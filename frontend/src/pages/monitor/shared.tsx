@@ -79,7 +79,7 @@ export function StepFrame({ n, state, busy, last, labelledBy, children }: {
 
 /** The highlighted card of the current step. */
 export function ActiveCard({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("overflow-hidden rounded-2xl border border-r-focus bg-r-card shadow-[0_0_0_4px_rgb(242_181_68/0.18),0_8px_24px_rgb(21_32_43/0.06)]", className)} {...props} />;
+  return <div className={cn("overflow-hidden rounded-2xl border border-r-focus bg-r-card shadow-[0_0_0_4px_var(--r-focus-glow),0_8px_24px_rgb(21_32_43/0.06)]", className)} {...props} />;
 }
 
 /** A step that hasn't opened yet. */

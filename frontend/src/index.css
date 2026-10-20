@@ -309,6 +309,24 @@
 
 /* ---------------------------------------------------------------- Reports workspace */
 /* .rpt scopes the design's type and ground to report pages; Social Monitoring pages keep the defaults. */
+/* Social monitoring (.mon): light mode keeps the marigold focus; on the dark ground marigold reads muddy, so
+   the current step / focus / "left to decide" highlight switches to teal and warnings to a softer orange. */
+.mon {
+  --r-focus-glow: rgb(242 181 68 / 0.18);
+  --mon-mark: #ffe3a1;
+  --mon-mark-ink: #15202b;
+}
+.dark .mon {
+  --r-focus: #4cc3d3;
+  --r-focus-glow: rgb(76 195 211 / 0.16);
+  --r-today: #12303a;
+  --r-returned: #f0915a;
+  --r-returned-ink: #f6b48c;
+  --r-returned-soft: #36231a;
+  --mon-mark: #1f5560;
+  --mon-mark-ink: #e6f7fa;
+}
+
 .rpt { background: var(--r-ground); color: var(--r-ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
 .rpt :focus-visible { outline: 3px solid var(--r-focus); outline-offset: 2px; }
 .rpt a:not([class]) { color: var(--r-action); }

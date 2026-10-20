@@ -84,9 +84,9 @@ export default function MonitorPage() {
   const scrollTo = (id: string) => window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   const newRun = () => { set({ run: null, step: null, start, end, campaign_id: campaignId }); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
-  if (metaError) return <RPage><RError error={metaError} /></RPage>;
-  if (runError) return <RPage><RError error={runError} /></RPage>;
-  if (!meta || (runId && !run)) return <RPage><div className="flex items-center gap-3 py-16 text-r-muted"><Loader2 className="size-5 animate-spin" />…</div></RPage>;
+  if (metaError) return <RPage className="mon"><RError error={metaError} /></RPage>;
+  if (runError) return <RPage className="mon"><RError error={runError} /></RPage>;
+  if (!meta || (runId && !run)) return <RPage className="mon"><div className="flex items-center gap-3 py-16 text-r-muted"><Loader2 className="size-5 animate-spin" />…</div></RPage>;
 
   const lastSnap = dash?.snapshots[0];
   const otherLive = !runId ? runs?.find((r) => ["queued", "running"].includes(r.status)) : undefined;
@@ -95,7 +95,7 @@ export default function MonitorPage() {
   const urls = pdfUrls(campaignId, start, end);
 
   return (
-    <RPage className="mx-auto w-full max-w-[1040px] gap-6">
+    <RPage className="mon mx-auto w-full max-w-[1040px] gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           <div className="text-xs font-bold tracking-[0.08em] text-r-muted uppercase">{t("mon_eyebrow")}</div>

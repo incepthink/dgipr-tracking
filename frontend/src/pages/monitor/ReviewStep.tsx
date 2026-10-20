@@ -284,7 +284,7 @@ export function ReviewActive({ data, campaignId, start, end, onContinue }: {
       </ActiveCard>
 
       {hasTerm && cur?.cls && (
-        <div className="rpt fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2.5 border-t border-r-line bg-r-card px-4 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] sm:hidden">
+        <div className="rpt mon fixed inset-x-0 bottom-0 z-30 grid grid-cols-2 gap-2.5 border-t border-r-line bg-r-card px-4 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] sm:hidden">
           <RButton size="lg" className="min-h-14 rounded-[14px]" disabled={decide.isPending}
             onClick={() => onDecide({ cls: cur.cls!, pubId: cur.pub.id, action: "exclude" })}><X strokeWidth={2.6} aria-hidden />{t("exclude")}</RButton>
           <RButton size="lg" className="min-h-14 rounded-[14px] border-r-accepted bg-r-accepted text-white hover:bg-r-accepted/90" disabled={decide.isPending}
@@ -318,7 +318,7 @@ export function ReviewActive({ data, campaignId, start, end, onContinue }: {
 
 function Highlighted({ parts }: { parts: [string, boolean][] }) {
   return <>{parts.map(([seg, hit], i) => hit
-    ? <mark key={i} className="rounded-[3px] bg-[#ffe3a1] px-[3px] text-[#15202b]">{seg}</mark>
+    ? <mark key={i} className="rounded-[3px] bg-(--mon-mark) px-[3px] text-(--mon-mark-ink)">{seg}</mark>
     : <React.Fragment key={i}>{seg}</React.Fragment>)}</>;
 }
 
