@@ -1,0 +1,34 @@
+{
+  "run_id": 8,
+  "status": "completed",
+  "period": [
+    "2026-10-15",
+    "2026-10-15"
+  ],
+  "window_utc": [
+    "2026-10-14T18:30:00",
+    "2026-10-15T18:30:00"
+  ],
+  "tasks": [
+    {
+      "task_id": 22,
+      "platform": "facebook",
+      "provider": "apify",
+      "account": "MahaDGIPR",
+      "status": "complete",
+      "window_complete": true,
+      "coverage_note": "provider applied the date window and returned all results",
+      "items_received": 60,
+      "items_in_window": 48,
+      "items_new": 0,
+      "items_updated": 60,
+      "items_unparseable": 0,
+      "requests_made": 3,
+      "usage": {
+        "apify_usage_usd": 0.316
+      },
+      "error_kind": null,
+      "error_message": null
+    }
+  ]
+}

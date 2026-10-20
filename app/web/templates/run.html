@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Collection run #{{ run.id }} <span id="status" class="chip s-{{ run.status }}">{{ run.status }}</span></h1>
+<div class="panel small">
+  Period <b>{{ run.period_start }}</b>{% if run.period_end != run.period_start %} → <b>{{ run.period_end }}</b>{% endif %} (Asia/Kolkata) ·
+  retrieval window {{ run.window_start_utc }} → {{ run.window_end_utc }} UTC (overlap {{ run.overlap_hours }} h) · mode {{ run.mode }} ·
+  triggered by {{ run.triggered_by }} ({{ run.trigger_source }}) at {{ run.created_at | ist }}
+</div>
+<table class="grid" id="tasks">
+  <tr><th>Platform</th><th>Account</th><th>Provider</th><th>Status</th><th>Window covered?</th><th>Pages</th><th>Received</th><th>In window</th><th>New</th><th>Updated</th><th>Unparsed</th><th>Requests</th><th>Usage</th><th>Progress / error</th></tr>
+</table>
+<p class="small muted">“Window covered” is the key completeness signal: a task that failed or stopped early never counts as zero activity — affected report cells stay incomplete and block final approval.</p>
+<p>
+  <form method="post" action="/runs/{{ run.id }}/retry" style="display:inline"><button class="btn secondary" id="retry" type="submit">Retry failed / partial tasks</button></form>
+  <a class="btn" href="/review?campaign_id={{ run.campaign_id or '' }}&start={{ run.period_start }}&end={{ run.period_end }}">Continue to review →</a>
+</p>
+{% endblock %}
+{% block scripts %}
+<script>
+const initial = {{ data | tojson }};
+function esc(s){return String(s ?? '').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function render(d){
+  document.getElementById('status').textContent = d.status;
+  document.getElementById('status').className = 'chip s-' + d.status;
+  const t = document.getElementById('tasks');
+  t.querySelectorAll('tr.task').forEach(r=>r.remove());
+  for (const k of d.tasks){
+    const tr = document.createElement('tr'); tr.className='task';
+    const cov = k.window_complete === null ? '—' : (k.window_complete ? '<span class="chip s-complete">yes</span>' : '<span class="chip s-failed">NO</span>');
+    const usage = Object.entries(k.usage||{}).map(([a,b])=>esc(a)+': '+esc(b)).join('<br>');
+    const msg = k.error ? '<b style="color:#b3261e">'+esc(k.error_kind)+'</b>: '+esc(k.error) : esc(k.progress);
+    tr.innerHTML = `<td>${esc(k.platform)}</td><td>${esc(k.handle)}</td><td>${esc(k.provider)}</td>
+      <td><span class="chip s-${esc(k.status)}">${esc(k.status)}</span></td><td>${cov}<div class="small muted">${esc(k.coverage_note)}</div></td>
+      <td class="n">${k.pages}</td><td class="n">${k.received}</td><td class="n">${k.in_window}</td><td class="n">${k.new}</td>
+      <td class="n">${k.updated}</td><td class="n">${k.unparseable}</td><td class="n">${k.requests}</td><td class="small">${usage}</td><td class="small">${msg}</td>`;
+    t.appendChild(tr);
+  }
+  document.getElementById('retry').disabled = d.active || !d.tasks.some(k=>['failed','partial'].includes(k.status));
+  return d.active || ['queued','running'].includes(d.status);
+}
+async function poll(){
+  try { const r = await fetch('/api/runs/{{ run.id }}'); if (render(await r.json())) setTimeout(poll, 2000); }
+  catch(e){ setTimeout(poll, 5000); }
+}
+if (render(initial)) setTimeout(poll, 1500);
+</script>
+{% endblock %}

@@ -1,0 +1,40 @@
+# Initial account registry. Loaded into the database on first start only (existing
+# accounts are never overwritten from this file; edit them in the UI afterwards).
+#
+# office_code must be a code from organisation.yaml. mapping_confirmed: false means the
+# mapping is a proposal that an operator must confirm in the UI before a FINAL report can
+# be approved. These four are the state-level DGIPR handles; mapping them to the Mumbai
+# headquarters row is an assumption to be confirmed, not something inferred from posts.
+
+accounts:
+  - platform: instagram
+    handle: mahadgipr
+    url: https://www.instagram.com/mahadgipr
+    display_name: "DGIPR Maharashtra (Instagram)"
+    office_code: mumbai_hq
+    mapping_confirmed: false
+    mapping_note: "Proposed: state-level DGIPR handle → मुख्यालय, मुंबई. Confirm before final reports."
+
+  - platform: x
+    handle: MahaDGIPR
+    url: https://x.com/MahaDGIPR
+    display_name: "DGIPR Maharashtra (X)"
+    office_code: mumbai_hq
+    mapping_confirmed: false
+    mapping_note: "Proposed: state-level DGIPR handle → मुख्यालय, मुंबई. Confirm before final reports."
+
+  - platform: facebook
+    handle: MahaDGIPR
+    url: https://www.facebook.com/MahaDGIPR
+    display_name: "DGIPR Maharashtra (Facebook)"
+    office_code: mumbai_hq
+    mapping_confirmed: false
+    mapping_note: "Proposed: state-level DGIPR handle → मुख्यालय, मुंबई. Confirm before final reports."
+
+  - platform: youtube
+    handle: "@MAHARASHTRADGIPR"
+    url: https://www.youtube.com/@MAHARASHTRADGIPR
+    display_name: "DGIPR Maharashtra (YouTube)"
+    office_code: mumbai_hq
+    mapping_confirmed: false
+    mapping_note: "Proposed: state-level DGIPR handle → मुख्यालय, मुंबई. Confirm before final reports."

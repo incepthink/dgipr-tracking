@@ -1,0 +1,110 @@
+/* The map surface, ported from ai-newssharing (itself from maharashtra-is-building) and re-tokenised onto the
+   reports palette (--r-*), light and dark. Paint order: land, choropleth, "not reported" hatch, district hairlines,
+   selected district, coastline last so nothing crosses it. */
+
+.map-frame {
+  position: relative;
+  width: 100%;
+  height: clamp(20rem, 56vh, 34rem);
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 0.75rem;
+  background: var(--r-ground);
+  touch-action: none;
+}
+.map-frame:focus { outline: none; }
+.map-frame:focus-visible { outline: 3px solid var(--r-focus); outline-offset: 2px; }
+
+.map-surface { position: absolute; inset: 0; z-index: 2; display: block; width: 100%; height: 100%; cursor: default; }
+.map-frame[data-panning] .map-surface,
+.map-frame[data-panning] .map-district { cursor: grabbing; }
+.map-camera { will-change: transform; }
+.map-sheet { pointer-events: none; }
+.map-land-a { stop-color: var(--r-land); }
+.map-land-b { stop-color: var(--r-land-deep); }
+
+.map-choropleth, .map-hatch-layer, .map-lit { pointer-events: none; }
+.map-choropleth-fill { stroke: none; transition: fill 260ms cubic-bezier(0.16, 1, 0.3, 1); }
+.map-choropleth-fill[data-level='1'] { fill: var(--r-seq-1); }
+.map-choropleth-fill[data-level='2'] { fill: var(--r-seq-2); }
+.map-choropleth-fill[data-level='3'] { fill: var(--r-seq-3); }
+.map-choropleth-fill[data-level='4'] { fill: var(--r-seq-4); }
+.map-choropleth-fill[data-level='5'] { fill: var(--r-seq-5); }
+/* change vs before: two hues, grey midpoint */
+.map-choropleth-fill[data-level='d-2'] { fill: color-mix(in oklab, var(--r-overdue) 75%, var(--r-land)); }
+.map-choropleth-fill[data-level='d-1'] { fill: color-mix(in oklab, var(--r-overdue) 35%, var(--r-land)); }
+.map-choropleth-fill[data-level='d0'] { fill: var(--r-sunk); }
+.map-choropleth-fill[data-level='d1'] { fill: var(--r-seq-2); }
+.map-choropleth-fill[data-level='d2'] { fill: var(--r-seq-4); }
+.map-choropleth-fill[data-level='hq'] { fill: var(--r-sunk); }
+.map-hatch-line { stroke: var(--r-overdue); stroke-width: 1.8; opacity: 0.65; }
+.map-frame[data-pending] .map-choropleth { opacity: 0.5; transition: opacity 180ms; }
+
+.map-district {
+  fill: transparent;
+  stroke: var(--r-border);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  pointer-events: all;
+  cursor: pointer;
+  outline: none;
+  animation: map-arrive 700ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+.map-district:hover, .map-district:focus-visible { fill: rgb(255 255 255 / 0.28); }
+.dark .map-district:hover, .dark .map-district:focus-visible { fill: rgb(255 255 255 / 0.1); }
+.map-district:focus-visible { stroke: var(--r-focus); stroke-width: 2.5; }
+.map-district-lit {
+  fill: none;
+  stroke: var(--r-ink);
+  stroke-width: 2.25;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.map-coast { fill: none; stroke: var(--r-coast); stroke-width: 1.35; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: none; }
+@keyframes map-arrive { from { opacity: 0; } to { opacity: 1; } }
+
+/* the plate that follows the pointer (positioned by custom properties, not React state) */
+.map-readout { position: absolute; top: 0; left: 0; z-index: 14; translate: var(--plate-x, 0) var(--plate-y, 0); pointer-events: none; }
+.map-readout-card {
+  transform: translate(-50%, calc(-100% - 16px));
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: max-content;
+  max-width: 16rem;
+  padding: 0.4rem 0.7rem;
+  border-radius: 0.5rem;
+  background: var(--r-ink);
+  color: var(--r-card);
+  font-size: 0.8125rem;
+  box-shadow: 0 10px 24px -8px rgb(0 0 0 / 0.3);
+  transition: opacity 120ms;
+}
+.map-readout[data-visible] .map-readout-card { opacity: 1; }
+.map-readout[data-below] .map-readout-card { transform: translate(-50%, 22px); }
+
+.map-controls {
+  position: absolute; right: 0.75rem; bottom: 0.75rem; z-index: 12;
+  display: flex; flex-direction: column; padding: 0.2rem;
+  border-radius: 0.6rem; background: var(--r-card); border: 1px solid var(--r-line);
+}
+.map-controls-rule { height: 1px; margin: 0 0.3rem; background: var(--r-line); }
+.map-controls button {
+  display: grid; height: 2.25rem; width: 2.25rem; place-items: center;
+  border: 0; border-radius: 0.4rem; background: transparent; color: var(--r-muted); cursor: pointer;
+}
+.map-controls button:hover { background: var(--r-sunk); color: var(--r-ink); }
+.map-attribution {
+  position: absolute; left: 0.75rem; bottom: 0.6rem; z-index: 11; max-width: 22rem;
+  font-size: 0.6875rem; line-height: 1.4; color: var(--r-faint); pointer-events: none;
+}
+@media (max-width: 40rem) {
+  .map-frame { height: clamp(17rem, 50vh, 24rem); }
+  .map-attribution { right: 3.6rem; max-width: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-district { animation: none; }
+  .map-readout-card { transition: none; }
+}

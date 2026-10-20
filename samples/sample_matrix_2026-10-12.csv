@@ -1,0 +1,48 @@
+﻿division,office_code,office,Articles,News items,Newspaper clippings,Video bites,Video interviews,Facebook,Instagram,X,Blog,YouTube,Public App,Activities / hoardings / Mahasamvad,row_type
+nagpur,nagpur_rio,"विमाका, नागपूर",1,0,6,0,0,1,1,0,0,0,0,0,office
+nagpur,bhandara,भंडारा,0,0,10,0,0,3,3,3,0,0,0,0,office
+nagpur,gondia,गोंदिया,0,4,4,1,0,2,2,2,2,1,1,2,office
+nagpur,wardha,वर्धा,0,0,7,0,0,1,1,1,0,0,0,0,office
+nagpur,nagpur,नागपूर,0,0,11,0,0,2,5,0,0,0,0,0,office
+nagpur,chandrapur,चंद्रपूर,0,2,11,0,0,2,2,2,2,0,0,0,office
+nagpur,gadchiroli,गडचिरोली,0,1,6,0,0,3,2,1,0,0,0,0,office
+nagpur,,एकूण,1,7,55,1,0,14,16,9,4,1,1,2,subtotal
+pune,pune,पुणे,0,2,41,0,0,5,4,6,0,0,0,0,office
+pune,solapur,सोलापूर,0,0,15,0,0,0,0,0,0,0,0,0,office
+pune,satara,सातारा,0,2,19,0,0,2,2,2,0,0,0,2,office
+pune,,एकूण,0,4,75,0,0,7,6,8,0,0,0,2,subtotal
+chh_sambhajinagar,chh_sambhajinagar,छ. संभाजीनगर,0,0,32,0,0,1,1,2,0,0,0,0,office
+chh_sambhajinagar,jalna,जालना,0,0,5,0,0,0,0,0,0,0,0,0,office
+chh_sambhajinagar,parbhani,परभणी,0,2,3,0,0,3,0,2,0,0,0,0,office
+chh_sambhajinagar,beed,बीड,0,0,7,0,0,0,0,0,0,0,0,0,office
+chh_sambhajinagar,,एकूण,0,2,47,0,0,4,1,4,0,0,0,0,subtotal
+konkan,konkan_rio,विमाका कोकण,0,0,0,0,0,2,2,2,0,0,2,0,office
+konkan,raigad,रायगड,0,0,10,0,0,1,1,1,0,0,0,0,office
+konkan,thane,ठाणे,0,0,20,0,0,0,0,0,0,0,0,0,office
+konkan,ratnagiri,रत्नागिरी,0,1,9,0,0,1,1,1,0,0,1,0,office
+konkan,palghar,पालघर,0,0,8,0,0,0,0,0,0,0,0,0,office
+konkan,,एकूण,0,1,47,0,0,4,4,4,0,0,3,0,subtotal
+kolhapur,kolhapur,कोल्हापूर,0,0,8,0,0,1,1,1,0,0,0,0,office
+kolhapur,sangli,सांगली,0,1,14,0,0,2,1,3,0,1,1,0,office
+kolhapur,sindhudurg,सिंधुदुर्ग,0,3,30,3,0,5,5,5,2,3,5,0,office
+kolhapur,,एकूण,0,4,52,3,0,8,7,9,2,4,6,0,subtotal
+nashik,nashik,नाशिक,0,1,17,0,0,2,1,1,0,0,0,0,office
+nashik,ahilyanagar,अहिल्यानगर,0,1,11,0,0,1,1,1,0,0,0,0,office
+nashik,jalgaon,जळगाव,0,1,9,0,0,1,0,1,0,0,0,0,office
+nashik,dhule,धुळे,0,1,12,0,0,1,1,0,0,0,0,1,office
+nashik,nandurbar,नंदूरबार,0,0,3,0,0,2,2,6,0,0,0,0,office
+nashik,,एकूण,0,4,52,0,0,7,5,9,0,0,0,1,subtotal
+amravati,amravati,अमरावती,0,0,0,0,0,13,5,5,5,0,5,0,office
+amravati,akola,अकोला,0,0,3,0,0,2,3,3,0,0,0,0,office
+amravati,washim,वाशिम,0,0,0,0,0,2,2,2,2,1,0,0,office
+amravati,buldhana,बुलढाणा,0,0,3,0,0,0,0,0,0,0,0,0,office
+amravati,yavatmal,यवतमाळ,0,0,0,0,0,0,0,0,0,0,0,0,office
+amravati,,एकूण,0,0,6,0,0,17,10,10,7,1,5,0,subtotal
+latur,latur,लातूर,0,2,19,0,0,2,2,2,1,0,0,0,office
+latur,dharashiv,धाराशिव,0,0,3,0,0,0,0,0,0,0,0,0,office
+latur,nanded,नांदेड,0,0,4,0,0,0,0,0,0,0,0,0,office
+latur,hingoli,हिंगोली,1,2,15,0,0,3,2,4,2,0,1,0,office
+latur,,एकूण,1,4,41,0,0,5,4,6,3,0,1,0,subtotal
+mumbai_hq,mumbai_hq,"मुख्यालय, मुंबई",0,1,59,0,0,3,3,3,4,0,0,0,office
+mumbai_hq,,एकूण,0,1,59,0,0,3,3,3,4,0,0,0,subtotal
+,,एकूण (राज्य),2,27,434,4,0,69,56,62,20,6,16,5,grand_total

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Publication #{{ pub.id }} <span class="small muted">{{ pub.platform }} · {{ pub.platform_post_id }}</span></h1>
+<div class="cols">
+<div class="panel small">
+  <table class="grid">
+    <tr><th>URL</th><td><a href="{{ pub.url }}" target="_blank" rel="noopener">{{ pub.url }}</a></td></tr>
+    <tr><th>Account</th><td>{{ pub.account.platform }}:{{ pub.account.handle }} → <span class="mr">{{ pub.account.office.name_mr if pub.account.office else 'unmapped' }}</span></td></tr>
+    <tr><th>Published</th><td>{{ pub.published_at_utc }} UTC · {{ pub.published_at_utc | ist }}</td></tr>
+    <tr><th>Reporting date (IST)</th><td>{{ pub.reporting_date }}</td></tr>
+    <tr><th>Type</th><td>{{ pub.content_type }} · repost={{ pub.is_repost }} · reply={{ pub.is_reply }} · quote={{ pub.is_quote }} · pinned={{ pub.is_pinned }} · short={{ pub.is_short }}</td></tr>
+    <tr><th>Metrics</th><td>{% for k, v in (pub.metrics or {}).items() %}{{ k }}: {{ 'n/a' if v is none else v }}{% if not loop.last %} · {% endif %}{% endfor %}<div class="muted">observed {{ pub.metrics_observed_at | ist }} — n/a means the provider did not supply it (not zero)</div></td></tr>
+    <tr><th>Provider</th><td>{{ pub.provider }} · first collected {{ pub.first_collected_at | ist }} (run {{ pub.first_run_id }}) · last {{ pub.last_collected_at | ist }} (run {{ pub.last_run_id }})</td></tr>
+    <tr><th>Attributes</th><td><code>{{ pub.attributes | tojson_pretty }}</code></td></tr>
+  </table>
+  <h2>Text</h2>
+  {% if pub.title %}<p class="mr"><b>{{ pub.title }}</b></p>{% endif %}
+  <p class="pubtext mr" style="max-height:none">{{ pub.text }}</p>
+  {% if pub.description %}<p class="pubtext mr muted" style="max-height:none">{{ pub.description }}</p>{% endif %}
+  <h2>Media references (not downloaded)</h2>
+  <ul>{% for m in pub.media %}<li>{{ m.kind }} — {{ m.url }}</li>{% else %}<li class="muted">none</li>{% endfor %}</ul>
+</div>
+<div>
+  <div class="panel small">
+    <h2 style="margin-top:0">Classification</h2>
+    {% for c in classes %}<p>campaign {{ c.campaign_id }}: auto <span class="chip s-{{ c.auto_decision }}">{{ c.auto_decision }}</span> ({{ c.classifier }} {{ c.classifier_version }}, rules v{{ c.rules_version }}) · effective <span class="chip s-{{ c.effective_decision }}">{{ c.effective_decision }}</span></p>
+    <pre>{{ c.auto_evidence | tojson_pretty }}</pre>{% endfor %}
+    <h2>Review history</h2>
+    <table class="grid">{% for h in history %}<tr><td>{{ h.at | ist }}</td><td>{{ h.actor }}</td><td>{{ h.action }}</td><td>{{ h.after | tojson_pretty }}</td><td>{{ h.note }}</td></tr>{% else %}<tr><td class="muted">no manual changes</td></tr>{% endfor %}</table>
+  </div>
+  <div class="panel small">
+    <h2 style="margin-top:0">Provenance</h2>
+    <table class="grid">{% for p in pub.provenance %}<tr><td>run {{ p.run_id }}</td><td>task {{ p.task_id }}</td><td>{{ p.provider }}</td><td>raw {{ p.raw_id }}</td><td>{{ p.fetched_at }}</td></tr>{% endfor %}</table>
+    <h2>Latest raw provider record</h2>
+    {% if raw %}<p>{{ raw.provider }} · fetched {{ raw.fetched_at | ist }} · sha256 {{ raw.payload_sha256[:16] }}…</p><pre>{{ raw.payload | tojson_pretty }}</pre>{% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}

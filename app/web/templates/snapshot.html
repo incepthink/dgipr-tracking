@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Report snapshot #{{ snap.id }} <span class="chip s-{{ snap.kind }}">{{ snap.kind }}</span>
+  {% if snap.is_sample %}<span class="chip s-pending">SAMPLE DATA</span>{% endif %}
+  {% if snap.superseded_by_id %}<span class="chip">superseded by <a href="/reports/{{ snap.superseded_by_id }}">#{{ snap.superseded_by_id }}</a></span>{% endif %}</h1>
+<div class="panel">
+  <p class="mr"><b>{{ d.presentation.summary_title }}</b></p>
+  <p class="small">Reporting period {{ d.period.start }}{% if d.period.end != d.period.start %} → {{ d.period.end }}{% endif %} (Asia/Kolkata) ·
+     generated {{ d.presentation.generated_at_ist }} by {{ snap.created_by }} · rules v{{ d.campaign.rules_version }}
+     {% if snap.note %}· note: “{{ snap.note }}”{% endif %}</p>
+  <p class="small">Data hash <code>{{ snap.data_sha256[:16] }}…</code> {% if intact %}<span class="chip s-complete">intact</span>{% else %}<span class="chip s-failed">MODIFIED</span>{% endif %}
+     · PDF hash <code>{{ (snap.pdf_sha256 or '')[:16] }}…</code></p>
+  <p><a class="btn" href="/reports/{{ snap.id }}/pdf">Download PDF</a>
+     <a class="btn secondary" href="/reports/{{ snap.id }}/evidence.csv">Evidence CSV</a>
+     <a class="btn secondary" href="/reports/{{ snap.id }}/matrix.csv">Values CSV</a>
+     <a class="btn secondary" href="/reports/{{ snap.id }}/snapshot.json">Snapshot JSON</a></p>
+</div>
+<div class="panel">
+  <h2 style="margin-top:0">Division totals</h2>
+  <table class="grid small">
+    <tr><th>Division</th>{% for col in d.columns %}<th class="mr">{{ col.label_mr }}</th>{% endfor %}</tr>
+    {% for div in d.divisions %}<tr><td class="mr">{{ div.summary_label_mr }}</td>{% for col in d.columns %}{% set a = div.subtotal[col.key] %}<td class="n">{{ a.value if a.known else '–' }}{% if not a.complete %}*{% endif %}</td>{% endfor %}</tr>{% endfor %}
+    <tr><th>एकूण</th>{% for col in d.columns %}{% set a = d.grand_total[col.key] %}<th class="n">{{ a.value if a.known else '–' }}{% if not a.complete %}*{% endif %}</th>{% endfor %}</tr>
+  </table>
+</div>
+<div class="panel">
+  <h2 style="margin-top:0">Issues at approval time ({{ d.issues|length }})</h2>
+  <table class="grid small">{% for i in d.issues %}<tr><td><span class="chip s-{{ i.severity }}">{{ i.severity }}</span></td><td>{{ i.code }}</td><td class="mr">{{ i.office_name or '' }}</td><td>{{ i.message }}</td></tr>{% else %}<tr><td class="muted">none</td></tr>{% endfor %}</table>
+</div>
+<div class="panel">
+  <h2 style="margin-top:0">Accounts &amp; coverage</h2>
+  <table class="grid small"><tr><th>Platform</th><th>Handle</th><th>Office</th><th>Mapping</th><th>Period fully collected</th></tr>
+  {% for a in d.accounts %}<tr><td>{{ a.platform }}</td><td>{{ a.handle }}</td><td>{{ a.office }}</td><td>{{ 'confirmed' if a.mapping_confirmed else 'unconfirmed' }}</td><td>{{ 'yes' if a.period_covered else 'NO' }}</td></tr>{% endfor %}</table>
+</div>
+{% endblock %}

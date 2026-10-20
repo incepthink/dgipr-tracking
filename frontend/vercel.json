@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build -- --outDir dist",
+  "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/app/",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/app/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/app(/.*)?",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "https://54-169-233-35.sslip.io/$1"
+    }
+  ]
+}

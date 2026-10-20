@@ -1,0 +1,16 @@
+# Report presentation settings, derived from the reference PDF "13.10.2026 for print.pdf".
+# Text templates: {campaign} = campaign Marathi title, {date} = Marathi reporting date/range.
+
+office_line_mr: "माहिती व जनसंपर्क महासंचालनालय, मंत्रालय मुंबई-३२"
+summary_title_mr: "{campaign} विभागनिहाय प्रसिद्धी अहवाल दि. {date}"
+# The reference repeats "अहवाल" at the end of the district-page title; kept verbatim.
+detail_title_mr: "{campaign} जिल्हानिहाय प्रसिद्धी अहवाल दि. {date} अहवाल"
+total_label_mr: "एकूण"
+serial_header_mr: "अ.क्र"
+division_header_mr: "विभागाचे नाव"
+number_detail_rows: true          # reference numbers some district rows only; we number all consistently
+show_generation_footer: true      # small footer with the PDF generation date (distinct from reporting date)
+generation_footer_mr: "अहवाल तयार केल्याचा दिनांक: {generated}"
+# Bundled in app/static/fonts (SIL OFL 1.1). Static instances of Noto Serif Devanagari.
+font_regular: NotoSerifDevanagari-Regular.ttf
+font_bold: NotoSerifDevanagari-Bold.ttf

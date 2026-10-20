@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Accounts &amp; organisational mapping</h1>
+<p class="muted small">Each account must be mapped to the office/district whose report row it feeds. Mappings are set here explicitly, never inferred from post text. A FINAL report is blocked while any contributing account's mapping is unconfirmed. Changing the office resets confirmation and updates that account's stored publications (audited).</p>
+<table class="grid">
+  <tr><th>Platform</th><th>Handle</th><th>Resolved ID</th><th>Office (report row)</th><th>Mapping</th><th>Note</th><th>Active</th><th></th></tr>
+  {% for a in accounts %}
+  <tr>
+    <td>{{ a.platform }}</td>
+    <td><a href="{{ a.url }}" target="_blank" rel="noopener">{{ a.handle }}</a><div class="small muted">{{ a.display_name }}</div></td>
+    <td class="small">{{ a.external_id or '—' }}</td>
+    <td><select name="office_code" form="acc{{ a.id }}">
+      <option value="">— not mapped —</option>
+      {% for d in divisions %}<optgroup label="{{ d.summary_label_mr }}">
+        {% for o in d.offices if o.active %}<option value="{{ o.code }}" {% if o.code == a.office_code %}selected{% endif %}>{{ o.name_mr }} ({{ o.name_en }})</option>{% endfor %}
+      </optgroup>{% endfor %}
+    </select></td>
+    <td>{% if a.mapping_confirmed %}<span class="chip s-complete">confirmed</span>
+        {% else %}<span class="chip s-pending">unconfirmed</span><label class="small"><input type="checkbox" name="confirm_mapping" value="1" form="acc{{ a.id }}"> confirm</label>{% endif %}</td>
+    <td><input type="text" name="mapping_note" value="{{ a.mapping_note }}" style="width:22em" form="acc{{ a.id }}"></td>
+    <td><input type="checkbox" name="active" value="1" form="acc{{ a.id }}" {% if a.active %}checked{% endif %}></td>
+    <td><form id="acc{{ a.id }}" method="post" action="/accounts/{{ a.id }}"><button class="btn small" type="submit">Save</button></form></td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>Register an account</h2>
+<form class="panel row" method="post" action="/accounts">
+  <label>Platform<select name="platform">{% for p in PLATFORMS %}<option>{{ p }}</option>{% endfor %}</select></label>
+  <label>Handle<input type="text" name="handle" required placeholder="e.g. InfoPune or @handle"></label>
+  <label>Profile URL<input type="text" name="url" required style="width:22em"></label>
+  <label>Display name<input type="text" name="display_name"></label>
+  <label>Office<select name="office_code"><option value="">— not mapped —</option>
+    {% for d in divisions %}<optgroup label="{{ d.summary_label_mr }}">{% for o in d.offices if o.active %}<option value="{{ o.code }}">{{ o.name_mr }}</option>{% endfor %}</optgroup>{% endfor %}
+  </select></label>
+  <label>Mapping note<input type="text" name="mapping_note" placeholder="source of the mapping"></label>
+  <button class="btn" type="submit">Add</button>
+</form>
+<p class="small muted">Divisions and offices come from <code>config/organisation.yaml</code> (synced at start-up).</p>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+{% set blockers = data.issues | selectattr('severity', 'equalto', 'blocker') | list %}
+<h1>3 · Report — <span class="mr">{{ data.presentation.summary_title }}</span></h1>
+<form class="panel row" method="get" action="/report">
+  <label>Campaign<select name="campaign_id">{% for x in campaigns %}<option value="{{ x.id }}" {% if x.id == c.id %}selected{% endif %}>{{ x.title_mr }}</option>{% endfor %}</select></label>
+  <label>From (IST)<input type="date" name="start" value="{{ start }}"></label>
+  <label>To (IST)<input type="date" name="end" value="{{ end }}"></label>
+  <button class="btn secondary" type="submit">Load</button>
+  <a class="btn secondary" href="/report/preview.pdf?campaign_id={{ c.id }}&start={{ start }}&end={{ end }}" target="_blank">Preview draft PDF</a>
+</form>
+{% if errors %}<div class="errors"><b>Not saved / not approved:</b><ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul></div>{% endif %}
+
+<div class="cols">
+<div class="panel">
+  <h2 style="margin-top:0">Completeness {% if data.complete %}<span class="chip s-complete">ready for final approval</span>{% else %}<span class="chip s-failed">{{ blockers|length }} blocking issue(s)</span>{% endif %}</h2>
+  {% if data.issues %}
+  <details {% if blockers|length < 15 %}open{% endif %}><summary>{{ data.issues|length }} issue(s)</summary>
+  <table class="grid small">{% for i in data.issues %}<tr><td><span class="chip s-{{ i.severity }}">{{ i.severity }}</span></td><td>{{ i.code }}</td><td class="mr">{{ i.office_name or i.office or '' }}</td><td>{{ i.column or '' }}</td><td>{{ i.message }}</td></tr>{% endfor %}</table>
+  </details>
+  {% else %}<p class="muted">No issues.</p>{% endif %}
+</div>
+<div class="panel">
+  <h2 style="margin-top:0">Approve</h2>
+  <form method="post" action="/reports" class="row">
+    <input type="hidden" name="campaign_id" value="{{ c.id }}"><input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}">
+    <label>Note<input type="text" name="note" style="width:18em"></label>
+    <button class="btn secondary" name="kind" value="draft" type="submit">Save draft snapshot</button>
+    <button class="btn" name="kind" value="final" type="submit" {% if not data.complete %}disabled title="Resolve blocking issues first"{% endif %}>Approve final report</button>
+  </form>
+  <p class="small muted">A snapshot freezes all values, evidence and labels; its PDF is always re-rendered from the snapshot, never from live data. Drafts are watermarked “प्रारूप · DRAFT”.</p>
+  {% if snaps %}<table class="grid small"><tr><th>#</th><th>Kind</th><th>By</th><th>When</th><th></th></tr>
+    {% for sn in snaps %}<tr><td><a href="/reports/{{ sn.id }}">{{ sn.id }}</a></td><td><span class="chip s-{{ sn.kind }}">{{ sn.kind }}</span>{% if sn.superseded_by_id %} superseded{% endif %}</td><td>{{ sn.created_by }}</td><td>{{ sn.created_at | ist }}</td><td><a href="/reports/{{ sn.id }}/pdf">PDF</a></td></tr>{% endfor %}</table>{% endif %}
+</div>
+</div>
+
+<h2>District values</h2>
+<p class="small muted">
+  <span class="chip s-auto">auto</span> counted from reviewed publications (click to see them) ·
+  <span class="chip s-manual">manual</span> entered value ·
+  <span class="chip s-confirmed_zero">0 ✓</span> explicitly confirmed zero ·
+  <span class="chip s-missing">empty</span> not entered — never treated as zero. To record zero, enter 0 and tick “0✓”.
+  Cells outlined orange are incomplete (collection gap, pending review or unconfirmed mapping).
+</p>
+<form method="post" action="/report/manual">
+<input type="hidden" name="campaign_id" value="{{ c.id }}"><input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}">
+<div style="overflow-x:auto">
+<table class="grid matrix">
+  <tr><th>Office</th>{% for col in data.columns %}<th class="mr" title="{{ col.label_en }}">{{ col.label_mr }}<div class="small muted">{{ col.label_en }}</div></th>{% endfor %}</tr>
+  {% for div in data.divisions %}
+    <tr><th colspan="{{ data.columns|length + 1 }}" class="mr">{{ div.section_title_mr }}</th></tr>
+    {% for off in div.offices %}
+    <tr>
+      <td class="mr">{{ off.name_mr }}</td>
+      {% for col in data.columns %}{% set cell = off.cells[col.key] %}
+        {% if cell.state == 'auto' %}
+          <td class="auto n {{ '' if cell.complete else 'incomplete' }}" title="{{ cell.issues | join(', ') }}">
+            <a href="/review?campaign_id={{ c.id }}&start={{ start }}&end={{ end }}&office={{ off.code }}">{{ cell.value }}</a>
+          </td>
+        {% else %}
+          <td class="{{ 'missing' if cell.state == 'missing' else '' }}">
+            <input type="number" min="0" name="v__{{ off.code }}__{{ col.key }}" value="{{ '' if cell.value is none else cell.value }}"
+              title="{{ ('by ' ~ cell.manual.by ~ ' — ' ~ cell.manual.note) if cell.manual else 'not entered' }}">
+            <label class="z"><input type="checkbox" name="z__{{ off.code }}__{{ col.key }}" {% if cell.state == 'confirmed_zero' %}checked{% endif %}>0✓</label>
+          </td>
+        {% endif %}
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    <tr class="sub"><td class="mr">एकूण</td>{% for col in data.columns %}{% set a = div.subtotal[col.key] %}<td class="n">{{ a.value if a.known else '–' }}{% if not a.complete %}*{% endif %}</td>{% endfor %}</tr>
+  {% endfor %}
+  <tr class="sub"><td class="mr">एकूण (सर्व)</td>{% for col in data.columns %}{% set a = data.grand_total[col.key] %}<td class="n">{{ a.value if a.known else '–' }}{% if not a.complete %}*{% endif %}</td>{% endfor %}</tr>
+</table>
+</div>
+<div class="row" style="margin-top:8px">
+  <label>Note for these changes (audit)<input type="text" name="note" style="width:28em" placeholder="e.g. figures from district office email 13/10"></label>
+  <button class="btn" type="submit">Save manual values</button>
+</div>
+</form>
+{% endblock %}

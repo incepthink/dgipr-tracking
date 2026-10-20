@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Campaign: <span class="mr">{{ c.title_mr }}</span> <span class="muted small">({{ c.slug }} · rules v{{ c.version }} · updated {{ c.updated_at | ist }} by {{ c.updated_by }})</span></h1>
+{% if campaigns|length > 1 %}<p>Other campaigns: {% for x in campaigns %}<a href="/campaigns/{{ x.id }}">{{ x.title_mr }}</a> {% endfor %}</p>{% endif %}
+<div class="cols">
+<form class="panel" method="post" action="/campaigns/{{ c.id }}">
+  <div class="row">
+    <label>Marathi title (used in the PDF heading)<input type="text" name="title_mr" value="{{ c.title_mr }}" style="width:22em"></label>
+    <label>English title<input type="text" name="title_en" value="{{ c.title_en }}"></label>
+  </div>
+  <h2>Matching rules (YAML)</h2>
+  <p class="small muted">keywords/phrases/exclusions per language (mr, hi, en); hashtags; weights; match_threshold; review_threshold; min_text_chars. Devanagari keywords also match inflected forms (दुष्काळ → दुष्काळी). Latin terms match whole words unless they end in <code>*</code>.</p>
+  <textarea name="rules_yaml" rows="22">{{ rules_yaml }}</textarea>
+  <h2>Count rules (YAML)</h2>
+  <p class="small muted">Which publication types count toward report columns. <code>video_bites_source</code> / <code>video_interviews_source</code>: <code>manual</code> (default) or <code>reviewer_tag</code> — a video is never counted as a bite/interview without an explicit reviewer tag.</p>
+  <textarea name="count_yaml" rows="11">{{ count_yaml }}</textarea>
+  <p><button class="btn" type="submit">Save (creates rules v{{ c.version + 1 }})</button></p>
+  <p class="small muted">Saving does not change existing decisions. Use “Re-classify period” to recompute automatic decisions; manual decisions are preserved.</p>
+</form>
+<div>
+  <div class="panel">
+    <h2 style="margin-top:0">Test the rules</h2>
+    <form method="get" action="/campaigns/{{ c.id }}">
+      <textarea name="test_text" rows="5" placeholder="Paste a caption/post text">{{ test_text }}</textarea>
+      <p><button class="btn secondary" type="submit">Classify</button></p>
+    </form>
+    {% if result %}
+      <p>Decision: <span class="chip s-{{ result.decision }}">{{ result.decision }}</span> score {{ result.score }}</p>
+      <ul class="small">{% for r in result.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+      <table class="grid small"><tr><th>Kind</th><th>Term</th><th>Lang</th><th>Snippet</th></tr>
+      {% for e in result.evidence %}<tr><td>{{ e.kind }}</td><td class="mr">{{ e.term }}</td><td>{{ e.lang }}</td><td class="mr">{{ e.snippet }}</td></tr>{% endfor %}</table>
+    {% endif %}
+  </div>
+  <form class="panel" method="post" action="/campaigns/{{ c.id }}/reclassify">
+    <h2 style="margin-top:0">Re-classify a period</h2>
+    <div class="row"><label>From<input type="date" name="start" required></label><label>To<input type="date" name="end" required></label>
+    <button class="btn secondary" type="submit">Re-classify</button></div>
+  </form>
+  <div class="panel small muted">
+    Only text-based keyword classification is implemented. Images, video and audio are <b>not</b> analysed (no OCR, transcription or AI model). Publications whose relevance cannot be judged from their text are flagged <span class="chip s-insufficient_text">insufficient_text</span> for human review.
+  </div>
+</div>
+</div>
+{% endblock %}

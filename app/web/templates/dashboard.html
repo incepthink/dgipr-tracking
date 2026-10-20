@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="cols">
+  <div class="panel">
+    <h2 style="margin-top:0">Workflow</h2>
+    <ol>
+      <li><a href="/runs/new">Collect</a> — choose date/range, campaign and accounts, then trigger collection.</li>
+      <li><a href="/review">Review</a> — check evidence, correct classifications.</li>
+      <li><a href="/report">Report</a> — enter manual columns, preview the draft PDF, approve the final report.</li>
+    </ol>
+    <p class="small muted">Reporting dates are calendar days in Asia/Kolkata.</p>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Data providers</h2>
+    <table class="grid">
+      <tr><th>Platform</th><th>Provider</th><th>Credentials</th></tr>
+      {% for p in providers %}
+      <tr><td>{{ p.platform }}</td><td>{{ p.provider }}</td>
+        <td><span class="chip {{ 's-failed' if p.credentials == 'MISSING' else ('s-pending' if 'fixture' in p.credentials else 's-complete') }}">{{ p.credentials }}</span></td></tr>
+      {% endfor %}
+    </table>
+    {% if providers | selectattr('provider', 'equalto', 'fixture') | list %}
+      <p class="small" style="color:#a76400">Some platforms use <b>synthetic fixtures</b>: collected items are sample data, not live publications.</p>
+    {% endif %}
+  </div>
+</div>
+<div class="cols">
+  <div class="panel">
+    <h2 style="margin-top:0">Recent collection runs</h2>
+    <table class="grid">
+      <tr><th>#</th><th>Period</th><th>Status</th><th>By</th><th>Created</th></tr>
+      {% for r in runs %}
+      <tr><td><a href="/runs/{{ r.id }}">{{ r.id }}</a></td><td>{{ r.period_start }}{% if r.period_end != r.period_start %} → {{ r.period_end }}{% endif %}</td>
+        <td><span class="chip s-{{ r.status }}">{{ r.status }}</span></td><td>{{ r.triggered_by }}</td><td class="small">{{ r.created_at | ist }}</td></tr>
+      {% else %}<tr><td colspan="5" class="muted">No runs yet.</td></tr>{% endfor %}
+    </table>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">Report snapshots</h2>
+    <table class="grid">
+      <tr><th>#</th><th>Period</th><th>Kind</th><th>By</th><th>PDF</th></tr>
+      {% for sn in snaps %}
+      <tr><td><a href="/reports/{{ sn.id }}">{{ sn.id }}</a></td><td>{{ sn.period_start }}{% if sn.period_end != sn.period_start %} → {{ sn.period_end }}{% endif %}</td>
+        <td><span class="chip s-{{ sn.kind }}">{{ sn.kind }}</span>{% if sn.is_sample %} <span class="chip s-pending">SAMPLE</span>{% endif %}{% if sn.superseded_by_id %} <span class="chip">superseded</span>{% endif %}</td>
+        <td>{{ sn.created_by }}</td><td><a href="/reports/{{ sn.id }}/pdf">PDF</a></td></tr>
+      {% else %}<tr><td colspan="5" class="muted">No snapshots yet.</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}DGIPR publicity tracking{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header>
+  <span class="brand">DGIPR publicity tracking</span>
+  <a href="/app/">New UI</a>
+  <a href="/classic">Dashboard</a>
+  <a href="/runs/new">1 · Collect</a>
+  <a href="/review">2 · Review</a>
+  <a href="/report">3 · Report</a>
+  <a href="/accounts">Accounts</a>
+  <a href="/campaigns/1">Campaign rules</a>
+  <a href="/audit">Audit log</a>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+{% block scripts %}{% endblock %}
+</body>
+</html>

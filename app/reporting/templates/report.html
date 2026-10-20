@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<title>{{ p.summary_title }}</title>
+<style>
+  /* Geometry measured from the reference PDF (A4 landscape, 841.92 × 595.32 pt). */
+  @font-face { font-family: "ReportDeva"; src: url("{{ font_regular }}") format("truetype"); font-weight: 400; }
+  @font-face { font-family: "ReportDeva"; src: url("{{ font_bold }}") format("truetype"); font-weight: 700; }
+  @page { size: 841.92pt 595.32pt; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #fff; }
+  body { font-family: "ReportDeva", serif; font-size: 12.6pt; color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { position: relative; width: 841.92pt; height: 595.32pt; overflow: hidden; page-break-after: always; break-after: page; }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  table { border-collapse: collapse; table-layout: fixed; position: absolute; }
+  td, th { border: 0.75pt solid #3c3c3c; padding: 0 3pt; line-height: 1.28; font-weight: 400; vertical-align: middle; overflow: hidden; }
+  .num { text-align: center; }
+  .b { font-weight: 700; }
+
+  /* ---- page 1: division-wise summary */
+  table.summary { left: 71.8pt; top: 58.6pt; width: 724pt; }
+  table.summary .title td { height: 58.3pt; text-align: center; font-weight: 700; font-size: 15pt; line-height: 1.45; vertical-align: top; padding-top: 1pt; }
+  table.summary .title .dt { font-size: 16.5pt; }
+  table.summary tr.hdr th { height: 75.6pt; text-align: left; padding: 0 3pt 0 6pt; }
+  table.summary tr.hdr th.hb { font-weight: 700; }
+  table.summary tr.hdr th.sr { text-align: center; padding: 0; }
+  table.summary tbody td { height: 19.2pt; }
+  table.summary tbody td.name { padding-left: 6pt; }
+  table.summary tr.total td { height: 19.2pt; font-weight: 700; }
+
+  /* ---- district pages */
+  .dtitle { position: absolute; left: 0; width: 841.92pt; top: 55pt; text-align: center; font-size: 17.6pt; font-weight: 700; }
+  table.detail { left: 72pt; width: 706.3pt; }
+  table.detail.first { top: 91.6pt; }
+  table.detail.cont { top: 58.6pt; }
+  table.detail td { height: 19.3pt; }
+  table.detail tr.band td { height: 16.7pt; text-align: center; font-weight: 700; border: 1.25pt solid #000; line-height: 1.1; }
+  table.detail td.sr { text-align: center; padding: 0; }
+  table.detail td.name { padding-left: 6pt; }
+  table.detail tr.sub td { height: 20pt; }
+  table.detail tr.sub td.num { font-weight: 700; }
+
+  /* ---- states (only drafts can contain these) */
+  .missing { color: #555; }
+  .inc::after { content: "*"; }
+  .watermark { position: absolute; left: 0; top: 0; width: 841.92pt; height: 595.32pt; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 5; }
+  .watermark span { transform: rotate(-24deg); font-size: 64pt; font-weight: 700; color: rgba(200, 0, 0, 0.13); white-space: nowrap; }
+  .badge { position: absolute; right: 46pt; top: 22pt; font-size: 9pt; color: #b00000; border: 0.75pt solid #b00000; padding: 1pt 5pt; }
+  .footer { position: absolute; left: 72pt; right: 46pt; bottom: 18pt; font-size: 7.5pt; color: #555; display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+{% macro cellv(c, bold=False) -%}
+  {%- if c.value is none -%}<span class="missing">–</span>
+  {%- else -%}<span class="{{ '' if c.complete else 'inc' }}">{{ num(c.value) }}</span>{%- endif -%}
+{%- endmacro %}
+{% macro marks() -%}
+  {% if p.watermark %}<div class="watermark"><span>{{ p.watermark }}</span></div>{% endif %}
+  {% if p.badge %}<div class="badge">{{ p.badge }}</div>{% endif %}
+  {% if p.footer_left or p.footer_right %}<div class="footer"><span>{{ p.footer_left }}</span><span>{{ p.footer_right }}</span></div>{% endif %}
+{%- endmacro %}
+
+<!-- Page 1: division-wise summary -->
+<section class="page">
+  <table class="summary">
+    <colgroup>
+      {% for w in [48, 81.9, 48, 48.1, 53.1, 48.4, 48.4, 48, 55.5, 48, 48.1, 48, 48, 52.5] %}<col style="width: {{ w }}pt">{% endfor %}
+    </colgroup>
+    <tbody>
+      <tr class="title"><td colspan="14">{{ p.office_line }}<br>{{ p.summary_title_prefix }}<span class="dt">दि.</span> {{ p.date_label }}</td></tr>
+      <tr class="hdr">
+        <th class="hb sr">{{ p.serial_header }}</th>
+        <th class="hb">{{ p.division_header }}</th>
+        {% for col in d.columns %}<th>{% for line in col.header_lines %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</th>{% endfor %}
+      </tr>
+      {% for div in d.divisions %}
+      <tr>
+        <td class="num">{{ num(loop.index) }}</td>
+        <td class="name">{{ div.summary_label_mr }}</td>
+        {% for col in d.columns %}<td class="num">{{ cellv(div.subtotal[col.key] | subtotal_cell) }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+      <tr class="total">
+        <td colspan="2" class="num">{{ p.total_label }}</td>
+        {% for col in d.columns %}<td class="num">{{ cellv(d.grand_total[col.key] | subtotal_cell) }}</td>{% endfor %}
+      </tr>
+    </tbody>
+  </table>
+  {{ marks() }}
+</section>
+
+<!-- District pages -->
+{% for page in detail_pages %}
+<section class="page">
+  {% if loop.first %}<div class="dtitle">{{ p.detail_title }}</div>{% endif %}
+  <table class="detail {{ 'first' if loop.first else 'cont' }}">
+    <colgroup>
+      {% for w in [19.9, 119.1, 45, 46.6, 53.5, 45.1, 45, 51.4, 50, 49.9, 46.6, 46.5, 45.1, 42.6] %}<col style="width: {{ w }}pt">{% endfor %}
+    </colgroup>
+    <tbody>
+    {% for div in page %}
+      <tr class="band"><td colspan="14">{{ div.section_title_mr }}</td></tr>
+      {% for off in div.offices %}
+      <tr>
+        <td class="sr">{% if p.number_detail_rows %}{{ num(loop.index) }}{% endif %}</td>
+        <td class="name">{{ off.name_mr }}</td>
+        {% for col in d.columns %}<td class="num">{{ cellv(off.cells[col.key]) }}</td>{% endfor %}
+      </tr>
+      {% endfor %}
+      {% if div.show_subtotal %}
+      <tr class="sub">
+        <td class="sr"></td>
+        <td class="name b">{{ p.total_label }}</td>
+        {% for col in d.columns %}<td class="num">{{ cellv(div.subtotal[col.key] | subtotal_cell) }}</td>{% endfor %}
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {{ marks() }}
+</section>
+{% endfor %}
+</body>
+</html>

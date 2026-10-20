@@ -1,0 +1,45 @@
+# Campaign definition: "दुष्काळ उपाययोजना" (drought mitigation measures).
+# Loaded into the database on first start if the slug does not exist; edit in the UI afterwards.
+#
+# Term syntax (all lists):
+#   plain term      -> matches at a word start; Devanagari terms also match inflected
+#                      forms (दुष्काळ matches दुष्काळी, दुष्काळग्रस्त). Latin terms match whole words.
+#   term*           -> explicit prefix match (Latin), e.g. drought*
+#   "two words"     -> phrases: words in sequence, any whitespace between them
+# Hashtags are matched against #tags in the text (case-insensitive, Unicode kept intact).
+# Weights: keyword 1, phrase 2, hashtag 2 (configurable below).
+
+slug: drought_measures
+title_mr: "दुष्काळ उपाययोजना"
+title_en: "Drought mitigation measures"
+description: "Publicity for drought relief and mitigation measures."
+
+rules:
+  keywords:
+    mr: ["दुष्काळ", "दुष्काळी", "टंचाई", "पाणीटंचाई", "चारा छावणी", "टँकर", "जलसंधारण", "जलयुक्त शिवार"]
+    hi: ["सूखा", "सूखाग्रस्त", "जल संकट"]
+    en: ["drought", "drought-hit", "water scarcity", "fodder camp", "water tanker*"]
+  phrases:
+    mr: ["दुष्काळ उपाययोजना", "दुष्काळी उपाययोजना", "दुष्काळ निवारण", "दुष्काळ सदृश"]
+    hi: ["सूखा राहत"]
+    en: ["drought relief", "drought mitigation"]
+  hashtags: ["#दुष्काळ", "#दुष्काळउपाययोजना", "#DroughtRelief", "#Drought", "#MaharashtraDrought"]
+  exclusions:
+    mr: []
+    hi: []
+    en: ["drought of goals"]
+  weights: {keyword: 1, phrase: 2, hashtag: 2}
+  match_threshold: 2        # score >= this -> proposed match
+  review_threshold: 1       # score >= this but < match_threshold -> needs human review
+  min_text_chars: 25        # fewer meaningful characters -> relevance cannot be assessed from text
+
+count_rules:
+  include_reposts: false     # X retweets / shares of other accounts' posts
+  include_replies: false     # X replies
+  include_quotes: true       # X quote posts (have their own text)
+  include_reels: true        # Instagram reels / Facebook reels
+  include_shorts: true       # YouTube Shorts (see README: the API has no Shorts flag)
+  include_live: true         # completed YouTube live streams
+  include_upcoming: false    # scheduled / upcoming YouTube streams (not yet published)
+  video_bites_source: manual       # manual | reviewer_tag
+  video_interviews_source: manual  # manual | reviewer_tag

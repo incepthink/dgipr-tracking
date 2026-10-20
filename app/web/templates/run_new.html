@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>1 · Collect publications</h1>
+<form class="panel" method="post" action="/runs">
+  <div class="row">
+    <label>Reporting period from (IST)<input type="date" name="start" value="{{ start }}" required></label>
+    <label>to (IST)<input type="date" name="end" value="{{ end }}" required></label>
+    <label>Campaign<select name="campaign_id">{% for c in campaigns %}<option value="{{ c.id }}" {% if c.id == campaign_id %}selected{% endif %}>{{ c.title_mr }} ({{ c.slug }})</option>{% endfor %}</select></label>
+    <label>Overlap (hours)<input type="number" name="overlap_hours" value="{{ overlap }}" min="0" max="72" style="width:6em"></label>
+    <label>Mode<select name="mode">
+      <option value="window">Full window (re-fetch, refresh metrics)</option>
+      <option value="incremental">Incremental (skip already-covered time)</option>
+    </select></label>
+  </div>
+  <p class="small muted">The provider is asked for the period widened by the overlap on both sides, so items near midnight IST or indexed late are not missed. Re-running never duplicates records: publications are keyed by platform + stable ID.</p>
+  <h2>Accounts</h2>
+  <table class="grid">
+    <tr><th><input type="checkbox" checked onclick="document.querySelectorAll('.acc').forEach(c=>c.checked=this.checked)"></th><th>Platform</th><th>Handle</th><th>Office</th><th>Mapping</th></tr>
+    {% for a in accounts %}
+    <tr><td><input class="acc" type="checkbox" name="account_ids" value="{{ a.id }}" checked></td><td>{{ a.platform }}</td><td>{{ a.handle }}</td>
+      <td class="mr">{{ a.office.name_mr if a.office else '— not mapped —' }}</td>
+      <td><span class="chip {{ 's-complete' if a.mapping_confirmed else 's-pending' }}">{{ 'confirmed' if a.mapping_confirmed else 'unconfirmed' }}</span></td></tr>
+    {% endfor %}
+  </table>
+  <h2>Providers</h2>
+  <p class="small">{% for p in providers %}{{ p.platform }}: <b>{{ p.provider }}</b> <span class="chip {{ 's-failed' if p.credentials == 'MISSING' else '' }}">{{ p.credentials }}</span> &nbsp; {% endfor %}</p>
+  <p><button class="btn" type="submit">Start collection</button></p>
+</form>
+{% endblock %}

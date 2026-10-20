@@ -1,0 +1,64 @@
+# SAMPLE manual inputs transcribed from the reference PDF "13.10.2026 for print.pdf"
+# (district pages 2–4) for reporting date 2026-10-12. Used ONLY by scripts/load_sample.py to build
+# the clearly labelled sample report. Column order:
+#   articles news clippings video_bites video_interviews facebook instagram x blog youtube public_app activities
+# For मुख्यालय, मुंबई the facebook/instagram/x/youtube values are NOT loaded: those cells come from the
+# fixture collection of the four registered accounts (reference values 3 3 3 0, kept here for comparison).
+#
+# Reference inconsistency (kept as-is here): the reference's Konkan "एकूण" row shows facebook 2,
+# instagram 2, x 2, public_app 1, but its own district rows sum to 4, 4, 4, 3 (the subtotal omits the
+# "विमाका कोकण" row, unlike Nagpur's subtotal which includes "विमाका, नागपूर"). This application always
+# computes subtotals from the district rows, so the sample shows 4, 4, 4, 3.
+
+period: {start: 2026-10-12, end: 2026-10-12}
+values:
+  nagpur_rio:        [1, 0, 6, 0, 0, 1, 1, 0, 0, 0, 0, 0]
+  bhandara:          [0, 0, 10, 0, 0, 3, 3, 3, 0, 0, 0, 0]
+  gondia:            [0, 4, 4, 1, 0, 2, 2, 2, 2, 1, 1, 2]
+  wardha:            [0, 0, 7, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+  nagpur:            [0, 0, 11, 0, 0, 2, 5, 0, 0, 0, 0, 0]
+  chandrapur:        [0, 2, 11, 0, 0, 2, 2, 2, 2, 0, 0, 0]
+  gadchiroli:        [0, 1, 6, 0, 0, 3, 2, 1, 0, 0, 0, 0]
+  pune:              [0, 2, 41, 0, 0, 5, 4, 6, 0, 0, 0, 0]
+  solapur:           [0, 0, 15, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  satara:            [0, 2, 19, 0, 0, 2, 2, 2, 0, 0, 0, 2]
+  chh_sambhajinagar: [0, 0, 32, 0, 0, 1, 1, 2, 0, 0, 0, 0]
+  jalna:             [0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  parbhani:          [0, 2, 3, 0, 0, 3, 0, 2, 0, 0, 0, 0]
+  beed:              [0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  konkan_rio:        [0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 2, 0]
+  raigad:            [0, 0, 10, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+  thane:             [0, 0, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  ratnagiri:         [0, 1, 9, 0, 0, 1, 1, 1, 0, 0, 1, 0]
+  palghar:           [0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  kolhapur:          [0, 0, 8, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+  sangli:            [0, 1, 14, 0, 0, 2, 1, 3, 0, 1, 1, 0]
+  sindhudurg:        [0, 3, 30, 3, 0, 5, 5, 5, 2, 3, 5, 0]
+  nashik:            [0, 1, 17, 0, 0, 2, 1, 1, 0, 0, 0, 0]
+  ahilyanagar:       [0, 1, 11, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+  jalgaon:           [0, 1, 9, 0, 0, 1, 0, 1, 0, 0, 0, 0]
+  dhule:             [0, 1, 12, 0, 0, 1, 1, 0, 0, 0, 0, 1]
+  nandurbar:         [0, 0, 3, 0, 0, 2, 2, 6, 0, 0, 0, 0]
+  amravati:          [0, 0, 0, 0, 0, 13, 5, 5, 5, 0, 5, 0]
+  akola:             [0, 0, 3, 0, 0, 2, 3, 3, 0, 0, 0, 0]
+  washim:            [0, 0, 0, 0, 0, 2, 2, 2, 2, 1, 0, 0]
+  buldhana:          [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  yavatmal:          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  latur:             [0, 2, 19, 0, 0, 2, 2, 2, 1, 0, 0, 0]
+  dharashiv:         [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  nanded:            [0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+  hingoli:           [1, 2, 15, 0, 0, 3, 2, 4, 2, 0, 1, 0]
+  mumbai_hq:         [0, 1, 59, 0, 0, 3, 3, 3, 4, 0, 0, 0]
+
+# Page-1 values printed in the reference, for automated comparison by scripts/compare_reference.py.
+reference_page1:
+  nagpur:            [1, 7, 55, 1, 0, 14, 16, 9, 4, 1, 1, 2]
+  pune:              [0, 4, 75, 0, 0, 7, 6, 8, 0, 0, 0, 2]
+  chh_sambhajinagar: [0, 2, 47, 0, 0, 4, 1, 4, 0, 0, 0, 0]
+  konkan:            [0, 1, 47, 0, 0, 2, 2, 2, 0, 0, 1, 0]
+  kolhapur:          [0, 4, 52, 3, 0, 8, 7, 9, 2, 4, 6, 0]
+  nashik:            [0, 4, 52, 0, 0, 7, 5, 9, 0, 0, 0, 1]
+  amravati:          [0, 0, 6, 0, 0, 17, 10, 10, 7, 1, 5, 0]
+  latur:             [1, 4, 41, 0, 0, 5, 4, 6, 3, 0, 1, 0]
+  mumbai_hq:         [0, 1, 59, 0, 0, 3, 3, 3, 4, 0, 0, 0]
+  total:             [2, 27, 434, 4, 0, 67, 54, 60, 20, 6, 14, 5]

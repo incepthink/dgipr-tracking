@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>2 · Review publications — <span class="mr">{{ c.title_mr }}</span></h1>
+<form class="panel row" method="get" action="/review">
+  <label>Campaign<select name="campaign_id">{% for x in campaigns %}<option value="{{ x.id }}" {% if x.id == c.id %}selected{% endif %}>{{ x.title_mr }}</option>{% endfor %}</select></label>
+  <label>From (IST)<input type="date" name="start" value="{{ start }}"></label>
+  <label>To (IST)<input type="date" name="end" value="{{ end }}"></label>
+  <label>Platform<select name="platform"><option value="">all</option>{% for p in PLATFORMS %}<option {% if p == platform %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></label>
+  <label>Decision<select name="decision"><option value="">all</option>
+    {% for d in ['pending','include','exclude','match','needs_review','insufficient_text','no_match'] %}<option {% if d == decision %}selected{% endif %}>{{ d }}</option>{% endfor %}</select></label>
+  <label>Office<select name="office"><option value="">all</option>{% for o in offices %}<option value="{{ o.code }}" {% if o.code == office %}selected{% endif %}>{{ o.name_mr }}</option>{% endfor %}</select></label>
+  <button class="btn secondary" type="submit">Filter</button>
+</form>
+<div class="panel row">
+  <span>{{ summary.total }} publications · <b>{{ summary.include }}</b> counted · <b style="color:#a76400">{{ summary.pending }}</b> countable items awaiting a decision</span>
+  <form method="post" action="/review/bulk/accept" style="margin-left:auto">
+    <input type="hidden" name="campaign_id" value="{{ c.id }}"><input type="hidden" name="start" value="{{ start }}"><input type="hidden" name="end" value="{{ end }}">
+    <button class="btn secondary" type="submit" title="Marks every proposed match without a manual decision as reviewed/included (each audited)">Accept all proposed matches</button>
+  </form>
+  <a class="btn" href="/report?campaign_id={{ c.id }}&start={{ start }}&end={{ end }}">Continue to report →</a>
+</div>
+<table class="grid">
+  <tr><th style="width:12em">Publication</th><th>Text &amp; evidence</th><th style="width:13em">Automatic</th><th style="width:9em">Counts?</th><th style="width:21em">Review</th></tr>
+  {% for r in rows %}{% set p = r.pub %}{% set cls = r.cls %}
+  <tr id="p{{ p.id }}">
+    <td class="small">
+      <b>{{ p.platform }}</b> · {{ p.content_type }}{% if p.is_pinned %} · pinned{% endif %}{% if p.is_repost %} · repost{% endif %}{% if p.is_reply %} · reply{% endif %}{% if p.is_quote %} · quote{% endif %}<br>
+      {{ p.published_at_utc | ist }}<br>
+      <span class="mr">{{ p.account.office.name_mr if p.account.office else '— unmapped —' }}</span><br>
+      <a href="{{ p.url }}" target="_blank" rel="noopener">open ↗</a> · <a href="/publications/{{ p.id }}">details</a><br>
+      <span class="muted">{{ p.provider }}</span>
+    </td>
+    <td class="text">
+      {% for fname, parts in r.highlight.items() %}
+        <div class="pubtext">{% if fname != 'text' %}<span class="muted small">{{ fname }}: </span>{% endif %}{% for seg, hit in parts %}{% if hit %}<mark>{{ seg }}</mark>{% else %}{{ seg }}{% endif %}{% endfor %}</div>
+      {% else %}<span class="muted">(no text)</span>{% endfor %}
+      {% if p.media %}<div class="small muted">{{ p.media|length }} media item(s) — not analysed</div>{% endif %}
+    </td>
+    <td class="small">
+      {% if cls %}<span class="chip s-{{ cls.auto_decision }}">{{ cls.auto_decision }}</span> score {{ cls.auto_score }}
+        <ul style="padding-left:16px;margin:4px 0">{% for m in (cls.auto_evidence.matches or []) %}<li class="mr">{{ m.kind }}: {{ m.term }}</li>{% endfor %}
+        {% for x in (cls.auto_evidence.reasons or []) %}<li class="muted">{{ x }}</li>{% endfor %}</ul>
+        <span class="muted">rules v{{ cls.rules_version }}</span>
+      {% else %}<span class="chip s-pending">not classified</span>{% endif %}
+    </td>
+    <td class="small">{% if r.counts %}<span class="chip s-complete">countable</span>{% else %}<span class="chip">{{ r.count_reason }}</span>{% endif %}</td>
+    <td class="small">
+      {% if cls %}
+      Now: <span class="chip s-{{ r.eff }}">{{ r.eff }}</span>{% if cls.manual_decision %} by {{ cls.manual_by }}{% endif %}{% if cls.report_tag %} · tag {{ cls.report_tag }}{% endif %}
+      {% if cls.manual_note %}<div class="muted">“{{ cls.manual_note }}”</div>{% endif %}
+      <form method="post" action="/review/{{ cls.id }}" style="margin-top:4px">
+        <input type="hidden" name="ret" value="{{ request.url.path }}?{{ request.url.query }}#p{{ p.id }}">
+        <input type="text" name="note" placeholder="note (required for overrides)" style="width:100%">
+        <div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap">
+          <button class="btn small" name="action" value="include">Include</button>
+          <button class="btn small danger" name="action" value="exclude">Exclude</button>
+          {% if cls.manual_decision %}<button class="btn small secondary" name="action" value="reset">Reset</button>{% endif %}
+          <select name="report_tag" title="Optional explicit tag used only if the campaign counts video bites/interviews by reviewer tag">
+            <option value="__keep__">tag: keep</option><option value="">no tag</option><option value="video_bite">video bite</option><option value="video_interview">video interview</option>
+          </select>
+        </div>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}<tr><td colspan="5" class="muted">No publications for this period/filter. Run a collection first.</td></tr>{% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,17 @@
+services:
+  app:
+    build: ..
+    restart: unless-stopped
+    env_file: ./app.env
+    volumes:
+      - /data/dgipr:/data
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      - SITE_HOST=${SITE_HOST}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /data/caddy:/data
+    depends_on: [app]

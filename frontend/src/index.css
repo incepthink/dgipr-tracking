@@ -1,0 +1,362 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource/noto-sans-devanagari/400.css";
+@import "@fontsource/noto-sans-devanagari/600.css";
+@import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/500.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: oklch(0.985 0.002 250);
+  --foreground: oklch(0.21 0.02 260);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--foreground);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.5 0.17 258);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.96 0.006 250);
+  --secondary-foreground: oklch(0.25 0.02 260);
+  --muted: oklch(0.965 0.005 250);
+  --muted-foreground: oklch(0.52 0.02 260);
+  --accent: oklch(0.955 0.012 258);
+  --accent-foreground: oklch(0.3 0.06 260);
+  --destructive: oklch(0.56 0.21 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(0.915 0.008 255);
+  --input: oklch(0.88 0.01 255);
+  --ring: oklch(0.6 0.15 258);
+  --brand: oklch(0.68 0.19 45);
+
+  --success: oklch(0.55 0.13 155);
+  --success-soft: oklch(0.95 0.045 155);
+  --warning: oklch(0.6 0.14 70);
+  --warning-soft: oklch(0.96 0.06 85);
+  --danger: oklch(0.55 0.19 25);
+  --danger-soft: oklch(0.95 0.035 25);
+  --info: oklch(0.52 0.15 258);
+  --info-soft: oklch(0.95 0.03 258);
+  --neutral-soft: oklch(0.95 0.005 255);
+  --mark: oklch(0.92 0.13 95);
+
+  /* Sidebar follows the reports design: ink ground, slate hover, marigold for the active item. */
+  --sidebar: #15202b;
+  --sidebar-foreground: #d5dbe0;
+  --sidebar-muted: #8a96a0;
+  --sidebar-accent: #2a3844;
+
+  --radius: 0.65rem;
+}
+
+.dark {
+  --background: oklch(0.16 0.012 260);
+  --foreground: oklch(0.95 0.005 260);
+  --card: oklch(0.2 0.014 260);
+  --card-foreground: var(--foreground);
+  --popover: oklch(0.21 0.014 260);
+  --popover-foreground: var(--foreground);
+  --primary: oklch(0.68 0.15 258);
+  --primary-foreground: oklch(0.16 0.02 260);
+  --secondary: oklch(0.26 0.014 260);
+  --secondary-foreground: oklch(0.93 0.005 260);
+  --muted: oklch(0.24 0.012 260);
+  --muted-foreground: oklch(0.7 0.015 260);
+  --accent: oklch(0.27 0.03 260);
+  --accent-foreground: oklch(0.93 0.01 260);
+  --destructive: oklch(0.62 0.2 25);
+  --border: oklch(0.29 0.014 260);
+  --input: oklch(0.34 0.014 260);
+  --ring: oklch(0.65 0.14 258);
+
+  --success: oklch(0.75 0.14 155);
+  --success-soft: oklch(0.3 0.06 155);
+  --warning: oklch(0.8 0.13 80);
+  --warning-soft: oklch(0.32 0.06 75);
+  --danger: oklch(0.72 0.16 25);
+  --danger-soft: oklch(0.32 0.07 25);
+  --info: oklch(0.75 0.12 258);
+  --info-soft: oklch(0.3 0.06 258);
+  --neutral-soft: oklch(0.28 0.01 260);
+  --mark: oklch(0.55 0.12 95);
+
+  --sidebar: #0d1217;
+  --sidebar-accent: #1f2a33;
+}
+
+/* Chart palette (dataviz reference instance): categorical slots 1–3 for trend lines (validated all-pairs in
+   both modes), one blue ramp for the compliance heatmap. Dark steps are selected for the dark surface. */
+:root {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --seq-empty: #f0efec;
+  --seq-partial: #9ec5f4;
+  --seq-full: #256abf;
+  --corrected: #fff2cc; /* the admin workbook's highlight for corrected cells */
+  --grid: #e1e0d9;
+  --axis: #898781;
+}
+.dark {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --seq-empty: #383835;
+  --seq-partial: #1c5cab;
+  --seq-full: #86b6ef;
+  --corrected: #5a4a14;
+  --grid: #2c2c2a;
+  --axis: #898781;
+}
+
+/* Reports workspace ("the roll call" design): ink on a grey-green ground, one action blue, marigold for focus and
+   today, and one colour per review status. Status is always carried by shape too (see .g below), never hue alone. */
+:root {
+  --r-ink: #15202b;
+  --r-ground: #f2f3ee;
+  --r-card: #ffffff;
+  --r-sunk: #e7eae3;
+  --r-line: #d7dbd3;
+  --r-line-soft: #f0f1ec;
+  --r-field: #c3c9c0;
+  --r-muted: #4e5a64;
+  --r-faint: #7d878f;
+  --r-action: #1f48b8;
+  --r-action-hover: #15327f;
+  --r-action-soft: #eef2fc;
+  --r-focus: #f2b544;
+  --r-today: #fff8e6;
+  --r-accepted: #0e6a4e;
+  --r-accepted-soft: #e9f5ee;
+  --r-returned: #b86e00;
+  --r-returned-ink: #7a4a00;
+  --r-returned-soft: #fff4df;
+  --r-overdue: #b42318;
+  --r-overdue-ink: #8c1a12;
+  --r-overdue-soft: #fdecea;
+  --r-late: #e8590c;
+  --r-late-bar: #e8a15c;
+  --r-corrected: #6d28d9;
+  --r-corrected-ink: #5b21b6;
+  --r-na: #c3c9c0;
+  --r-nav: #15202b;
+  --r-nav-active: #2a3844;
+  --r-nav-text: #d5dbe0;
+  --r-nav-muted: #8a96a0;
+  /* map + heat: one blue, light → dark = less → more (dark mode: dim → bright) */
+  --r-seq-1: #dce5f8;
+  --r-seq-2: #b0c3ef;
+  --r-seq-3: #7e9ee2;
+  --r-seq-4: #4a72cf;
+  --r-seq-5: #1f3f9e;
+  --r-land: #fbfbf8;
+  --r-land-deep: #eef0ea;
+  --r-coast: rgb(21 32 43 / 0.45);
+  --r-border: rgb(21 32 43 / 0.16);
+}
+.dark {
+  --r-ink: #e6eaed;
+  --r-ground: #11171d;
+  --r-card: #1a2229;
+  --r-sunk: #232d36;
+  --r-line: #2e3943;
+  --r-line-soft: #232c34;
+  --r-field: #475561;
+  --r-muted: #a7b1b9;
+  --r-faint: #84909a;
+  --r-action: #7d9cf0;
+  --r-action-hover: #a3b9f5;
+  --r-action-soft: #1e2a4a;
+  --r-focus: #f2b544;
+  --r-today: #2b2616;
+  --r-accepted: #3fb68b;
+  --r-accepted-soft: #15302a;
+  --r-returned: #e3a54a;
+  --r-returned-ink: #f0c27e;
+  --r-returned-soft: #33280f;
+  --r-overdue: #f07a6e;
+  --r-overdue-ink: #f6a39a;
+  --r-overdue-soft: #3a1c1a;
+  --r-late: #ff8a4c;
+  --r-late-bar: #c47a3a;
+  --r-corrected: #a98bf0;
+  --r-corrected-ink: #c4b0f6;
+  --r-na: #4a5560;
+  --r-nav: #0d1217;
+  --r-nav-active: #1f2a33;
+  --r-nav-text: #c9d1d7;
+  --r-nav-muted: #7d8a95;
+  --r-seq-1: #2e4677;
+  --r-seq-2: #3d5fa8;
+  --r-seq-3: #587dcf;
+  --r-seq-4: #82a1e8;
+  --r-seq-5: #b9cbf8;
+  --r-land: #222c35;
+  --r-land-deep: #1d262e;
+  --r-coast: rgb(230 234 237 / 0.45);
+  --r-border: rgb(230 234 237 / 0.16);
+}
+
+@theme inline {
+  --font-body: "Atkinson Hyperlegible Next", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font-figure: "IBM Plex Mono", ui-monospace, "Noto Sans Devanagari", monospace;
+  --color-r-ink: var(--r-ink);
+  --color-r-ground: var(--r-ground);
+  --color-r-card: var(--r-card);
+  --color-r-sunk: var(--r-sunk);
+  --color-r-line: var(--r-line);
+  --color-r-line-soft: var(--r-line-soft);
+  --color-r-field: var(--r-field);
+  --color-r-muted: var(--r-muted);
+  --color-r-faint: var(--r-faint);
+  --color-r-action: var(--r-action);
+  --color-r-action-hover: var(--r-action-hover);
+  --color-r-action-soft: var(--r-action-soft);
+  --color-r-focus: var(--r-focus);
+  --color-r-today: var(--r-today);
+  --color-r-accepted: var(--r-accepted);
+  --color-r-accepted-soft: var(--r-accepted-soft);
+  --color-r-returned: var(--r-returned);
+  --color-r-returned-ink: var(--r-returned-ink);
+  --color-r-returned-soft: var(--r-returned-soft);
+  --color-r-overdue: var(--r-overdue);
+  --color-r-overdue-ink: var(--r-overdue-ink);
+  --color-r-overdue-soft: var(--r-overdue-soft);
+  --color-r-late: var(--r-late);
+  --color-r-late-bar: var(--r-late-bar);
+  --color-r-corrected: var(--r-corrected);
+  --color-r-corrected-ink: var(--r-corrected-ink);
+  --color-r-nav: var(--r-nav);
+  --color-r-nav-active: var(--r-nav-active);
+  --color-r-nav-text: var(--r-nav-text);
+  --color-r-nav-muted: var(--r-nav-muted);
+  --color-r-seq-1: var(--r-seq-1);
+  --color-r-seq-2: var(--r-seq-2);
+  --color-r-seq-3: var(--r-seq-3);
+  --color-r-seq-4: var(--r-seq-4);
+  --color-r-seq-5: var(--r-seq-5);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", Consolas, "Noto Sans Devanagari", monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-mark: var(--mark);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * { @apply border-border; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+  input[type="number"]::-webkit-inner-spin-button { opacity: 0.4; }
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+.scrollbar-thin { scrollbar-width: thin; }
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: translate(-50%, -48%) scale(0.97); } to { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes slide-in { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.animate-rise { animation: rise 220ms ease-out both; }
+.no-spin::-webkit-inner-spin-button, .no-spin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.no-spin { -moz-appearance: textfield; appearance: textfield; }
+
+/* ---------------------------------------------------------------- Reports workspace */
+/* .rpt scopes the design's type and ground to report pages; Social Monitoring pages keep the defaults. */
+.rpt { background: var(--r-ground); color: var(--r-ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+.rpt :focus-visible { outline: 3px solid var(--r-focus); outline-offset: 2px; }
+.rpt a:not([class]) { color: var(--r-action); }
+.rpt a:not([class]):hover { color: var(--r-action-hover); }
+.disp { font-family: var(--font-display); letter-spacing: -0.01em; }
+.num { font-family: var(--font-figure); font-variant-numeric: tabular-nums; }
+
+/* Period status marks: shape carries meaning, colour confirms it. */
+.g { display: inline-block; width: 14px; height: 14px; border-radius: 50%; position: relative; flex: none; vertical-align: -2px; }
+.g.pend { border: 2px solid var(--r-faint); }
+.g.draft { border: 2px dashed var(--r-muted); }
+.g.over { border: 2.5px solid var(--r-overdue); background: radial-gradient(circle, var(--r-overdue) 0 2.5px, var(--r-overdue-soft) 3px); }
+.g.sub { background: var(--r-action); }
+.g.acc { background: var(--r-accepted); }
+.g.acc::after { content: ""; position: absolute; left: 4.5px; top: 2px; width: 3px; height: 6.5px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.g.ret { border-radius: 3px; background: var(--r-returned); }
+.g.ret::after { content: ""; position: absolute; left: 3px; top: 4px; border: 3px solid transparent; border-right: 4px solid #fff; border-left: 0; }
+.g.late::before { content: ""; position: absolute; right: -3px; top: -3px; width: 7px; height: 7px; border-radius: 50%; background: var(--r-late); box-shadow: 0 0 0 1.5px var(--r-card); }
+.g.na { width: 5px; height: 5px; background: var(--r-na); margin: 0 4.5px; }
+
+/* A value the state office corrected: violet with a corner flag, everywhere it appears. */
+.corr { position: relative; color: var(--r-corrected-ink); padding-right: 8px; }
+.corr::after { content: ""; position: absolute; right: -1px; top: -1px; border: 5px solid transparent; border-top-color: var(--r-corrected); border-right-color: var(--r-corrected); }
+
+/* A scroll box is the containing block for anything absolutely positioned inside it (sr-only labels included),
+   so nothing escapes it and widens the page. */
+.rpt .overflow-auto, .rpt .overflow-x-auto { position: relative; }
+
+.kbd { font-family: var(--font-figure); font-size: 12px; border: 1px solid var(--r-field); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--r-card); color: var(--r-ink); }
+
+/* Print / PDF from the Reports export panel: while body.rpt-printing is set, only the table container prints
+   (no sidebar, controls or dialogs), in black on white whatever the theme, in the Devanagari-capable body face. */
+.rpt-print { display: none; }
+@page rpt-sheet { size: A4 landscape; margin: 10mm; }
+@media print {
+  body.rpt-printing { background: #fff !important; }
+  body.rpt-printing > *:not(.rpt-print) { display: none !important; }
+  body.rpt-printing > .rpt-print { display: block; page: rpt-sheet; }
+  .rpt-print { color: #000; background: #fff; font-family: var(--font-body); font-size: 10.5pt; line-height: 1.3; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rpt-print h1 { margin: 0 0 2pt; font-size: 14pt; font-weight: 700; }
+  .rpt-print p { margin: 0 0 8pt; font-weight: 700; }
+  .rpt-print table { width: 100%; border-collapse: collapse; }
+  .rpt-print thead { display: table-header-group; }
+  .rpt-print tfoot { display: table-row-group; }
+  .rpt-print tr { break-inside: avoid; }
+  .rpt-print th, .rpt-print td { border: 0.75pt solid #777; padding: 3pt 5pt; text-align: right; font-variant-numeric: tabular-nums; }
+  .rpt-print th { background: #e8ecf4; font-size: 9pt; font-weight: 700; vertical-align: bottom; }
+  .rpt-print .txt { text-align: left; }
+  .rpt-print tr.grp td { border-top: 1.5pt solid #000; }
+  .rpt-print tfoot td { font-weight: 700; background: #e8ecf4; border-top: 1.5pt solid #000; }
+}

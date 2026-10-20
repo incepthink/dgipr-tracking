@@ -1,0 +1,12 @@
+fastapi==0.143.1
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.4
+Jinja2==3.1.6
+python-multipart==0.0.32
+httpx==0.28.1
+PyYAML==6.0.3
+tzdata==2026.5          # IANA time zones (Asia/Kolkata) on Windows
+playwright==1.64.0      # Chromium/Edge for HTML -> PDF with correct Devanagari shaping
+pymupdf==1.28.2         # PDF -> PNG for visual comparison, PDF tests
+pytest==9.1.1
+openpyxl==3.1.5        # xlsx export of office reports, one-time sheet import
