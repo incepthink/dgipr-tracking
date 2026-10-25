@@ -18,7 +18,11 @@ import FillFormPage from "@/pages/forms/FillForm";
 import FormsListPage from "@/pages/forms/FormsList";
 import FormBuilderPage from "@/pages/forms/FormBuilder";
 import ResponsesPage from "@/pages/forms/Responses";
-import AnalyticsPage from "@/pages/office/Analytics";
+import AnalyticsPage, { FormAnalyticsPage } from "@/pages/office/Analytics";
+import InsightsOverview from "@/pages/insights/Overview";
+import InsightsPosts from "@/pages/insights/Posts";
+import InsightsPost from "@/pages/insights/Post";
+import InsightsDistricts from "@/pages/insights/Districts";
 import DeskPage from "@/pages/office/Desk";
 import CompliancePage from "@/pages/office/Compliance";
 import ZoneBoardPage from "@/pages/office/ZoneBoard";
@@ -34,6 +38,8 @@ const queryClient = new QueryClient({
 
 /** Social Monitoring and administration are for the state admin only (the API enforces the same). */
 const state = (el: React.ReactNode) => <RequireRole roles={["state"]}>{el}</RequireRole>;
+/** Insights (post analytics) and the form analytics are for the state and zone offices. */
+const insights = (el: React.ReactNode) => <RequireRole roles={["state", "zone"]}>{el}</RequireRole>;
 
 function Home() {
   const me = useUser();
@@ -67,6 +73,11 @@ const router = createBrowserRouter(
         { path: "forms/responses", element: <ResponsesPage /> },
         { path: "office/entry", element: <Navigate to="/forms/mine" replace /> },
         { path: "office/analytics", element: <AnalyticsPage /> },
+        { path: "office/form-analytics", element: insights(<FormAnalyticsPage />) },
+        { path: "insights", element: insights(<InsightsOverview />) },
+        { path: "insights/posts", element: insights(<InsightsPosts />) },
+        { path: "insights/posts/:id", element: insights(<InsightsPost />) },
+        { path: "insights/districts", element: insights(<InsightsDistricts />) },
         { path: "office/desk", element: state(<DeskPage />) },
         { path: "office/compliance", element: <RequireRole roles={["zone"]}><CompliancePage /></RequireRole> },
         { path: "office/board", element: <RequireRole roles={["zone"]}><ZoneBoardPage /></RequireRole> },

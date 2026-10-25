@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import {
   Activity, BarChart3, CircleUserRound, ClipboardCheck, ClipboardList, Clock3,
-  Inbox, Languages, LayoutGrid, LogOut, Menu, Moon, Sheet, Sun, UserCog, X, ExternalLink,
+  Inbox, Languages, LayoutDashboard, LayoutGrid, LogOut, MapPinned, Menu, Moon, Newspaper, Sheet, Sun, UserCog, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout, useUser } from "@/lib/auth";
@@ -20,7 +20,6 @@ const OFFICE: NavItem[] = [
   { to: "/forms/mine", label: "nav_today", hint: "nav_today_hint", icon: Clock3, roles: ["district"], badge: true },
   { to: "/forms", label: "nav_forms", hint: "nav_forms_hint", icon: ClipboardList, roles: ["state"] },
   { to: "/forms/responses", label: "nav_responses", hint: "nav_responses_hint", icon: ClipboardCheck, roles: ["state"] },
-  { to: "/office/analytics", label: "nav_analytics", hint: "nav_analytics_hint", icon: BarChart3, roles: ["zone", "state"] },
   { to: "/office/analytics", label: "nav_my_numbers", hint: "nav_my_numbers_hint", icon: BarChart3, roles: ["district"] },
   { to: "/office/reports", label: "nav_reports", hint: "nav_reports_hint", icon: Sheet, roles: ["district", "zone", "state"] },
   { to: "/account", label: "nav_account", hint: "nav_account_hint", icon: CircleUserRound, roles: ["district", "zone", "state"] },
@@ -69,6 +68,13 @@ function activeOf(pathname: string) {
     .sort((a, b) => b.length - a.length)[0];
 }
 
+/** Insights (post analytics) for the state and zone offices. */
+const INSIGHTS: { to: string; label: TKey; icon: React.ElementType; end?: boolean }[] = [
+  { to: "/insights", label: "ins_overview", icon: LayoutDashboard, end: true },
+  { to: "/insights/posts", label: "ins_posts", icon: Newspaper },
+  { to: "/insights/districts", label: "ins_districts", icon: MapPinned },
+];
+
 /** Social monitoring is one page; these sit under it in the sidebar. */
 const MONITOR_SUB: { to: string; label: TKey }[] = [
   { to: "/runs", label: "nav_run_history" },
@@ -79,7 +85,7 @@ const MONITOR_SUB: { to: string; label: TKey }[] = [
 
 /** Report pages (forms, office analytics/tables, users) use the reports workspace look. */
 export function isReportsPath(pathname: string) {
-  return /^\/(forms|office|admin|account|monitor)(\/|$)/.test(pathname);
+  return /^\/(forms|office|admin|account|monitor|insights)(\/|$)/.test(pathname);
 }
 
 /** Light/dark, shared by every caller (header button and the Account page) through a window event. */
@@ -128,6 +134,19 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </Link>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
+        {me.role !== "district" && (
+          <div>
+            <SectionLabel>{t("nav_analytics")}</SectionLabel>
+            <div className="space-y-0.5">
+              {INSIGHTS.map((m) => (
+                <NavLink key={m.to} to={m.to} end={m.end} onClick={onNavigate} className={({ isActive }) => navCls(isActive)}>
+                  <m.icon className="size-4" /> {t(m.label)}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <SectionLabel>{t("nav_office")}</SectionLabel>
           <div className="space-y-0.5">
@@ -184,12 +203,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </nav>
 
       <div className="border-t border-sidebar-accent px-5 py-4 text-xs text-sidebar-muted">
-        {isState && (
-          <a href="/classic" className="inline-flex items-center gap-1.5 hover:text-white">
-            Classic interface <ExternalLink className="size-3" />
-          </a>
-        )}
-        <div className="mt-1">Dates are calendar days in Asia/Kolkata.</div>
+        <div>Dates are calendar days in Asia/Kolkata.</div>
       </div>
     </div>
   );

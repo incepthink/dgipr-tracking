@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { FileSpreadsheet } from "lucide-react";
 import { api, type Attention, type FormField, type GroupKey, type Groups, type Heatmap, type Movers, type OfficeMap, type SeriesPoint } from "@/lib/api";
@@ -21,9 +21,10 @@ import { fieldLabel, scopeQs, sumColumns, useFormFilters, type FormFilters } fro
 import MyNumbersPage from "./MyNumbers";
 import { DivisionPicker, FormPicker } from "./shared";
 
+/** District offices see their own numbers here; state and zone users now land on Insights (post analytics). */
 export default function AnalyticsPage() {
   const me = useUser();
-  return me.role === "district" ? <MyNumbersPage /> : <StateAnalytics />;
+  return me.role === "district" ? <MyNumbersPage /> : <Navigate to="/insights" replace />;
 }
 
 function useAn<T>(f: FormFilters, path: string, extra: Record<string, string | number | undefined> = {}, enabled = true) {
@@ -50,7 +51,7 @@ const TABLE_LINKS: { kind: string; label: TKey }[] = [
  * (rank with most improved, own-baseline drops, small multiples, the reporting calendar), links to the sheet
  * views, and the ask box. Zone users get the same page scoped to their division by the server.
  */
-function StateAnalytics() {
+export function FormAnalyticsPage() {
   const { t, tf, lang } = useT();
   const me = useUser();
   const f = useFormFilters(14);

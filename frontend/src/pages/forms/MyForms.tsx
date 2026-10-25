@@ -224,7 +224,7 @@ function DueHero({ form, p, office, now }: { form: InboxForm; p: Submission; off
   const dueLine = !dl ? null : sameIstDay(dl, new Date(now)) ? tf("due_today_by", { time: timeOf(dl, lang) }) : tf("due_by", { when: whenText(dl, lang) });
   const label = periodLabel(form, p.period_start, lang);
   return (
-    <section className="flex flex-col gap-3.5 rounded-[18px] bg-r-nav p-5 text-white">
+    <section className="flex flex-col gap-3.5 rounded-[18px] bg-r-hero p-5 text-white">
       {dueLine && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-bold text-r-focus">{dueLine}</span>
@@ -248,7 +248,7 @@ function DueHero({ form, p, office, now }: { form: InboxForm; p: Submission; off
 function CaughtUp() {
   const { t } = useT();
   return (
-    <section className="flex items-start gap-3.5 rounded-[18px] bg-r-nav p-5 text-white">
+    <section className="flex items-start gap-3.5 rounded-[18px] bg-r-hero p-5 text-white">
       <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-r-focus" aria-hidden />
       <div className="flex flex-col gap-1">
         <span className="disp text-2xl leading-[1.15] font-bold">{t("caught_up")}</span>

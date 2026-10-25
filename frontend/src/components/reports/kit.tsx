@@ -240,7 +240,7 @@ export function OfflineBanner() {
   }, []);
   if (online) return null;
   return (
-    <div role="status" className="rpt mb-4 flex gap-3 rounded-xl bg-r-nav p-3.5 text-white">
+    <div role="status" className="rpt mb-4 flex gap-3 rounded-xl bg-r-hero p-3.5 text-white">
       <WifiOff className="size-[22px] shrink-0 text-r-focus" aria-hidden />
       <div className="flex flex-col gap-1"><b>{t("offline_title")}</b><span className="text-[15px] text-r-nav-text">{t("offline_body")}</span></div>
     </div>

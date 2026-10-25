@@ -393,6 +393,6 @@ export function RollCall({ form, data, highlight, onPick, extraCols = "sent" }: 
 
 export function WhatsAppBox({ text }: { text: string }) {
   return (
-    <pre className="m-0 rounded-xl border border-[#bfdccb] bg-[#e9f5ee] p-3.5 font-body text-sm leading-normal whitespace-pre-wrap text-[#10261a] dark:border-[#2c4a3a] dark:bg-[#15302a] dark:text-[#d5eadf]">{text}</pre>
+    <pre className="m-0 rounded-xl border border-[#bfdccb] bg-[#e9f5ee] p-3.5 font-body text-sm leading-normal whitespace-pre-wrap text-[#10261a] dark:border-r-line dark:bg-r-accepted-soft dark:text-[#d5eadf]">{text}</pre>
   );
 }

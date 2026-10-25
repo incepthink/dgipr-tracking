@@ -55,38 +55,40 @@
 }
 
 .dark {
-  --background: oklch(0.16 0.012 260);
-  --foreground: oklch(0.95 0.005 260);
-  --card: oklch(0.2 0.014 260);
+  --background: #141414;
+  --foreground: #ececec;
+  --card: #1c1c1c;
   --card-foreground: var(--foreground);
-  --popover: oklch(0.21 0.014 260);
+  --popover: #222222;
   --popover-foreground: var(--foreground);
-  --primary: oklch(0.68 0.15 258);
-  --primary-foreground: oklch(0.16 0.02 260);
-  --secondary: oklch(0.26 0.014 260);
-  --secondary-foreground: oklch(0.93 0.005 260);
-  --muted: oklch(0.24 0.012 260);
-  --muted-foreground: oklch(0.7 0.015 260);
-  --accent: oklch(0.27 0.03 260);
-  --accent-foreground: oklch(0.93 0.01 260);
-  --destructive: oklch(0.62 0.2 25);
-  --border: oklch(0.29 0.014 260);
-  --input: oklch(0.34 0.014 260);
-  --ring: oklch(0.65 0.14 258);
+  --primary: #8db0ff;
+  --primary-foreground: #141414;
+  --secondary: #262626;
+  --secondary-foreground: #e3e3e3;
+  --muted: #212121;
+  --muted-foreground: #acacac;
+  --accent: #2a2a2a;
+  --accent-foreground: #ececec;
+  --destructive: #f2806f;
+  --border: #303030;
+  --input: #484848;
+  --ring: #f2b544;
 
-  --success: oklch(0.75 0.14 155);
-  --success-soft: oklch(0.3 0.06 155);
-  --warning: oklch(0.8 0.13 80);
-  --warning-soft: oklch(0.32 0.06 75);
-  --danger: oklch(0.72 0.16 25);
-  --danger-soft: oklch(0.32 0.07 25);
-  --info: oklch(0.75 0.12 258);
-  --info-soft: oklch(0.3 0.06 258);
-  --neutral-soft: oklch(0.28 0.01 260);
-  --mark: oklch(0.55 0.12 95);
+  --success: #5ccb95;
+  --success-soft: #17291f;
+  --warning: #f0a73e;
+  --warning-soft: #33280f;
+  --danger: #f2806f;
+  --danger-soft: #371c18;
+  --info: #8db0ff;
+  --info-soft: #1f2840;
+  --neutral-soft: #262626;
+  --mark: #6b5418;
 
-  --sidebar: #0d1217;
-  --sidebar-accent: #1f2a33;
+  --sidebar: #0f0f0f;
+  --sidebar-foreground: #c8c8c8;
+  --sidebar-muted: #868686;
+  --sidebar-accent: #222222;
 }
 
 /* Chart palette (dataviz reference instance): categorical slots 1–3 for trend lines (validated all-pairs in
@@ -106,11 +108,11 @@
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;
-  --seq-empty: #383835;
+  --seq-empty: #2b2b2b;
   --seq-partial: #1c5cab;
   --seq-full: #86b6ef;
   --corrected: #5a4a14;
-  --grid: #2c2c2a;
+  --grid: #2c2c2c;
   --axis: #898781;
 }
 
@@ -148,6 +150,7 @@
   --r-nav-active: #2a3844;
   --r-nav-text: #d5dbe0;
   --r-nav-muted: #8a96a0;
+  --r-hero: #15202b;
   /* map + heat: one blue, light → dark = less → more (dark mode: dim → bright) */
   --r-seq-1: #dce5f8;
   --r-seq-2: #b0c3ef;
@@ -159,47 +162,50 @@
   --r-coast: rgb(21 32 43 / 0.45);
   --r-border: rgb(21 32 43 / 0.16);
 }
+/* Dark ("graphite"): neutral greys with no blue or green tint. Surfaces step up in lightness (nav < ground < card <
+   hero / sunk), borders stay quiet, marigold remains the one accent, and text never goes pure white. */
 .dark {
-  --r-ink: #e6eaed;
-  --r-ground: #11171d;
-  --r-card: #1a2229;
-  --r-sunk: #232d36;
-  --r-line: #2e3943;
-  --r-line-soft: #232c34;
-  --r-field: #475561;
-  --r-muted: #a7b1b9;
-  --r-faint: #84909a;
-  --r-action: #7d9cf0;
-  --r-action-hover: #a3b9f5;
-  --r-action-soft: #1e2a4a;
+  --r-ink: #ececec;
+  --r-ground: #141414;
+  --r-card: #1c1c1c;
+  --r-sunk: #262626;
+  --r-line: #303030;
+  --r-line-soft: #232323;
+  --r-field: #484848;
+  --r-muted: #acacac;
+  --r-faint: #878787;
+  --r-action: #8db0ff;
+  --r-action-hover: #b3caff;
+  --r-action-soft: #1f2840;
   --r-focus: #f2b544;
-  --r-today: #2b2616;
-  --r-accepted: #3fb68b;
-  --r-accepted-soft: #15302a;
-  --r-returned: #e3a54a;
-  --r-returned-ink: #f0c27e;
+  --r-today: #2b2414;
+  --r-accepted: #5ccb95;
+  --r-accepted-soft: #17291f;
+  --r-returned: #f0a73e;
+  --r-returned-ink: #f6c57f;
   --r-returned-soft: #33280f;
-  --r-overdue: #f07a6e;
-  --r-overdue-ink: #f6a39a;
-  --r-overdue-soft: #3a1c1a;
-  --r-late: #ff8a4c;
-  --r-late-bar: #c47a3a;
-  --r-corrected: #a98bf0;
-  --r-corrected-ink: #c4b0f6;
-  --r-na: #4a5560;
-  --r-nav: #0d1217;
-  --r-nav-active: #1f2a33;
-  --r-nav-text: #c9d1d7;
-  --r-nav-muted: #7d8a95;
-  --r-seq-1: #2e4677;
-  --r-seq-2: #3d5fa8;
-  --r-seq-3: #587dcf;
-  --r-seq-4: #82a1e8;
-  --r-seq-5: #b9cbf8;
-  --r-land: #222c35;
-  --r-land-deep: #1d262e;
-  --r-coast: rgb(230 234 237 / 0.45);
-  --r-border: rgb(230 234 237 / 0.16);
+  --r-overdue: #f2806f;
+  --r-overdue-ink: #f8aa9e;
+  --r-overdue-soft: #371c18;
+  --r-late: #ff9358;
+  --r-late-bar: #b9733b;
+  --r-corrected: #b7a0f6;
+  --r-corrected-ink: #cfc0f9;
+  --r-na: #484848;
+  --r-nav: #0f0f0f;
+  --r-nav-active: #222222;
+  --r-nav-text: #c8c8c8;
+  --r-nav-muted: #868686;
+  --r-hero: #252525;
+  --r-seq-1: #232d45;
+  --r-seq-2: #2f4479;
+  --r-seq-3: #4766b8;
+  --r-seq-4: #7495e8;
+  --r-seq-5: #aec3fa;
+  --r-land: #222222;
+  --r-land-deep: #1a1a1a;
+  --r-coast: rgb(236 236 236 / 0.4);
+  --r-border: rgb(236 236 236 / 0.12);
 }
 
 @theme inline {
@@ -236,6 +242,7 @@
   --color-r-nav-active: var(--r-nav-active);
   --color-r-nav-text: var(--r-nav-text);
   --color-r-nav-muted: var(--r-nav-muted);
+  --color-r-hero: var(--r-hero);
   --color-r-seq-1: var(--r-seq-1);
   --color-r-seq-2: var(--r-seq-2);
   --color-r-seq-3: var(--r-seq-3);
@@ -309,22 +316,16 @@
 
 /* ---------------------------------------------------------------- Reports workspace */
 /* .rpt scopes the design's type and ground to report pages; Social Monitoring pages keep the defaults. */
-/* Social monitoring (.mon): light mode keeps the marigold focus; on the dark ground marigold reads muddy, so
-   the current step / focus / "left to decide" highlight switches to teal and warnings to a softer orange. */
+/* Social monitoring (.mon): the current step / focus / "left to decide" highlight uses marigold in both modes. */
 .mon {
   --r-focus-glow: rgb(242 181 68 / 0.18);
   --mon-mark: #ffe3a1;
   --mon-mark-ink: #15202b;
 }
 .dark .mon {
-  --r-focus: #4cc3d3;
-  --r-focus-glow: rgb(76 195 211 / 0.16);
-  --r-today: #12303a;
-  --r-returned: #f0915a;
-  --r-returned-ink: #f6b48c;
-  --r-returned-soft: #36231a;
-  --mon-mark: #1f5560;
-  --mon-mark-ink: #e6f7fa;
+  --r-focus-glow: rgb(242 181 68 / 0.14);
+  --mon-mark: #4a3a12;
+  --mon-mark-ink: #fbe7b8;
 }
 
 .rpt { background: var(--r-ground); color: var(--r-ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }

@@ -78,7 +78,7 @@ function FormCard({ f }: { f: FormBrief }) {
       <div className="mt-auto flex flex-wrap gap-2">
         <RButton size="sm" variant="ghost" asChild><Link to={`/forms/${f.id}/edit`}><Pencil aria-hidden /> {t("edit")}</Link></RButton>
         {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/forms/responses${qs({ form: f.id })}`}><ClipboardCheck aria-hidden /> {t("nav_responses")}</Link></RButton>}
-        {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/office/analytics${qs({ form: f.id })}`}><BarChart3 aria-hidden /> {t("nav_analytics")}</Link></RButton>}
+        {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/office/form-analytics${qs({ form: f.id })}`}><BarChart3 aria-hidden /> {t("nav_analytics")}</Link></RButton>}
         <div className="ml-auto flex flex-wrap gap-1">
           {(f.status === "draft" || f.status === "closed") && (
             <RButton size="sm" variant="pri" loading={status.isPending} onClick={() => status.mutate("publish")}><Send aria-hidden /> {f.status === "draft" ? t("publish") : t("reopen")}</RButton>

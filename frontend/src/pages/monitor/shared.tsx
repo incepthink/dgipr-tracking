@@ -11,11 +11,16 @@ import { RSheet } from "@/components/reports/kit";
 
 export type StepState = "todo" | "active" | "done";
 
-const PLATFORM_BADGE: Record<string, { bg: string; glyph: string }> = {
-  facebook: { bg: "bg-[#1877f2]", glyph: "f" },
-  x: { bg: "bg-[#15202b] dark:bg-[#3a4652]", glyph: "X" },
-  instagram: { bg: "bg-[#b1307a]", glyph: "IG" },
-  youtube: { bg: "bg-[#c4170c]", glyph: "YT" },
+const svg = { viewBox: "0 0 24 24", className: "size-[62%]", "aria-hidden": true } as const;
+
+const PLATFORM_BADGE: Record<string, { bg: string; glyph: React.ReactNode }> = {
+  facebook: { bg: "bg-[#1877f2]", glyph: <svg {...svg} fill="currentColor"><path d="M14 13.5h2.5l1-4H14v-2c0-1.03 0-2 2-2h1.5V2.14c-.33-.04-1.56-.14-2.86-.14C11.93 2 10 3.66 10 6.7v2.8H7v4h3V22h4z" /></svg> },
+  x: { bg: "bg-[#0f1419] dark:bg-[#33352f]", glyph: <svg {...svg} fill="currentColor" className="size-[52%]"><path d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.59-6.64 7.59H.47l8.6-9.83L0 1.15h7.59l5.24 6.93zM17.61 20.64h2.04L6.49 3.24H4.3z" /></svg> },
+  instagram: {
+    bg: "bg-[radial-gradient(circle_at_30%_107%,#fdf497_0%,#fd5949_45%,#d6249f_60%,#285aeb_90%)]",
+    glyph: <svg {...svg} fill="none" stroke="currentColor" strokeWidth={2.2}><rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="0.6" fill="currentColor" /></svg>,
+  },
+  youtube: { bg: "bg-[#ff0000] dark:bg-[#e01e1e]", glyph: <svg {...svg} fill="currentColor"><path d="M8.5 6.5v11l9-5.5z" /></svg> },
 };
 
 export function PlatformBadge({ platform, className }: { platform: string; className?: string }) {
@@ -79,7 +84,7 @@ export function StepFrame({ n, state, busy, last, labelledBy, children }: {
 
 /** The highlighted card of the current step. */
 export function ActiveCard({ className, ...props }: React.ComponentProps<"div">) {
-  return <div className={cn("overflow-hidden rounded-2xl border border-r-focus bg-r-card shadow-[0_0_0_4px_var(--r-focus-glow),0_8px_24px_rgb(21_32_43/0.06)]", className)} {...props} />;
+  return <div className={cn("overflow-hidden rounded-2xl bg-r-card", className)} {...props} />;
 }
 
 /** A step that hasn't opened yet. */
