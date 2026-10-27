@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { RCard, RPage, RSegmented } from "@/components/reports/kit";
 import { BEST_TIME, DISTRICT_OF_WEEK, DISTRICTS, FORMATS, MOVES, NEED_CALL, type Office } from "./sample";
-import { bi, Eyebrow, FORMAT_LABEL, InsightsTabs, InsightsTitle, Legend, mult, SectionHead } from "./kit";
+import { bi, Eyebrow, FORMAT_LABEL, InsightsTabs, InsightsTitle, Legend, mult, SectionHead, views } from "./kit";
 
 type By = "er" | "imp";
 
@@ -52,17 +52,19 @@ export default function InsightsDistricts() {
   );
 }
 
-const RANK_COLS = "grid-cols-[40px_minmax(0,1fr)_minmax(0,1.2fr)_76px] sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.2fr)_90px]";
+const RANK_COLS = "grid-cols-[40px_minmax(0,1fr)_minmax(0,1.2fr)_76px] sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1.4fr)_90px]";
+/** Posts · views · followers; followers drops off on phones. */
+const STAT_COLS = "grid grid-cols-2 gap-2 text-right sm:grid-cols-3";
 
 function Ranking({ by }: { by: By }) {
   const { t, tf, lang } = useT();
   const key = by === "er" ? "er" : "imp";
   const rows = DISTRICTS.slice().sort((a, b) => b[key] - a[key]).slice(0, 10);
-  const max = rows[0][key];
   return (
     <div className="min-w-0 flex-[3_1_480px] rounded-[18px] bg-r-card py-2.5">
       <div className={`grid ${RANK_COLS} gap-3 px-5 py-2.5 text-[13px] font-bold text-r-muted sm:gap-4 sm:px-6`}>
-        <span>{t("ins_rank")}</span><span>{t("ins_district")}</span><span />
+        <span>{t("ins_rank")}</span><span>{t("ins_district")}</span>
+        <span className={STAT_COLS}><span>{t("ins_posts")}</span><span>{t("ins_views")}</span><span className="hidden sm:block">{t("ins_followers")}</span></span>
         <span className="text-right">{by === "er" ? t("ins_engagement") : t("ins_change")}</span>
       </div>
       <ol className="m-0 list-none p-0">
@@ -77,8 +79,8 @@ function Ranking({ by }: { by: By }) {
                 <span className="truncate text-[17px] font-bold">{lang === "en" ? d.office.name_en : d.office.name_mr}</span>
                 <span className={cn("text-[13px]", by === "er" && mv > 0 ? "text-r-accepted" : by === "er" && mv < 0 ? "text-r-overdue" : "text-r-muted")}>{sub}</span>
               </div>
-              <span aria-hidden className="h-2.5 overflow-hidden rounded-full bg-r-line-soft">
-                <span className={cn("block h-full rounded-full", k < 3 ? "bg-r-action" : "bg-r-seq-3")} style={{ width: `${(d[key] / max) * 100}%` }} />
+              <span className={cn(STAT_COLS, "num text-[15px] text-r-muted")}>
+                <span>{d.posts}</span><span>{views(d.views)}</span><span className="hidden sm:block">{views(d.followers)}</span>
               </span>
               <span className="num text-right text-lg font-semibold">{by === "er" ? d.er.toFixed(1) + "%" : (d.imp >= 0 ? "+" : "") + d.imp.toFixed(1) + " pt"}</span>
             </li>

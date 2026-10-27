@@ -46,21 +46,61 @@ export function postCurve(p: Post) {
 export const usualCurve = (p: Post) => USUAL_SHAPE.map((s) => (s * p.views) / 1000 / p.mult);
 export { CURVE_HOURS };
 
-/** "M x y L x y …" through evenly spaced points. */
-export function linePath(values: number[], { w, h, max, padX = 0, padY = 0 }: { w: number; h: number; max: number; padX?: number; padY?: number }) {
-  const step = (w - padX * 2) / Math.max(1, values.length - 1);
-  return values.map((v, i) => `${i ? "L" : "M"}${(padX + i * step).toFixed(1)} ${(h - padY - (v / max) * (h - padY * 2)).toFixed(1)}`).join(" ");
+/** 6,30,000 — the exact figure, Indian grouping, for tooltips. */
+export const fullNum = (n: number) => Math.round(n).toLocaleString("en-IN");
+
+/** Axis ticks: 600000 → "6 L", 250000 → "2.5 L", 1500 → "1.5K", 0 → "0". */
+export function axisNum(n: number) {
+  if (n >= 100000) return `${+(n / 100000).toFixed(1)} L`;
+  if (n >= 1000) return `${+(n / 1000).toFixed(1)}K`;
+  return String(n);
 }
 
-/** The header of every Insights page: title, a line under it, and the sample-data label. */
-export function InsightsTitle({ title, sub, actions }: { title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode }) {
-  const { t } = useT();
+/** "+43%" / "−12%". */
+export const pctChange = (a: number, b: number) => {
+  const p = Math.round((a / b - 1) * 100);
+  return `${p >= 0 ? "+" : "−"}${Math.abs(p)}%`;
+};
+
+/** Shared axis/grid styling for the Insights charts; `dark` is for charts on the hero panel. */
+export function chartChrome(dark = false) {
+  const tick = { fontSize: 12, fill: dark ? "var(--r-nav-muted)" : "var(--r-muted)" };
+  return {
+    grid: { stroke: dark ? "rgba(255,255,255,0.12)" : "var(--r-sunk)", vertical: false },
+    axis: { tick, tickLine: false, axisLine: false },
+    xAxis: { tick, tickLine: false, axisLine: { stroke: dark ? "rgba(255,255,255,0.25)" : "var(--r-line)" }, tickMargin: 8 },
+    cursor: { stroke: dark ? "rgba(255,255,255,0.45)" : "var(--r-muted)", strokeWidth: 1, strokeDasharray: "3 3" },
+  };
+}
+
+/** Hover card for the Insights charts: a heading, then each series' value (strong) with its line key and name. */
+export function ChartTip({ title, rows, foot }: {
+  title: React.ReactNode;
+  rows: { key: React.ReactNode; label: React.ReactNode; value: React.ReactNode }[];
+  foot?: React.ReactNode;
+}) {
   return (
-    <RTitle title={title} sub={sub} actions={<>
-      {actions}
-      <span className="rounded-full bg-r-returned-soft px-2.5 py-1 text-xs font-bold text-r-returned-ink" title={t("ins_sample_hint")}>{t("ins_sample")}</span>
-    </>} />
+    <div className="flex min-w-[180px] flex-col gap-1.5 rounded-xl border border-r-line bg-r-card px-3.5 py-2.5 text-sm text-r-ink shadow-lg">
+      <span className="font-bold">{title}</span>
+      {rows.map((r, i) => (
+        <span key={i} className="flex items-center gap-2">
+          {r.key}
+          <b className="num text-[15px]">{r.value}</b>
+          <span className="text-r-muted">{r.label}</span>
+        </span>
+      ))}
+      {foot && <span className="text-[13px] font-bold text-r-muted">{foot}</span>}
+    </div>
   );
+}
+
+/** Line keys for ChartTip rows and legends. */
+export const SolidKey = ({ className }: { className: string }) => <span aria-hidden className={cn("h-1 w-4 shrink-0 rounded-sm", className)} />;
+export const DashedKey = ({ className }: { className: string }) => <span aria-hidden className={cn("w-4 shrink-0 border-t-2 border-dashed", className)} />;
+
+/** The header of every Insights page: title and a line under it. */
+export function InsightsTitle({ title, sub, actions }: { title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode }) {
+  return <RTitle title={title} sub={sub} actions={actions} />;
 }
 
 /** Overview · Posts · Districts, under the page title on small screens (the sidebar has them on large ones). */
@@ -82,11 +122,12 @@ export function InsightsTabs() {
   );
 }
 
-/** The coloured stand-in for a post's picture or video frame. */
-export function Thumb({ tint, video, className }: { tint: string; video?: boolean; className?: string }) {
+/** A post's picture or video frame; the tint shows while it loads, or alone when there is none. */
+export function Thumb({ tint, src, video, className }: { tint: string; src?: string; video?: boolean; className?: string }) {
   return (
-    <span aria-hidden className={cn("flex shrink-0 items-center justify-center", className)} style={{ background: tint }}>
-      {video && <span className="flex size-10 items-center justify-center rounded-full bg-[#15202b]/50"><Play className="size-4 fill-white text-white" /></span>}
+    <span aria-hidden className={cn("relative flex shrink-0 items-center justify-center overflow-hidden", className)} style={{ background: tint }}>
+      {src && <img src={src} alt="" loading="lazy" decoding="async" className="absolute inset-0 size-full object-cover object-top" />}
+      {video && <span className="relative flex size-10 items-center justify-center rounded-full bg-[#15202b]/50"><Play className="size-4 fill-white text-white" /></span>}
     </span>
   );
 }

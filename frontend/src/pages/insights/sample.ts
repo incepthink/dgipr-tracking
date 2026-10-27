@@ -1,6 +1,9 @@
 /* Sample data for the Insights pages (design canvas "DGIPR Insights", Core page). There is no API yet that lists
    posts with their metrics over time (Publication.metrics is overwritten on each collection), so every page shows
-   these figures under a "Sample data" label. Captions and citizen questions stay in Marathi in both languages. */
+   these figures. Captions and citizen questions stay in Marathi in both languages. Pictures are real DGIPR posters
+   from the content platform's posters bucket, paired with posts at random — img/<post id>.jpg. */
+
+const IMAGES = import.meta.glob<string>("./img/*.jpg", { eager: true, query: "?url", import: "default" });
 
 export type Bi = { mr: string; en: string };
 export type Platform = "facebook" | "instagram" | "x" | "youtube";
@@ -25,24 +28,53 @@ export const WEEK = { start: "2026-10-19", end: "2026-10-25" };
 export interface Post {
   id: string; caption: string; office: Office; platform: Platform; format: Format; daysAgo: number;
   posted: Bi; views: number; mult: number; tint: string;
+  image?: string;
   /** Views over 0,1,3,6,12,24,48,72,120,168 h (thousands); absent = drawn from the usual curve times `mult`. */
   curve?: number[];
   /** A moment marked on the growth chart. */
   event?: { hour: number; label: Bi };
   platforms?: { platform: Platform; views: number }[];
   platformsNote?: Bi;
-  sentiment?: { pos: number; neu: number; neg: number; comments: number };
-  topQuestion?: { n: number; mr: string; en: string };
+  talk: Talk;
   why?: { t: Bi; b: Bi }[];
 }
 
+// ------------------------------------------------------------------------------------------------ comments
+export type TalkKind = "question" | "complaint" | "praise" | "other";
+export interface Topic { kind: TalkKind; label: Bi; quote: Bi }
+/** A post's comments: overall mood (percent), then grouped by what they were about. */
+export interface Talk {
+  total: number; pos: number; neu: number; neg: number;
+  /** `replied` = the office answered in the thread (questions and complaints only). */
+  topics: (Topic & { n: number; replied?: boolean })[];
+}
+
+const TOPICS = {
+  tanker_when: { kind: "question", label: { mr: "टँकर कधी येणार", en: "When the tanker will come" }, quote: { mr: "आमच्या गावाला टँकर कधी येणार?", en: "When will the tanker come to our village?" } },
+  apply_where: { kind: "question", label: { mr: "अर्ज कुठे करायचा", en: "Where to apply" }, quote: { mr: "टँकरच्या पाण्यासाठी अर्ज कुठे करायचा?", en: "Where do we apply for tanker water?" } },
+  fodder_register: { kind: "question", label: { mr: "छावणीत नोंदणी", en: "Registering at a fodder camp" }, quote: { mr: "चारा छावणीत नोंदणी कशी करावी?", en: "How do we register at a fodder camp?" } },
+  insurance_when: { kind: "question", label: { mr: "विम्याचे पैसे कधी", en: "When the insurance money comes" }, quote: { mr: "पीक विम्याचे पैसे कधी मिळणार?", en: "When will the crop insurance money come?" } },
+  not_on_list: { kind: "complaint", label: { mr: "गाव यादीत नाही", en: "Village left off the list" }, quote: { mr: "आमच्या गावाचे नाव यादीत का नाही?", en: "Why isn’t our village on the list?" } },
+  tanker_rare: { kind: "complaint", label: { mr: "टँकर अनियमित", en: "Tanker doesn’t come often" }, quote: { mr: "आमच्याकडे टँकर आठवड्यातून एकदाच येतो.", en: "The tanker comes to us only once a week." } },
+  form_hard: { kind: "complaint", label: { mr: "अर्ज अवघड", en: "The form is hard" }, quote: { mr: "ऑनलाइन अर्ज खूप अवघड आहे, गावात नेटवर्क नाही.", en: "The online form is too hard, and there’s no network in the village." } },
+  too_long: { kind: "complaint", label: { mr: "मजकूर खूप मोठा", en: "Too much text" }, quote: { mr: "इतकं लांब कोण वाचणार? थोडक्यात सांगा.", en: "Who will read this much? Keep it short." } },
+  thanks: { kind: "praise", label: { mr: "वेळेवर मदतीबद्दल आभार", en: "Thanks for timely help" }, quote: { mr: "वेळेवर मदत केल्याबद्दल धन्यवाद.", en: "Thank you for the timely help." } },
+  officer_came: { kind: "praise", label: { mr: "अधिकारी प्रत्यक्ष आले", en: "Officials came in person" }, quote: { mr: "साहेब स्वतः गावात आले, हे पाहून बरं वाटलं.", en: "Good to see the officer come to the village in person." } },
+  useful_info: { kind: "praise", label: { mr: "उपयुक्त माहिती", en: "Useful information" }, quote: { mr: "खूप उपयुक्त माहिती, सर्वांनी शेअर करा.", en: "Very useful — everyone, please share." } },
+  tagging: { kind: "other", label: { mr: "मित्रांना टॅग केले", en: "Tagging friends and family" }, quote: { mr: "हे बघ, आपल्या तालुक्यासाठी आहे.", en: "Look, this is for our taluka." } },
+} satisfies Record<string, Topic>;
+
+const T = (total: number, [pos, neu, neg]: [number, number, number], topics: [keyof typeof TOPICS, number, boolean?][]): Talk =>
+  ({ total, pos, neu, neg, topics: topics.map(([k, n, replied]) => ({ ...TOPICS[k], n, replied })) });
+
 const P = (id: string, caption: string, office: Office, platform: Platform, format: Format, daysAgo: number,
-  posted: Bi, views: number, mult: number, tint: string, more: Partial<Post> = {}): Post =>
-  ({ id, caption, office, platform, format, daysAgo, posted, views, mult, tint, ...more });
+  posted: Bi, views: number, mult: number, tint: string, talk: Talk, more: Partial<Post> = {}): Post =>
+  ({ id, caption, office, platform, format, daysAgo, posted, views, mult, tint, talk, image: IMAGES[`./img/${id}.jpg`], ...more });
 
 export const POSTS: Post[] = [
   P("mohol-tanker", "मोहोळ तालुक्यात टँकरने पाणीपुरवठा सुरू — जिल्हाधिकाऱ्यांची पाहणी", OFFICES.solapur, "instagram", "short_video", 2,
-    { mr: "गुरु. २३ ऑक्टो., सायं. ७", en: "Thu 23 Oct, 7 pm" }, 382000, 4.6, "#c9b28a", {
+    { mr: "गुरु. २३ ऑक्टो., सायं. ७", en: "Thu 23 Oct, 7 pm" }, 382000, 4.6, "#c9b28a",
+    T(2240, [72, 19, 9], [["thanks", 610], ["officer_came", 420], ["tagging", 390], ["tanker_when", 214, false], ["tanker_rare", 180, true]]), {
       curve: [0, 12, 48, 96, 170, 252, 318, 350, 374, 382],
       event: { hour: 9, label: { mr: "राज्य खात्याने शेअर केले", en: "State account shared it" } },
       platforms: [
@@ -50,8 +82,6 @@ export const POSTS: Post[] = [
         { platform: "youtube", views: 62000 }, { platform: "x", views: 18000 },
       ],
       platformsNote: { mr: "X वर सर्वात कमी: १४ तास उशिरा आणि उपशीर्षकांशिवाय टाकले.", en: "X did worst: it went up 14 hours later and without captions." },
-      sentiment: { pos: 72, neu: 19, neg: 9, comments: 2240 },
-      topQuestion: { n: 214, mr: "आमच्या गावाला टँकर कधी येणार?", en: "When will the tanker come to our village?" },
       why: [
         { t: { mr: "जिल्हाधिकारी स्वतः कॅमेऱ्यावर बोलले", en: "The Collector spoke on camera" }, b: { mr: "खरी व्यक्ती असलेल्या पोस्टना दुप्पट प्रतिसाद मिळतो.", en: "Posts with a real person do twice as well." } },
         { t: { mr: "लहान, मराठी उपशीर्षकांसह", en: "Short, with Marathi captions" }, b: { mr: "४८ सेकंद — बहुतेक लोक आवाज बंद ठेवून पाहतात.", en: "48 seconds — most people watch on mute." } },
@@ -59,28 +89,37 @@ export const POSTS: Post[] = [
       ],
     }),
   P("fodder-visit", "चारा छावणीला पालकमंत्र्यांची भेट", OFFICES.beed, "facebook", "long_video", 1,
-    { mr: "शुक्र. २४ ऑक्टो., सायं. ६", en: "Fri 24 Oct, 6 pm" }, 124000, 3.1, "#9fb3a0"),
+    { mr: "शुक्र. २४ ऑक्टो., सायं. ६", en: "Fri 24 Oct, 6 pm" }, 124000, 3.1, "#9fb3a0",
+    T(780, [64, 24, 12], [["officer_came", 210], ["fodder_register", 160, true], ["thanks", 120], ["tagging", 90], ["not_on_list", 74, false]])),
   P("how-to-apply", "दुष्काळग्रस्त तालुक्यांसाठी मदत — अर्ज कसा करावा", OFFICES.dgipr, "x", "short_video", 0,
-    { mr: "आज, दु. १", en: "Today, 1 pm" }, 86000, 2.8, "#a9b8cf"),
+    { mr: "आज, दु. १", en: "Today, 1 pm" }, 86000, 2.8, "#a9b8cf",
+    T(610, [48, 38, 14], [["apply_where", 190, false], ["useful_info", 140], ["tagging", 110], ["form_hard", 86, false]])),
   P("crop-insurance-qa", "पीक विमा: शेतकऱ्यांचे प्रश्न, अधिकाऱ्यांची उत्तरे", OFFICES.jalna, "youtube", "long_video", 3,
-    { mr: "बुध. २२ ऑक्टो., सायं. ८", en: "Wed 22 Oct, 8 pm" }, 71000, 2.4, "#d0a99a"),
+    { mr: "बुध. २२ ऑक्टो., सायं. ८", en: "Wed 22 Oct, 8 pm" }, 71000, 2.4, "#d0a99a",
+    T(940, [31, 34, 35], [["insurance_when", 380, true], ["form_hard", 140, false], ["useful_info", 120], ["not_on_list", 96, false]])),
   P("kinwat-schedule", "किनवट तालुक्यातील टँकर वेळापत्रक जाहीर", OFFICES.nanded, "facebook", "poster", 2,
-    { mr: "गुरु. २३ ऑक्टो., सकाळी ११", en: "Thu 23 Oct, 11 am" }, 64000, 1.9, "#b7a7c4"),
+    { mr: "गुरु. २३ ऑक्टो., सकाळी ११", en: "Thu 23 Oct, 11 am" }, 64000, 1.9, "#b7a7c4",
+    T(410, [52, 26, 22], [["thanks", 98], ["tanker_rare", 92, true], ["tanker_when", 70, true], ["not_on_list", 64, false]])),
   P("jalyukt-review", "जलयुक्त शिवार: गावागावातील कामांचा आढावा", OFFICES.kolhapur, "instagram", "short_video", 4,
-    { mr: "मंगळ. २१ ऑक्टो., सायं. ७", en: "Tue 21 Oct, 7 pm" }, 48000, 1.7, "#a5c0bd"),
+    { mr: "मंगळ. २१ ऑक्टो., सायं. ७", en: "Tue 21 Oct, 7 pm" }, 48000, 1.7, "#a5c0bd",
+    T(260, [70, 22, 8], [["thanks", 90], ["tagging", 50], ["officer_came", 48]])),
   P("free-fodder-list", "जनावरांसाठी मोफत चारा — केंद्रांची यादी", OFFICES.nashik, "facebook", "poster", 3,
-    { mr: "बुध. २२ ऑक्टो., दु. १२", en: "Wed 22 Oct, 12 pm" }, 52000, 1.6, "#cbbf95"),
+    { mr: "बुध. २२ ऑक्टो., दु. १२", en: "Wed 22 Oct, 12 pm" }, 52000, 1.6, "#cbbf95",
+    T(350, [58, 30, 12], [["fodder_register", 120, true], ["useful_info", 96], ["not_on_list", 40, false]])),
   P("save-water", "पाणी जपून वापरा — नागरिकांना आवाहन", OFFICES.pune, "facebook", "poster", 5,
-    { mr: "सोम. २० ऑक्टो., सकाळी १०", en: "Mon 20 Oct, 10 am" }, 33000, 1.0, "#c8b7a3"),
+    { mr: "सोम. २० ऑक्टो., सकाळी १०", en: "Mon 20 Oct, 10 am" }, 33000, 1.0, "#c8b7a3",
+    T(120, [55, 35, 10], [["useful_info", 44], ["tagging", 30], ["tanker_rare", 22, false]])),
   P("press-note-meeting", "प्रेस नोट: दुष्काळ निवारण बैठक", OFFICES.latur, "facebook", "text", 2,
-    { mr: "गुरु. २३ ऑक्टो., सकाळी ९", en: "Thu 23 Oct, 9 am" }, 6200, 0.4, "#d9dcd4", {
+    { mr: "गुरु. २३ ऑक्टो., सकाळी ९", en: "Thu 23 Oct, 9 am" }, 6200, 0.4, "#d9dcd4",
+    T(18, [22, 50, 28], [["too_long", 7, false], ["apply_where", 4, false]]), {
       why: [
         { t: { mr: "फक्त मजकूर, चित्र किंवा व्हिडिओ नाही", en: "Text only, no picture or video" }, b: { mr: "मजकूर पोस्टना नेहमीच्या पोस्टच्या निम्मा प्रतिसाद मिळतो.", en: "Text posts get under half of a usual post." } },
         { t: { mr: "सकाळी ९ वाजता टाकले", en: "Posted at 9 am" }, b: { mr: "सकाळी आपले प्रेक्षक सर्वात कमी असतात.", en: "Mornings are when our audience is smallest." } },
       ],
     }),
   P("lake-desilting", "तलाव गाळमुक्ती अभियानाला सुरुवात", OFFICES.gadchiroli, "instagram", "poster", 4,
-    { mr: "मंगळ. २१ ऑक्टो., सकाळी ८", en: "Tue 21 Oct, 8 am" }, 4100, 0.3, "#c2cbb8"),
+    { mr: "मंगळ. २१ ऑक्टो., सकाळी ८", en: "Tue 21 Oct, 8 am" }, 4100, 0.3, "#c2cbb8",
+    T(11, [64, 36, 0], [["thanks", 6]])),
 ];
 
 /** A usual post's views over the same hours, as a share of its 7-day total. */
@@ -116,14 +155,20 @@ export const OVERVIEW = {
 };
 
 // ------------------------------------------------------------------------------------------------ districts
-/** Engagement rate (%), improvement (points), last week's rank. */
-export const DISTRICTS: { office: Office; er: number; imp: number; lastRank: number }[] = [
-  { office: OFFICES.solapur, er: 6.1, imp: 1.9, lastRank: 3 }, { office: OFFICES.beed, er: 5.2, imp: 2.3, lastRank: 6 },
-  { office: OFFICES.jalna, er: 4.7, imp: 2.6, lastRank: 9 }, { office: OFFICES.kolhapur, er: 4.5, imp: 0.4, lastRank: 2 },
-  { office: OFFICES.nashik, er: 4.4, imp: 0.6, lastRank: 4 }, { office: OFFICES.dharashiv, er: 4.2, imp: 1.1, lastRank: 10 },
-  { office: OFFICES.nagpur, er: 4.1, imp: 0.2, lastRank: 1 }, { office: OFFICES.sambhajinagar, er: 4.0, imp: 0.5, lastRank: 7 },
-  { office: OFFICES.pune, er: 3.9, imp: -0.2, lastRank: 5 }, { office: OFFICES.sangli, er: 3.8, imp: 0.7, lastRank: 12 },
-  { office: OFFICES.amravati, er: 3.6, imp: 0.8, lastRank: 14 }, { office: OFFICES.sindhudurg, er: 3.3, imp: 1.2, lastRank: 20 },
+/** Engagement rate (%), improvement (points), last week's rank; posts and views this month, followers across accounts. */
+export const DISTRICTS: { office: Office; er: number; imp: number; lastRank: number; posts: number; views: number; followers: number }[] = [
+  { office: OFFICES.solapur, er: 6.1, imp: 1.9, lastRank: 3, posts: 64, views: 1840000, followers: 212000 },
+  { office: OFFICES.beed, er: 5.2, imp: 2.3, lastRank: 6, posts: 51, views: 926000, followers: 128000 },
+  { office: OFFICES.jalna, er: 4.7, imp: 2.6, lastRank: 9, posts: 47, views: 612000, followers: 94000 },
+  { office: OFFICES.kolhapur, er: 4.5, imp: 0.4, lastRank: 2, posts: 72, views: 2130000, followers: 276000 },
+  { office: OFFICES.nashik, er: 4.4, imp: 0.6, lastRank: 4, posts: 69, views: 2480000, followers: 341000 },
+  { office: OFFICES.dharashiv, er: 4.2, imp: 1.1, lastRank: 10, posts: 38, views: 384000, followers: 61000 },
+  { office: OFFICES.nagpur, er: 4.1, imp: 0.2, lastRank: 1, posts: 88, views: 3920000, followers: 584000 },
+  { office: OFFICES.sambhajinagar, er: 4.0, imp: 0.5, lastRank: 7, posts: 74, views: 2260000, followers: 362000 },
+  { office: OFFICES.pune, er: 3.9, imp: -0.2, lastRank: 5, posts: 96, views: 4260000, followers: 712000 },
+  { office: OFFICES.sangli, er: 3.8, imp: 0.7, lastRank: 12, posts: 44, views: 518000, followers: 88000 },
+  { office: OFFICES.amravati, er: 3.6, imp: 0.8, lastRank: 14, posts: 52, views: 742000, followers: 131000 },
+  { office: OFFICES.sindhudurg, er: 3.3, imp: 1.2, lastRank: 20, posts: 29, views: 196000, followers: 42000 },
 ];
 
 export const DISTRICT_OF_WEEK = { office: OFFICES.solapur, postId: "mohol-tanker" };

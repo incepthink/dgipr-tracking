@@ -1,22 +1,29 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { useT } from "@/lib/i18n";
-import { RPage, RSearch, RSegmented } from "@/components/reports/kit";
+import { PLATFORM_LABEL } from "@/lib/status";
+import { RPage, RSearch, RSegmented, RSelect } from "@/components/reports/kit";
 import { PlatformBadge } from "@/pages/monitor/shared";
-import { POSTS, type Post } from "./sample";
-import { agoLabel, InsightsTabs, InsightsTitle, mult, multTone, Thumb, TONE_BG, TONE_STROKE, TONE_TEXT, views } from "./kit";
+import { POSTS, type Platform, type Post } from "./sample";
+import { agoLabel, InsightsTabs, InsightsTitle, mult, multTone, Thumb, TONE_STROKE, TONE_TEXT, views } from "./kit";
 
 type Sort = "best" | "new" | "weak";
-const COLS = "grid-cols-[52px_minmax(0,1fr)_96px] sm:grid-cols-[64px_minmax(0,1fr)_100px_96px_150px]";
+const PLATFORMS: Platform[] = ["facebook", "instagram", "x", "youtube"];
+const COLS = "grid-cols-[52px_minmax(0,1fr)_96px] sm:grid-cols-[64px_minmax(0,1fr)_100px_96px_140px]";
 
 /** Every campaign post this week, each compared with what its own account usually gets. */
 export default function InsightsPosts() {
   const { t, tf, lang } = useT();
   const [sort, setSort] = React.useState<Sort>("best");
   const [q, setQ] = React.useState("");
+  const [platform, setPlatform] = React.useState<Platform | "">("");
+  const [office, setOffice] = React.useState("");
+  const offices = [...new Map(POSTS.map((p) => [p.office.code, p.office])).values()]
+    .sort((a, b) => (lang === "en" ? a.name_en.localeCompare(b.name_en) : a.name_mr.localeCompare(b.name_mr, "mr")));
 
   const needle = q.trim().toLowerCase();
   const rows = POSTS
+    .filter((p) => (!platform || p.platform === platform) && (!office || p.office.code === office))
     .filter((p) => !needle || [p.caption, p.office.name_mr, p.office.name_en, p.platform].some((s) => s.toLowerCase().includes(needle)))
     .sort((a, b) => sort === "best" ? b.mult - a.mult : sort === "new" ? a.daysAgo - b.daysAgo : a.mult - b.mult);
 
@@ -26,7 +33,17 @@ export default function InsightsPosts() {
       <InsightsTabs />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <RSearch value={q} onChange={setQ} placeholder={t("ins_search_posts")} className="max-w-[460px] flex-[1_1_280px]" />
+        <div className="flex flex-[1_1_280px] flex-wrap items-center gap-3">
+          <RSearch value={q} onChange={setQ} placeholder={t("ins_search_posts")} className="max-w-[460px] flex-[1_1_280px]" />
+          <RSelect aria-label={t("mon_platform")} value={platform} onChange={(e) => setPlatform(e.target.value as Platform | "")}>
+            <option value="">{t("all_platforms")}</option>
+            {PLATFORMS.map((x) => <option key={x} value={x}>{PLATFORM_LABEL[x]}</option>)}
+          </RSelect>
+          <RSelect aria-label={t("office")} value={office} onChange={(e) => setOffice(e.target.value)}>
+            <option value="">{t("all_offices")}</option>
+            {offices.map((o) => <option key={o.code} value={o.code}>{lang === "en" ? o.name_en : o.name_mr}</option>)}
+          </RSelect>
+        </div>
         <RSegmented label={t("ins_sort")} value={sort} onChange={setSort}
           options={[{ value: "best", label: t("ins_sort_best") }, { value: "new", label: t("ins_sort_new") }, { value: "weak", label: t("ins_sort_weak") }]} />
       </div>
@@ -36,7 +53,7 @@ export default function InsightsPosts() {
           <span /><span>{t("ins_post")}</span>
           <span className="hidden sm:block">{t("ins_first_3_days")}</span>
           <span className="hidden text-right sm:block">{t("ins_views")}</span>
-          <span className="text-right sm:text-left">{t("ins_vs_usual")}</span>
+          <span className="text-right">{t("ins_vs_usual")}</span>
         </div>
         {rows.map((p) => <Row key={p.id} p={p} />)}
         {!rows.length && <p className="m-0 px-5 py-8 text-center text-r-muted">{t("ins_no_posts")}</p>}
@@ -52,7 +69,7 @@ function Row({ p }: { p: Post }) {
   const tone = multTone(p.mult);
   return (
     <Link to={`/insights/posts/${p.id}`} className={`grid ${COLS} items-center gap-4 border-b border-r-line-soft px-5 py-3.5 text-r-ink no-underline last:border-b-0 hover:bg-r-ground`}>
-      <Thumb tint={p.tint} className="size-[52px] rounded-[10px] sm:size-16" />
+      <Thumb tint={p.tint} src={p.image} className="size-[52px] rounded-[10px] sm:size-16" />
       <div className="flex min-w-0 flex-col gap-0.5">
         <span lang="mr" className="line-clamp-2 font-semibold sm:line-clamp-none sm:truncate">{p.caption}</span>
         <span className="flex items-center gap-1.5 text-sm text-r-muted">
@@ -62,10 +79,7 @@ function Row({ p }: { p: Post }) {
       </div>
       <Spark p={p} />
       <span className="num hidden text-right text-[17px] font-semibold sm:block">{views(p.views)}</span>
-      <div className="flex items-center justify-end gap-2.5 sm:justify-start">
-        <span className="hidden h-2 w-16 overflow-hidden rounded bg-r-sunk sm:block"><span className={`block h-full ${TONE_BG[tone]}`} style={{ width: `${Math.min(100, (p.mult / 5) * 100)}%` }} /></span>
-        <span className={`num font-semibold ${TONE_TEXT[tone]}`}>{mult(p.mult)}</span>
-      </div>
+      <span className={`num text-right font-semibold ${TONE_TEXT[tone]}`}>{mult(p.mult)}</span>
     </Link>
   );
 }
