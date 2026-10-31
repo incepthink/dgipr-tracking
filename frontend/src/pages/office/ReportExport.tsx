@@ -8,7 +8,8 @@ import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
-import { RAlert, RButton, RCheck, RInput, RLabel, RSelect, RSheet } from "@/components/reports/kit";
+import { RAlert, RButton, RCheck, RLabel, RSelect, RSheet } from "@/components/reports/kit";
+import { DateInput } from "@/components/reports/DateInput";
 import { fig, periodEnd, periodOf, rangeText } from "@/components/reports/period";
 import { formTitle, scopeQs, type FormFilters } from "../forms/common";
 
@@ -89,7 +90,8 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
     };
   }, [printing]);
 
-  const kinds = KINDS.filter((k) => !once || k.startsWith("cumulative_"));
+  // a district office has no division-level tables to export
+  const kinds = KINDS.filter((k) => (!once || k.startsWith("cumulative_")) && (me.role !== "district" || !k.endsWith("_division")));
   const daily = what !== "workbook" && what.startsWith("daily_");
   const clampDay = (d: string) => (d < lo ? lo : d > hi ? hi : d);
   const range = daily ? { start: day, end: day }
@@ -159,7 +161,7 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
           <legend className="mb-1.5 p-0 font-bold">{t("exp_dates")}</legend>
           {daily ? (
             <RLabel small label={t("date")} className="self-start">
-              <RInput type="date" value={day} min={lo} max={hi} onChange={(e) => e.target.value && setDay(clampDay(e.target.value))} />
+              <DateInput value={day} min={lo} max={hi} onChange={(d) => d && setDay(clampDay(d))} />
             </RLabel>
           ) : (
             <>
@@ -171,10 +173,10 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
               {preset === "custom" && (
                 <div className="flex flex-wrap gap-3">
                   <RLabel small label={t("from")}>
-                    <RInput type="date" value={from} min={lo} max={hi} onChange={(e) => e.target.value && setFrom(clampDay(e.target.value))} aria-invalid={badRange || undefined} />
+                    <DateInput value={from} min={lo} max={hi} onChange={(d) => d && setFrom(clampDay(d))} aria-invalid={badRange || undefined} />
                   </RLabel>
                   <RLabel small label={t("to")}>
-                    <RInput type="date" value={to} min={lo} max={hi} onChange={(e) => e.target.value && setTo(clampDay(e.target.value))} aria-invalid={badRange || undefined} />
+                    <DateInput value={to} min={lo} max={hi} onChange={(d) => d && setTo(clampDay(d))} aria-invalid={badRange || undefined} />
                   </RLabel>
                 </div>
               )}

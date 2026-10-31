@@ -35,7 +35,7 @@ export default function CompliancePage() {
 
   return (
     <RPage>
-      <RTitle title={t("nav_compliance")} sub={t("compliance_sub")} />
+      <RTitle title={t("nav_compliance")} />
       <RFilterBar className="items-center">
         <FormPicker f={f} label={false} />
         {form && form.frequency !== "once" && (

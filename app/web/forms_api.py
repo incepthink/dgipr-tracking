@@ -101,7 +101,6 @@ class FormIn(BaseModel):
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     deadline_hours: Optional[int] = None
-    entry_open: Optional[bool] = None
     campaign_id: Optional[int] = None
     fields: Optional[list[FieldIn]] = None
     recipients: Optional[list[str]] = None
@@ -180,8 +179,7 @@ def _status_endpoint(status: str):
     return handler
 
 
-for _action, _status in (("publish", "published"), ("close", "closed"), ("archive", "archived"),
-                         ("unpublish", "draft")):
+for _action, _status in (("publish", "published"), ("pause", "paused"), ("unpublish", "draft")):
     app.post(f"/api/forms/{{form_id}}/{_action}")(_status_endpoint(_status))
 
 
@@ -194,13 +192,22 @@ def api_form_duplicate(form_id: int, admin: User = Depends(state_only), s: Sessi
 
 @app.delete("/api/forms/{form_id}")
 def api_form_delete(form_id: int, admin: User = Depends(state_only), s: Session = Depends(get_session)):
+    """Shown to the admin as a delete; the form is archived (see schema.delete_form)."""
+    schema.delete_form(s, admin.username, _form(s, admin, form_id))
+    s.commit()
+    return {"ok": True}
+
+
+@app.post("/api/forms/{form_id}/restore")
+def api_form_restore(form_id: int, admin: User = Depends(state_only), s: Session = Depends(get_session)):
+    form = _form(s, admin, form_id)
     try:
-        schema.delete_form(s, admin.username, _form(s, admin, form_id))
+        schema.restore_form(s, admin.username, form)
     except FormError as exc:
         s.rollback()
         _err(exc)
     s.commit()
-    return {"ok": True}
+    return schema.form_json(s, form)
 
 
 # --------------------------------------------------------------------------- filling (offices)

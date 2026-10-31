@@ -74,8 +74,9 @@ def migrate(s: Session) -> dict[str, Any]:
         taken.add(slug)
         form = Form(slug=slug, title_mr=c.title_mr, title_en=c.title_en, instructions_mr=INSTRUCTIONS_MR,
                     instructions_en=INSTRUCTIONS_EN, frequency="daily", start_date=start,
-                    end_date=(win or {}).get("end"), status="published",
-                    entry_open=(win or {}).get("open", True), campaign_id=c.id, created_by=ACTOR)
+                    end_date=(win or {}).get("end"),
+                    status="published" if (win or {}).get("open", True) else "paused", campaign_id=c.id,
+                    created_by=ACTOR)
         for i, col in enumerate(COLUMNS):
             form.fields.append(FormField(key=col.key, label_mr=col.label_mr, label_en=col.label_en, type="number",
                                          min_value=0, integer=True, group=col.group, sort_order=i,

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Archive, BarChart3, ClipboardCheck, FilePlus2, Lock, Pencil, Send, Trash2, Users } from "lucide-react";
+import { BarChart3, ClipboardCheck, FilePlus2, Pause, Pencil, Play, Send, Trash2, Users } from "lucide-react";
 import { api, type FormBrief, type FormDef, type FormStatus } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
@@ -11,7 +11,7 @@ import { dayMonth, fig, rangeText, whenText } from "@/components/reports/period"
 import { formTitle } from "./common";
 
 const DOT: Record<FormStatus, string> = {
-  draft: "border-2 border-dashed border-r-muted", published: "bg-r-accepted", closed: "bg-r-faint", archived: "border-2 border-r-faint",
+  draft: "border-2 border-dashed border-r-muted", published: "bg-r-accepted", paused: "bg-r-returned", archived: "border-2 border-r-faint",
 };
 
 export default function FormsListPage() {
@@ -23,7 +23,7 @@ export default function FormsListPage() {
   });
   return (
     <RPage>
-      <RTitle title={t("forms_title")} sub={t("forms_desc")}
+      <RTitle title={t("forms_title")}
         actions={<>
           <RCheck checked={archived} onChange={setArchived} className="min-h-11 rounded-[10px]">{t("show_archived")}</RCheck>
           <RButton variant="pri" onClick={() => nav("/forms/new")}><FilePlus2 aria-hidden /> {t("new_form")}</RButton>
@@ -47,7 +47,8 @@ function FormCard({ f }: { f: FormBrief }) {
   const { t, tf, lang } = useT();
   const inv = [["forms"], ["forms-mine"], ["form", f.id]];
   const status = useAction((s: string) => api.post<FormDef>(`/api/forms/${f.id}/${s}`), { invalidate: inv, success: (r) => t(`status_${r.status}` as TKey) });
-  const del = useAction(() => api.del(`/api/forms/${f.id}`), { invalidate: inv });
+  const del = useAction(() => api.del(`/api/forms/${f.id}`), { invalidate: inv, success: () => t("deleted") });
+  const restore = useAction(() => api.post<FormDef>(`/api/forms/${f.id}/restore`), { invalidate: inv, success: (r) => t(`status_${r.status}` as TKey) });
   const pct = f.latest_expected ? Math.round((100 * f.latest_sent) / f.latest_expected) : 0;
   return (
     <RCard className={cn(f.status === "archived" && "opacity-70")}>
@@ -57,7 +58,6 @@ function FormCard({ f }: { f: FormBrief }) {
           <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-r-muted">
             <span className={cn("size-2 rounded-full", DOT[f.status])} aria-hidden />
             <span className="font-bold text-r-ink">{t(`status_${f.status}` as TKey)}</span>
-            {f.status === "published" && !f.entry_open && <span className="inline-flex items-center gap-1"><Lock className="size-3" aria-hidden />{t("entry_closed")}</span>}
             · {t(`freq_${f.frequency}` as TKey)} · {rangeText(f.start_date, f.end_date ?? f.start_date, lang)}
             · {f.fields_count} {t("fields_n")} · <Users className="size-3" aria-hidden /> {f.recipients.length}
           </div>
@@ -80,13 +80,20 @@ function FormCard({ f }: { f: FormBrief }) {
         {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/forms/responses${qs({ form: f.id })}`}><ClipboardCheck aria-hidden /> {t("nav_responses")}</Link></RButton>}
         {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/office/form-analytics${qs({ form: f.id })}`}><BarChart3 aria-hidden /> {t("nav_analytics")}</Link></RButton>}
         <div className="ml-auto flex flex-wrap gap-1">
-          {(f.status === "draft" || f.status === "closed") && (
-            <RButton size="sm" variant="pri" loading={status.isPending} onClick={() => status.mutate("publish")}><Send aria-hidden /> {f.status === "draft" ? t("publish") : t("reopen")}</RButton>
+          {f.status === "draft" && (
+            <RButton size="sm" variant="pri" loading={status.isPending} onClick={() => status.mutate("publish")}><Send aria-hidden /> {t("publish")}</RButton>
           )}
-          {f.status === "closed" && <RButton size="icon" variant="ghost" aria-label={t("archive")} title={t("archive")} onClick={() => status.mutate("archive")}><Archive aria-hidden /></RButton>}
-          {f.status === "archived" && <RButton size="sm" variant="ghost" onClick={() => status.mutate("close")}>{t("restore")}</RButton>}
-          <RButton size="icon" variant="ghost" aria-label={t("delete")} title={t("delete")} loading={del.isPending} className="text-r-overdue-ink hover:bg-r-overdue-soft"
-            onClick={() => confirm(t("delete_confirm")) && del.mutate(undefined)}><Trash2 aria-hidden /></RButton>
+          {f.status === "archived" && <RButton size="sm" variant="ghost" loading={restore.isPending} onClick={() => restore.mutate(undefined)}>{t("restore")}</RButton>}
+          {f.status === "published" && (
+            <RButton size="icon" variant="ghost" aria-label={t("pause")} title={`${t("pause")}: ${t("pause_hint")}`} loading={status.isPending} onClick={() => status.mutate("pause")}><Pause aria-hidden /></RButton>
+          )}
+          {f.status === "paused" && (
+            <RButton size="icon" variant="ghost" aria-label={t("resume")} title={t("resume")} loading={status.isPending} className="text-r-accepted hover:bg-r-accepted-soft" onClick={() => status.mutate("publish")}><Play aria-hidden /></RButton>
+          )}
+          {f.status !== "archived" && (
+            <RButton size="icon" variant="ghost" aria-label={t("delete")} title={t("delete")} loading={del.isPending} className="text-r-overdue-ink hover:bg-r-overdue-soft"
+              onClick={() => confirm(t("delete_confirm")) && del.mutate(undefined)}><Trash2 aria-hidden /></RButton>
+          )}
         </div>
       </div>
     </RCard>

@@ -2,15 +2,17 @@ import * as React from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import {
   Activity, BarChart3, CircleUserRound, ClipboardCheck, ClipboardList, Clock3,
-  Inbox, Languages, LayoutDashboard, LayoutGrid, LogOut, MapPinned, Menu, Moon, Newspaper, Sheet, Sun, UserCog, X,
+  Inbox, KeyRound, Languages, LayoutDashboard, LayoutGrid, LogOut, MapPinned, Menu, Moon, Newspaper, Sheet, Sun, UserCog, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogout, useUser } from "@/lib/auth";
 import { useLang, useT, type TKey } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { AttentionBell, useInboxCount } from "@/pages/forms/MyForms";
-import { OfflineBanner } from "@/components/reports/kit";
+import { OfflineBanner, RSheet } from "@/components/reports/kit";
+import { PasswordForm } from "@/pages/Account";
 import type { Role } from "@/lib/api";
+import emblem from "@/assets/maharashtra-emblem.png";
 
 /** Reports section (अहवाल): offices fill their forms; the state admin builds forms and reviews responses. */
 type NavItem = { to: string; label: TKey; hint: TKey; icon: React.ElementType; roles: Role[]; badge?: boolean };
@@ -22,7 +24,6 @@ const OFFICE: NavItem[] = [
   { to: "/forms/responses", label: "nav_responses", hint: "nav_responses_hint", icon: ClipboardCheck, roles: ["state"] },
   { to: "/office/analytics", label: "nav_my_numbers", hint: "nav_my_numbers_hint", icon: BarChart3, roles: ["district"] },
   { to: "/office/reports", label: "nav_reports", hint: "nav_reports_hint", icon: Sheet, roles: ["district", "zone", "state"] },
-  { to: "/account", label: "nav_account", hint: "nav_account_hint", icon: CircleUserRound, roles: ["district", "zone", "state"] },
 ];
 
 /** The district office's phone tabs (the design's bottom bar). */
@@ -121,12 +122,25 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const isState = me.role === "state";
   const pending = useInboxCount();
   const current = activeOf(pathname);
+  const [pwOpen, setPwOpen] = React.useState(false);
   const monitorActive = /^\/(monitor|publications|reports)(\/|$)/.test(pathname);
+  const analytics = me.role !== "district" && (
+    <div>
+      <SectionLabel>{t("nav_analytics_beta")}</SectionLabel>
+      <div className="space-y-0.5">
+        {INSIGHTS.map((m) => (
+          <NavLink key={m.to} to={m.to} end={m.end} onClick={onNavigate} className={({ isActive }) => navCls(isActive)}>
+            <m.icon className="size-4" /> {t(m.label)}
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-full flex-col bg-sidebar font-body text-sidebar-foreground">
       <Link to="/" onClick={onNavigate} className="flex items-center gap-3 px-5 py-5">
-        <div className="disp flex size-9 items-center justify-center rounded-lg bg-r-focus text-base font-bold text-[#15202b]">D</div>
+        <img src={emblem} alt="" className="size-9 shrink-0" />
         <div className="leading-tight">
           <div className="disp text-base font-bold text-white">{t("app_title")}</div>
           <div className="text-xs text-sidebar-muted">{t("app_sub")}</div>
@@ -134,18 +148,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </Link>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
-        {me.role !== "district" && (
-          <div>
-            <SectionLabel>{t("nav_analytics")}</SectionLabel>
-            <div className="space-y-0.5">
-              {INSIGHTS.map((m) => (
-                <NavLink key={m.to} to={m.to} end={m.end} onClick={onNavigate} className={({ isActive }) => navCls(isActive)}>
-                  <m.icon className="size-4" /> {t(m.label)}
-                </NavLink>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* The state admin's day starts in Reports, so it leads their sidebar; zones still open on Analytics. */}
+        {!isState && analytics}
 
         <div>
           <SectionLabel>{t("nav_office")}</SectionLabel>
@@ -169,9 +173,11 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         </div>
 
+        {isState && analytics}
+
         {isState && (
           <div>
-            <SectionLabel>{t("nav_social")}</SectionLabel>
+            <SectionLabel>{t("nav_monitoring_beta")}</SectionLabel>
             <Link to="/monitor" onClick={onNavigate} aria-current={monitorActive ? "page" : undefined}
               className={cn("flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition-colors hover:bg-sidebar-accent", monitorActive && ACTIVE)}>
               <Activity className="size-4" /> <span className="flex-1">{t("nav_monitoring")}</span>
@@ -188,19 +194,23 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         )}
 
-        {isState && (
-          <div>
-            <SectionLabel>{t("nav_admin")}</SectionLabel>
-            <div className="space-y-0.5">
-              {ADMIN.map((m) => (
-                <NavLink key={m.to} to={m.to} onClick={onNavigate} className={({ isActive }) => navCls(isActive)}>
-                  <m.icon className="size-4" /> {t(m.label)}
-                </NavLink>
-              ))}
-            </div>
+        <div>
+          <SectionLabel>{t("nav_account")}</SectionLabel>
+          <div className="space-y-0.5">
+            {isState && ADMIN.map((m) => (
+              <NavLink key={m.to} to={m.to} onClick={onNavigate} className={({ isActive }) => navCls(isActive)}>
+                <m.icon className="size-4" /> {t(m.label)}
+              </NavLink>
+            ))}
+            <button type="button" onClick={() => setPwOpen(true)} className={cn(navCls(false), "w-full cursor-pointer text-left")}>
+              <KeyRound className="size-4" /> {t("change_pw")}
+            </button>
           </div>
-        )}
+        </div>
       </nav>
+      <RSheet open={pwOpen} onClose={() => setPwOpen(false)} title={t("change_pw")} closeLabel={t("close")}>
+        <PasswordForm onDone={() => { setPwOpen(false); onNavigate?.(); }} />
+      </RSheet>
 
       <div className="border-t border-sidebar-accent px-5 py-4 text-xs text-sidebar-muted">
         <div>Dates are calendar days in Asia/Kolkata.</div>
@@ -211,12 +221,15 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
 function UserBadge() {
   const me = useUser();
-  const { t, name } = useT();
-  const where = me.role === "zone" ? me.division?.label_mr : me.role === "district" ? name(me.office) : "";
+  const { t, shortName } = useT();
+  const where = me.role === "zone" ? me.division?.label_mr : me.role === "district" ? shortName(me.office) : "";
   return (
     <div className="min-w-0 text-right leading-tight">
       <div className="truncate text-sm font-medium">{me.display_name || me.username}</div>
-      <div className="truncate text-xs text-muted-foreground">{t(("role_" + me.role) as TKey)}{where ? " · " + where : ""}</div>
+      <div className="truncate text-xs text-muted-foreground">
+        {/* On a phone the office alone says enough; the role prefix returns from sm up. */}
+        <span className={cn(where && "hidden sm:inline")}>{t(("role_" + me.role) as TKey)}{where ? " · " : ""}</span>{where}
+      </div>
     </div>
   );
 }

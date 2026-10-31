@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Download, FileJson, FileSpreadsheet, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
 import { api, backendUrl, type SnapshotDetail } from "@/lib/api";
-import { periodLabel } from "@/lib/utils";
+import { dmyText, periodLabel } from "@/lib/utils";
 import { labelOf } from "@/lib/status";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, StatusBadge } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -20,7 +20,7 @@ export default function SnapshotPage() {
       <PageHeader
         title={<span className="flex flex-wrap items-center gap-3">Report snapshot #{s.id} <StatusBadge status={s.kind} />{s.is_sample && <Badge tone="warning">Sample data</Badge>}</span>}
         description={<><span className="font-medium text-foreground">{d.presentation.summary_title}</span><br />
-          {periodLabel(s.period_start, s.period_end)} (IST) · created by {s.created_by} on {s.created_at} · {d.campaign.rules_version != null ? `rules v${d.campaign.rules_version}` : "no search term"}{s.note && <> · “{s.note}”</>}</>}
+          {periodLabel(s.period_start, s.period_end)} (IST) · created by {s.created_by} on {dmyText(s.created_at)} · {d.campaign.rules_version != null ? `rules v${d.campaign.rules_version}` : "no search term"}{s.note && <> · “{s.note}”</>}</>}
         actions={<>
           <Button asChild><a href={backendUrl(`/reports/${s.id}/pdf`)}><Download /> Download PDF</a></Button>
           <Button variant="outline" asChild><a href={backendUrl(`/reports/${s.id}/evidence.csv`)}><FileSpreadsheet /> Evidence CSV</a></Button>

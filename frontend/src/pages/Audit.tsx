@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, ScrollText, Search } from "lucide-react";
 import { api, type AuditRow } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { cn, dmyText } from "@/lib/utils";
 import { Badge, Card, Input, Select } from "@/components/ui/primitives";
 import { EmptyState, ErrorState, JsonBlock, LoadingRows, PageHeader } from "@/components/common";
 
@@ -73,7 +73,7 @@ export default function AuditPage() {
                     onClick={() => { const n = new Set(open); if (isOpen) n.delete(r.id); else n.add(r.id); setOpen(n); }}
                     className="flex w-full items-center gap-4 px-4 py-3 text-left text-sm transition-colors hover:bg-accent/40 disabled:cursor-default cursor-pointer">
                     <ChevronRight className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-90", !hasDetail && "invisible")} />
-                    <span className="w-36 shrink-0 text-xs text-muted-foreground tabular">{r.at}</span>
+                    <span className="w-36 shrink-0 text-xs text-muted-foreground tabular">{dmyText(r.at)}</span>
                     <span className="w-32 shrink-0 truncate font-medium">{r.actor}</span>
                     <Badge tone={tone(r.action)} className="font-mono">{r.action}</Badge>
                     <span className="truncate text-muted-foreground">{r.entity_type} <span className="font-mono text-xs">{r.entity_id}</span></span>

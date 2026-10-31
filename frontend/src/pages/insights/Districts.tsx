@@ -16,7 +16,7 @@ export default function InsightsDistricts() {
 
   return (
     <RPage className="gap-7">
-      <InsightsTitle title={t("ins_districts")} sub={t("ins_districts_sub")}
+      <InsightsTitle title={t("ins_districts")}
         actions={<RSegmented label={t("ins_rank_by")} value={by} onChange={setBy}
           options={[{ value: "er", label: t("ins_engagement") }, { value: "imp", label: t("ins_most_improved") }]} />} />
       <InsightsTabs />

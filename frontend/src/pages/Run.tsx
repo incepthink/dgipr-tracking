@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, ArrowRight, CheckCircle2, CircleDashed, Loader2, RotateCcw, XCircle } from "lucide-react";
 import { api, type RunDetail, type Task } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
-import { cn, periodLabel, qs } from "@/lib/utils";
+import { cn, dmyText, periodLabel, qs } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle, StatusBadge, Tip } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { Callout, ErrorState, LoadingRows, PageHeader, PlatformIcon } from "@/components/common";
@@ -63,7 +63,7 @@ export default function RunPage() {
       <PageHeader
         step={1}
         title={<span className="flex flex-wrap items-center gap-3">Collection run #{run.id} <StatusBadge status={run.status} /></span>}
-        description={<>Reporting period <b className="text-foreground">{periodLabel(run.period_start, run.period_end)}</b> · {run.mode} mode · {run.overlap_hours}h overlap · started by {run.triggered_by || "—"} at {run.created_at}</>}
+        description={<>Reporting period <b className="text-foreground">{periodLabel(run.period_start, run.period_end)}</b> · {run.mode} mode · {run.overlap_hours}h overlap · started by {run.triggered_by || "—"} at {dmyText(run.created_at)}</>}
         actions={<>
           {retryable && <Button variant="outline" loading={retry.isPending} onClick={() => retry.mutate(undefined)}><RotateCcw /> Retry failed tasks</Button>}
           {live ? <Button disabled>Continue to review <ArrowRight /></Button>

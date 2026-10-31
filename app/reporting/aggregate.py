@@ -69,7 +69,7 @@ def compute_report(session: Session, campaign: Optional[Campaign], start: date, 
     manual = {(m.office_code, m.column_key): m for m in manual_rows}
 
     entries: dict[tuple[str, str], dict[date, int]] = defaultdict(dict)  # (office, column) -> {day: value}
-    form_id = session.scalar(select(Form.id).where(Form.campaign_id == cid, Form.status.in_(('published', 'closed')))
+    form_id = session.scalar(select(Form.id).where(Form.campaign_id == cid, Form.status.in_(('published', 'paused')))
                              .order_by(Form.id.desc()).limit(1)) if cid is not None else None
     if form_id is not None:
         for o, k, d, v in session.execute(

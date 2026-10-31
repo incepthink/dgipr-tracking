@@ -4,7 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { FlaskConical, RefreshCcw, Save, ScanText } from "lucide-react";
 import { api, type CampaignFull, type TestResult } from "@/lib/api";
 import { useAction, useMeta } from "@/lib/hooks";
-import { cn } from "@/lib/utils";
+import { cn, dmyText } from "@/lib/utils";
+import { DateInput } from "@/components/reports/DateInput";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Field, Input, Select, StatusBadge, Tabs, TabsContent, TabsList, TabsTrigger, Textarea } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { Callout, ErrorState, LoadingRows, PageHeader } from "@/components/common";
@@ -32,7 +33,7 @@ function Editor({ c }: { c: CampaignFull }) {
   return (
     <>
       <PageHeader title="Campaign rules"
-        description={<>How publications are matched to <b className="text-foreground">{c.title_mr}</b>. Rules v{c.version} · updated {c.updated_at} by {c.updated_by}</>}
+        description={<>How publications are matched to <b className="text-foreground">{c.title_mr}</b>. Rules v{c.version} · updated {dmyText(c.updated_at)} by {c.updated_by}</>}
         actions={meta && meta.campaigns.length > 1 && (
           <Select value={c.id} onChange={(e) => navigate(`/campaigns/${e.target.value}`)} className="w-64">
             {meta.campaigns.map((x) => <option key={x.id} value={x.id}>{x.title_mr}</option>)}
@@ -116,8 +117,8 @@ function Editor({ c }: { c: CampaignFull }) {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <Field label="From"><Input type="date" value={range.start} onChange={(e) => setRange({ ...range, start: e.target.value })} /></Field>
-                <Field label="To"><Input type="date" value={range.end} onChange={(e) => setRange({ ...range, end: e.target.value })} /></Field>
+                <Field label="From"><DateInput look="plain" value={range.start} onChange={(d) => setRange({ ...range, start: d })} /></Field>
+                <Field label="To"><DateInput look="plain" value={range.end} onChange={(d) => setRange({ ...range, end: d })} /></Field>
               </div>
               <Button variant="outline" className="w-full" disabled={!range.start || !range.end || dirty} loading={reclass.isPending} onClick={() => reclass.mutate(range)}>Re-classify</Button>
               {dirty && <p className="text-xs text-warning">Save your rule changes first.</p>}

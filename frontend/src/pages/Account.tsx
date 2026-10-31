@@ -37,13 +37,17 @@ export default function AccountPage() {
             options={[{ value: "light", label: t("theme_light") }, { value: "dark", label: t("theme_dark") }]} /></div>
         </RLabel>
       </RCard>
-      <PasswordCard />
+      <RCard>
+        <RCardTitle>{t("change_pw")}</RCardTitle>
+        <PasswordForm />
+      </RCard>
       <RButton size="lg" variant="danger" onClick={logout}><LogOut aria-hidden /> {t("logout")}</RButton>
     </RPage>
   );
 }
 
-function PasswordCard() {
+/** Change your own password; shared by the Account page and the sidebar's change-password sheet. */
+export function PasswordForm({ onDone }: { onDone?: () => void }) {
   const { t } = useT();
   const qc = useQueryClient();
   const [current, setCurrent] = React.useState("");
@@ -51,12 +55,11 @@ function PasswordCard() {
   const [repeat, setRepeat] = React.useState("");
   const change = useMutation({
     mutationFn: () => api.post<Me>("/api/auth/password", { current_password: current, new_password: next }),
-    onSuccess: (m) => { qc.setQueryData(["me"], m); toast.success(t("pw_changed")); setCurrent(""); setNext(""); setRepeat(""); },
+    onSuccess: (m) => { qc.setQueryData(["me"], m); toast.success(t("pw_changed")); setCurrent(""); setNext(""); setRepeat(""); onDone?.(); },
   });
   const mismatch = repeat.length > 0 && next !== repeat;
   return (
-    <RCard>
-      <RCardTitle>{t("change_pw")}</RCardTitle>
+    <>
       <form className="flex flex-col gap-4" onSubmit={(e) => { e.preventDefault(); if (!mismatch) change.mutate(); }}>
         <RLabel label={t("current_password")}><RInput big type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} /></RLabel>
         <RLabel label={t("new_password")}><RInput big type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} /></RLabel>
@@ -68,6 +71,6 @@ function PasswordCard() {
           {t("save_password")}
         </RButton>
       </form>
-    </RCard>
+    </>
   );
 }

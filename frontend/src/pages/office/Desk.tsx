@@ -1,13 +1,12 @@
 import * as React from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { FileSpreadsheet, Megaphone, Search, X } from "lucide-react";
-import { backendUrl, type CampaignBrief, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
-import { useMeta } from "@/lib/hooks";
+import { Link } from "react-router-dom";
+import { FileSpreadsheet, Search, X } from "lucide-react";
+import { backendUrl, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { cn, qs } from "@/lib/utils";
 import { RButton, RCard, RError, StatusMark, markOf } from "@/components/reports/kit";
 import { deadlineOf, isOverdue, timeOf, whenText } from "@/components/reports/period";
-import { fieldLabel, formTitle, sumColumns, useFormFilters } from "../forms/common";
+import { fieldLabel, formTitle, sumColumns, useFormDef, useForms, useToday } from "../forms/common";
 import { cellInfo, chaseText, CopyButton, periodName, reportingPeriod, useCompliance, useResponses, windowOf } from "./shared";
 
 /** A flag worth a second look before accepting: far above the office's own recent average, or zeros. */
@@ -44,29 +43,10 @@ const isSent = (s: string) => s === "submitted" || s === "returned";
 type Filter = "all" | "none" | "submitted" | "returned";
 
 // --------------------------------------------------------------------------- search
-type Hit = { kind: "form"; form: FormDef } | { kind: "campaign"; c: CampaignBrief };
-
-function DeskSearch({ forms, campaigns, current, onForm }: {
-  forms: FormDef[]; campaigns: CampaignBrief[]; current: number; onForm: (id: number) => void;
-}) {
-  const { t, tf, lang } = useT();
-  const navigate = useNavigate();
-  const [q, setQ] = React.useState("");
-  const [open, setOpen] = React.useState(false);
-  const [active, setActive] = React.useState(0);
+/** Filters the cards below in place; it never navigates. */
+function DeskSearch({ q, setQ }: { q: string; setQ: (q: string) => void }) {
+  const { t } = useT();
   const input = React.useRef<HTMLInputElement>(null);
-  const listId = React.useId();
-
-  const hits = React.useMemo<Hit[]>(() => {
-    const needle = q.trim().toLowerCase();
-    const match = (...s: string[]) => !needle || s.some((x) => x?.toLowerCase().includes(needle));
-    return [
-      ...forms.filter((f) => match(f.title_mr, f.title_en, f.slug)).map((form) => ({ kind: "form" as const, form })),
-      ...(needle ? campaigns.filter((c) => match(c.title_mr, c.title_en, c.slug)).map((c) => ({ kind: "campaign" as const, c })) : []),
-    ].slice(0, 12);
-  }, [q, forms, campaigns]);
-
-  React.useEffect(() => setActive(0), [q]);
 
   // "/" from anywhere on the page jumps to the search
   React.useEffect(() => {
@@ -78,77 +58,56 @@ function DeskSearch({ forms, campaigns, current, onForm }: {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const pick = (h: Hit) => {
-    if (h.kind === "form") onForm(h.form.id);
-    else navigate(`/campaigns/${h.c.id}`);
-    setQ(""); setOpen(false); input.current?.blur();
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, hits.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-    else if (e.key === "Enter" && open && hits[active]) { e.preventDefault(); pick(hits[active]); }
-    else if (e.key === "Escape") { setOpen(false); input.current?.blur(); }
-  };
-
   return (
-    <div className="relative">
-      <div className="flex min-h-16 items-center gap-3 rounded-2xl border-[1.5px] border-r-line bg-r-card px-5 focus-within:border-r-ink focus-within:shadow-[0_0_0_3px_var(--r-focus)]">
-        <Search className="size-6 shrink-0 text-r-muted" aria-hidden />
-        <input ref={input} type="search" role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list"
-          aria-activedescendant={open && hits[active] ? `${listId}-${active}` : undefined}
-          value={q} placeholder={t("desk_search")} onChange={(e) => { setQ(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)} onBlur={() => setOpen(false)} onKeyDown={onKeyDown}
-          className="min-w-0 flex-1 border-0 bg-transparent py-4 text-lg text-r-ink outline-none! placeholder:text-r-faint sm:text-xl [&::-webkit-search-cancel-button]:hidden" />
-        {q ? (
-          <button type="button" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => setQ("")}
-            className="flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-r-sunk text-r-muted"><X className="size-4" /></button>
-        ) : <kbd className="hidden rounded-md border border-r-line px-2 py-0.5 text-sm text-r-muted sm:block">/</kbd>}
-      </div>
-      {open && (
-        <div id={listId} role="listbox" className="absolute inset-x-0 top-full z-30 mt-2 max-h-[60vh] overflow-y-auto rounded-2xl border border-r-line bg-r-card p-2 shadow-xl">
-          {!hits.length ? <p className="m-0 px-3 py-4 text-sm text-r-muted">{tf("desk_no_match", { q: q.trim() })}</p> : hits.map((h, i) => {
-            const id = `${listId}-${i}`;
-            const isForm = h.kind === "form";
-            const title = isForm ? formTitle(h.form, lang) : formTitle(h.c, lang);
-            const sub = isForm
-              ? `${t(`status_${h.form.status}` as "status_draft")} · ${t(`freq_${h.form.frequency}` as "freq_daily")}`
-              : t("campaign");
-            return (
-              <div key={isForm ? `f${h.form.id}` : `c${h.c.id}`} id={id} role="option" aria-selected={i === active}
-                onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setActive(i)} onClick={() => pick(h)}
-                className={cn("flex min-h-12 cursor-pointer items-center gap-3 rounded-xl px-3 py-2", i === active && "bg-r-sunk")}>
-                {isForm
-                  ? <span className={cn("mx-[3px] size-2.5 shrink-0 rounded-full", h.form.status === "published" ? "bg-r-accepted" : h.form.status === "draft" ? "border-2 border-dashed border-r-muted" : "bg-r-faint")} aria-hidden />
-                  : <Megaphone className="size-4 shrink-0 text-r-muted" aria-hidden />}
-                <span className="flex min-w-0 flex-1 flex-col leading-tight">
-                  <b className="truncate">{title}</b>
-                  <span className="text-[13px] text-r-muted">{sub}</span>
-                </span>
-                {isForm && h.form.id === current && <span className="rounded-full bg-r-sunk px-2 py-0.5 text-xs font-bold text-r-muted">✓</span>}
-              </div>
-            );
-          })}
-        </div>
-      )}
+    <div className="flex min-h-16 items-center gap-3 rounded-2xl border-[1.5px] border-r-line bg-r-card px-5 focus-within:border-r-ink focus-within:shadow-[0_0_0_3px_var(--r-focus)]">
+      <Search className="size-6 shrink-0 text-r-muted" aria-hidden />
+      <input ref={input} type="search" value={q} placeholder={t("desk_search")} aria-label={t("desk_search")}
+        onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") { setQ(""); input.current?.blur(); } }}
+        className="min-w-0 flex-1 border-0 bg-transparent py-4 text-lg text-r-ink outline-none! placeholder:text-r-faint sm:text-xl [&::-webkit-search-cancel-button]:hidden" />
+      {q ? (
+        <button type="button" aria-label="Clear" onClick={() => { setQ(""); input.current?.focus(); }}
+          className="flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-r-sunk text-r-muted"><X className="size-4" /></button>
+      ) : <kbd className="hidden rounded-md border border-r-line px-2 py-0.5 text-sm text-r-muted sm:block">/</kbd>}
     </div>
   );
 }
 
 // --------------------------------------------------------------------------- page
+/** Every live form, newest first, one card under another; the search hides the ones that don't match. */
 export default function DeskPage() {
+  const { tf } = useT();
+  const { data: forms } = useForms();
+  const [q, setQ] = React.useState("");
+
+  const live = React.useMemo(() => (forms ?? [])
+    .filter((x) => x.status === "published" || x.status === "paused")
+    .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id), [forms]);
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? live.filter((x) => [x.title_mr, x.title_en, x.slug].some((s) => s?.toLowerCase().includes(needle))) : live;
+
+  return (
+    <div className="rpt flex flex-col gap-5">
+      <DeskSearch q={q} setQ={setQ} />
+      {!forms ? <div className="h-96 animate-pulse rounded-2xl bg-r-sunk" />
+        : needle && !shown.length ? <p className="m-0 px-1 text-sm text-r-muted">{tf("desk_no_match", { q: q.trim() })}</p>
+        : shown.map((x) => <DeskCard key={x.id} formId={x.id} />)}
+    </div>
+  );
+}
+
+function DeskCard({ formId }: { formId: number }) {
   const tr = useT();
   const { t, tf, lang } = tr;
-  const f = useFormFilters(14);
-  const form = f.form;
-  const { data: meta } = useMeta();
+  const { data: form, error: formError } = useFormDef(formId);
+  const todayDay = useToday();
+  const lastDay = form?.end_date && form.end_date < todayDay ? form.end_date : todayDay;
+  const ready = !!form && !!todayDay;
   const now = Date.now();
-  const ps = form ? reportingPeriod(form, f.lastDay, now) : "";
+  const ps = form ? reportingPeriod(form, lastDay, now) : "";
   const win = form ? windowOf(form, ps, form.frequency === "weekly" ? 8 : 14) : { start: "", end: "" };
-  const resp = useResponses(f.formId, win.start, win.end, "", f.ready);
-  const comp = useCompliance(f.formId, win.start, win.end, "", f.ready);
+  const resp = useResponses(formId, win.start, win.end, "", ready);
+  const comp = useCompliance(formId, win.start, win.end, "", ready);
   const [filter, setFilter] = React.useState<Filter>("all");
-  React.useEffect(() => setFilter("all"), [f.formId]);
 
   const cols = sumColumns(form);
   const rows = resp.data?.rows ?? [];
@@ -170,9 +129,9 @@ export default function DeskPage() {
     return { days: acc.days + days, offices: acc.offices + (days ? 1 : 0) };
   }, { days: 0, offices: 0 }) : { days: 0, offices: 0 };
   const chase = cdata && form && j >= 0 ? chaseText({ form, data: cdata, j, withOld: true, tr, now }) : "";
-  const respTo = (r: ResponseRow) => `/forms/responses${qs({ form: f.formId, day: r.period_start, office: r.office })}`;
+  const respTo = (r: ResponseRow) => `/forms/responses${qs({ form: formId, day: r.period_start, office: r.office })}`;
   const shown = (r: ResponseRow) => filter === "all" || (filter === "none" ? !isSent(r.status) : r.status === filter);
-  const error = resp.error ?? comp.error;
+  const error = formError ?? resp.error ?? comp.error;
 
   const chips: { k: Filter; label: string; mark?: React.ReactNode }[] = [
     { k: "all", label: t("all_districts") },
@@ -181,84 +140,77 @@ export default function DeskPage() {
     { k: "returned", label: t("sub_returned"), mark: <StatusMark mark="ret" /> },
   ];
 
+  if (error) return <RError error={error} />;
+  if (!form || !resp.data) return <div className="h-96 animate-pulse rounded-2xl bg-r-sunk" />;
   return (
-    <div className="rpt flex flex-col gap-5">
-      <DeskSearch forms={f.forms ?? []} campaigns={meta?.campaigns ?? []} current={f.formId}
-        onForm={(id) => f.set({ form: id, start: null, end: null, day: null })} />
-
-      {error ? <RError error={error} /> : !form || !resp.data ? (
-        <div className="h-96 animate-pulse rounded-2xl bg-r-sunk" />
-      ) : (
-        <RCard className="gap-5 p-5 sm:p-6">
-          {/* header: which form, which period, how far along */}
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex min-w-0 flex-col gap-1">
-              <div className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">
-                {periodName(form, ps, lang)}{dl && ` · ${t("due_label")} ${dl.getTime() - now < 864e5 && dl.getTime() > now ? timeOf(dl, lang) : whenText(dl, lang)}`}
-              </div>
-              <h1 className="disp m-0 text-[28px] leading-[1.08] font-bold sm:text-[36px]">{formTitle(form, lang)}</h1>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {count("none") > 0 && chase && <CopyButton text={chase} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />}
-              <RButton asChild size="sm" variant="ghost">
-                <a href={backendUrl(`/api/forms/${f.formId}/export${qs({ start: form.start_date, end: f.lastDay })}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
-              </RButton>
-            </div>
+    <RCard className="gap-5 p-5 sm:p-6">
+      {/* header: which form, which period, how far along */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 flex-col gap-1">
+          <div className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">
+            {periodName(form, ps, lang)}{dl && ` · ${t("due_label")} ${dl.getTime() - now < 864e5 && dl.getTime() > now ? timeOf(dl, lang) : whenText(dl, lang)}`}
           </div>
+          <h2 className="disp m-0 text-[28px] leading-[1.08] font-bold sm:text-[36px]">{formTitle(form, lang)}</h2>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {count("none") > 0 && chase && <CopyButton text={chase} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />}
+          <RButton asChild size="sm" variant="ghost">
+            <a href={backendUrl(`/api/forms/${formId}/export${qs({ start: form.start_date, end: lastDay })}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
+          </RButton>
+        </div>
+      </div>
 
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="num text-xl font-bold">{tf("n_received", { a: received, b: today.length })}</span>
-              {late > 0 && <span className="text-sm font-bold text-r-late">{late} {t("late")}</span>}
-            </div>
-            <div className="flex h-2.5 overflow-hidden rounded-full bg-r-sunk" aria-hidden>
-              <div className="bg-r-action" style={{ width: `${(100 * count("submitted")) / Math.max(1, today.length)}%` }} />
-              <div className="bg-r-overdue" style={{ width: `${(100 * count("returned")) / Math.max(1, today.length)}%` }} />
-            </div>
-          </div>
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <span className="num text-xl font-bold">{tf("n_received", { a: received, b: today.length })}</span>
+          {late > 0 && <span className="text-sm font-bold text-r-late">{late} {t("late")}</span>}
+        </div>
+        <div className="flex h-2.5 overflow-hidden rounded-full bg-r-sunk" aria-hidden>
+          <div className="bg-r-action" style={{ width: `${(100 * count("submitted")) / Math.max(1, today.length)}%` }} />
+          <div className="bg-r-overdue" style={{ width: `${(100 * count("returned")) / Math.max(1, today.length)}%` }} />
+        </div>
+      </div>
 
-          {/* filter chips double as the at-a-glance counts */}
-          <div className="flex flex-wrap gap-2" role="group" aria-label={t("show")}>
-            {chips.map((c) => (
-              <button key={c.k} type="button" aria-pressed={filter === c.k} onClick={() => setFilter(c.k)}
-                className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-3.5 text-sm font-bold",
-                  filter === c.k ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
-                {c.mark}{c.label} <span className="num opacity-70">{count(c.k)}</span>
-              </button>
-            ))}
-          </div>
+      {/* filter chips double as the at-a-glance counts */}
+      <div className="flex flex-wrap gap-2" role="group" aria-label={t("show")}>
+        {chips.map((c) => (
+          <button key={c.k} type="button" aria-pressed={filter === c.k} onClick={() => setFilter(c.k)}
+            className={cn("flex min-h-10 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-3.5 text-sm font-bold",
+              filter === c.k ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
+            {c.mark}{c.label} <span className="num opacity-70">{count(c.k)}</span>
+          </button>
+        ))}
+      </div>
 
-          {older.days > 0 && (
-            <div className="flex items-center gap-2.5 rounded-[10px] bg-r-overdue-soft px-3 py-2.5 text-sm text-r-overdue-ink">
-              <StatusMark mark="over" />
-              <span className="flex-1">{tf("older_overdue", { d: older.days, o: older.offices })}</span>
-            </div>
-          )}
-
-          {/* every district, under its division */}
-          {!today.some(shown) ? <p className="m-0 text-sm text-r-muted">{filter === "none" ? t("everyone_sent") : t("nothing_in_filter")}</p> : (
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] gap-4">
-              {divisions.filter(([, d]) => d.rows.some(shown)).map(([code, d]) => {
-                const sent = d.rows.filter((r) => isSent(r.status)).length;
-                return (
-                  <section key={code} className="flex flex-col rounded-xl border border-r-line-soft">
-                    <header className="flex items-center justify-between gap-2 rounded-t-xl bg-r-sunk px-4 py-2.5">
-                      <h2 className="m-0 truncate text-base font-bold">{d.name}</h2>
-                      <span className={cn("num text-sm font-bold", sent === d.rows.length ? "text-r-accepted" : "text-r-muted")}>{sent} / {d.rows.length}</span>
-                    </header>
-                    <div className="flex flex-col px-2">
-                      {d.rows.filter(shown).map((r) => (
-                        <DistrictRow key={r.office} r={r} form={form} history={rows} cols={cols} to={respTo(r)} overdue={isOverdue(r.status, dl, now)} />
-                      ))}
-                    </div>
-                  </section>
-                );
-              })}
-            </div>
-          )}
-        </RCard>
+      {older.days > 0 && (
+        <div className="flex items-center gap-2.5 rounded-[10px] bg-r-overdue-soft px-3 py-2.5 text-sm text-r-overdue-ink">
+          <StatusMark mark="over" />
+          <span className="flex-1">{tf("older_overdue", { d: older.days, o: older.offices })}</span>
+        </div>
       )}
-    </div>
+
+      {/* every district, under its division */}
+      {!today.some(shown) ? <p className="m-0 text-sm text-r-muted">{filter === "none" ? t("everyone_sent") : t("nothing_in_filter")}</p> : (
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(340px,100%),1fr))] gap-4">
+          {divisions.filter(([, d]) => d.rows.some(shown)).map(([code, d]) => {
+            const sent = d.rows.filter((r) => isSent(r.status)).length;
+            return (
+              <section key={code} className="flex flex-col rounded-xl border border-r-line-soft">
+                <header className="flex items-center justify-between gap-2 rounded-t-xl bg-r-sunk px-4 py-2.5">
+                  <h3 className="m-0 truncate text-base font-bold">{d.name}</h3>
+                  <span className={cn("num text-sm font-bold", sent === d.rows.length ? "text-r-accepted" : "text-r-muted")}>{sent} / {d.rows.length}</span>
+                </header>
+                <div className="flex flex-col px-2">
+                  {d.rows.filter(shown).map((r) => (
+                    <DistrictRow key={r.office} r={r} form={form} history={rows} cols={cols} to={respTo(r)} overdue={isOverdue(r.status, dl, now)} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </RCard>
   );
 }
 

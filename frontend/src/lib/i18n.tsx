@@ -20,6 +20,8 @@ const DICT = {
   nav_reports_hint: { mr: "शीटप्रमाणे तक्ते व निर्यात", en: "Sheet tables & export" },
   nav_social: { mr: "सोशल मॉनिटरिंग", en: "Social Monitoring" },
   nav_admin: { mr: "प्रशासन", en: "Admin" },
+  nav_analytics_beta: { mr: "विश्लेषण (Beta)", en: "Analytics (Beta)" },
+  nav_monitoring_beta: { mr: "मॉनिटरिंग (Beta)", en: "Monitoring (Beta)" },
   nav_users: { mr: "वापरकर्ते", en: "Users" },
   nav_dashboard: { mr: "डॅशबोर्ड", en: "Dashboard" },
   role_district: { mr: "जिल्हा", en: "District" },
@@ -311,8 +313,7 @@ const DICT = {
   deadline_each: { mr: "प्रत्येक कालावधीची मुदत", en: "Deadline for each period" },
   recipients_word: { mr: "कार्यालये", en: "Recipients" },
   field_order: { mr: "क्षेत्रांचा क्रम", en: "Field order" },
-  confirm_close: { mr: "हा फॉर्म बंद करायचा? कार्यालये नवीन आकडे पाठवू शकणार नाहीत; आधीचे आकडे राहतील.", en: "Close this form? Offices can't send new figures; what they sent stays." },
-  confirm_archive: { mr: "हा फॉर्म संग्रहित करायचा? तो याद्यांमधून लपेल; आकडे राहतील.", en: "Archive this form? It leaves the lists; its figures are kept." },
+  confirm_pause: { mr: "हा फॉर्म थांबवायचा? कार्यालये नवीन आकडे पाठवू शकणार नाहीत; आधीचे आकडे राहतील. नंतर पुन्हा सुरू करता येईल.", en: "Pause this form? Offices can't send new figures until you resume it; what they sent stays." },
   confirm_unpublish: { mr: "फॉर्म पुन्हा मसुदा करायचा?", en: "Turn this form back into a draft?" },
   lifecycle: { mr: "स्थिती", en: "Lifecycle" },
   preview_as_office: { mr: "फील्ड्सचे पूर्वावलोकन", en: "Preview fields" },
@@ -334,7 +335,6 @@ const DICT = {
   archived_note: { mr: "कार्यालयांपासून लपवलेले; आधीच्या आकड्यांत व निर्यातीत राहते", en: "hidden from offices, kept in earlier figures and exports" },
   archive_explain: { mr: "आकडे आलेले क्षेत्र हटवता येत नाही; संग्रहित केल्यास कार्यालयांपासून लपते.", en: "A field with figures can't be deleted; archiving hides it from offices." },
   preview_note: { mr: "कार्यालयांना फॉर्म असा दिसेल. येथे काहीही जतन होत नाही.", en: "This is how offices see the form. Nothing here is saved." },
-  entry_closed: { mr: "नोंदी बंद", en: "entry closed" },
   no_forms_state: { mr: "नवीन फॉर्म तयार करा आणि कार्यालयांना पाठवा.", en: "Build a form and send it to offices." },
   // users
   users_sub: { mr: "प्रत्येक कार्यालयासाठी एक, प्रत्येक विभागासाठी एक, आणि राज्य चमू. अधिकृत क्रमाने.", en: "One account per office, one per division, and the state team. Listed in official order." },
@@ -535,17 +535,19 @@ const DICT = {
   new_form: { mr: "नवीन फॉर्म", en: "New form" },
   duplicate: { mr: "प्रत बनवा", en: "Duplicate" },
   publish: { mr: "प्रकाशित करा", en: "Publish" },
-  close_form: { mr: "बंद करा", en: "Close" },
-  reopen: { mr: "पुन्हा सुरू करा", en: "Reopen" },
+  pause: { mr: "थांबवा", en: "Pause" },
+  resume: { mr: "पुन्हा सुरू करा", en: "Resume" },
+  pause_hint: { mr: "थांबवल्यावर कार्यालयांना फॉर्म दिसतो, पण नवीन आकडे भरता येत नाहीत.", en: "Offices still see a paused form but can't enter new figures." },
   archive: { mr: "संग्रहित करा", en: "Archive" },
   delete: { mr: "हटवा", en: "Delete" },
-  delete_confirm: { mr: "हा फॉर्म कायमचा हटवायचा?", en: "Delete this form permanently?" },
+  delete_confirm: { mr: "हा फॉर्म हटवायचा?", en: "Delete this form?" },
+  deleted: { mr: "फॉर्म हटवला", en: "Form deleted" },
   edit: { mr: "संपादित करा", en: "Edit" },
-  show_archived: { mr: "संग्रहित फॉर्मही दाखवा", en: "Show archived forms" },
+  show_archived: { mr: "हटवलेले फॉर्मही दाखवा", en: "Show deleted forms" },
   status_draft: { mr: "मसुदा", en: "Draft" },
   status_published: { mr: "सुरू", en: "Live" },
-  status_closed: { mr: "बंद", en: "Closed" },
-  status_archived: { mr: "संग्रहित", en: "Archived" },
+  status_paused: { mr: "थांबवलेले", en: "Paused" },
+  status_archived: { mr: "हटवलेले", en: "Deleted" },
   freq_daily: { mr: "दररोज", en: "Daily" },
   freq_weekly: { mr: "साप्ताहिक", en: "Weekly" },
   freq_once: { mr: "एकदाच", en: "One-time" },
@@ -602,7 +604,6 @@ const DICT = {
   autosaved_local: { mr: "बदल या ब्राउझरमध्ये आपोआप जतन होतात", en: "Changes are kept in this browser automatically" },
   deadline_hours: { mr: "मुदत: कालावधी संपल्यानंतर किती तास", en: "Deadline: hours after the period ends" },
   deadline_hint: { mr: "उदा. १८ = दुसऱ्या दिवशी सायं. ६ पर्यंत; रिकामे = मुदत नाही", en: "e.g. 18 = by 6 pm the next day; blank = no deadline" },
-  entry_open: { mr: "डेटा एंट्री सुरू", en: "Accepting entries" },
   schedule_locked: { mr: "कार्यालयांनी माहिती पाठवली आहे, त्यामुळे वारंवारता व सुरुवात बदलता येणार नाही.", en: "Offices already sent data, so frequency and start date are fixed." },
   preview: { mr: "कार्यालयांना असा दिसेल", en: "What offices will see" },
   unsaved_form: { mr: "जतन न केलेले बदल", en: "Unsaved changes" },
@@ -651,6 +652,9 @@ const DICT = {
   status: { mr: "स्थिती", en: "Status" },
   click_to_review: { mr: "आकड्यावर क्लिक करून दुरुस्त करा; ओळीवरील बटणांनी स्वीकारा / परत पाठवा.", en: "Click a value to correct it; use the row buttons to accept or return." },
   resp_search: { mr: "कार्यालय किंवा फॉर्म शोधा…", en: "Search an office or form…" },
+  resp_group_published: { mr: "सुरू", en: "Live" },
+  resp_group_paused: { mr: "थांबवलेले", en: "Paused" },
+  resp_group_archived: { mr: "संग्रहित", en: "Archived" },
   resp_no_match: { mr: "\"{q}\" शी जुळणारे काहीही नाही", en: "Nothing matches \"{q}\"" },
   resp_no_rows: { mr: "या दिवसासाठी कोणतेही कार्यालय नाही", en: "No offices for this day" },
   resp_counts: { mr: "{b} पैकी {a} पाठवले", en: "{a} of {b} sent" },
@@ -671,6 +675,7 @@ const DICT = {
   current_value: { mr: "सध्याचे", en: "Current" },
   open_value: { mr: "उघडा", en: "Open" },
   click_to_edit: { mr: "कोणत्याही आकड्यावर क्लिक करून तो बदला; प्रत्येक बदल नोंदला जातो व पूर्ववत करता येतो.", en: "Click any value to edit it; every change is kept and can be undone." },
+  sort_by: { mr: "यानुसार क्रमवारी लावा: {f} (पुन्हा क्लिक करून क्रम उलटा)", en: "Sort by {f} (click again to reverse)" },
   missing_for: { mr: "न पाठवलेली कार्यालये", en: "Offices that haven't sent" },
   // analytics (docs/analytics.md)
   sec_nav: { mr: "विभाग", en: "Sections" },
@@ -1127,9 +1132,12 @@ export function useT() {
       DICT[key][lang].replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
     const name = (x: { name_mr: string; name_en?: string } | null | undefined) =>
       !x ? "" : lang === "en" && x.name_en ? x.name_en : x.name_mr;
+    /** name() for tight spots: English office names abbreviated like the Marathi ones (जिमाका → DIO, विमाका → RIO). */
+    const shortName = (x: { name_mr: string; name_en?: string } | null | undefined) =>
+      name(x).replace(/^District Information Office,/, "DIO,").replace(/^Divisional Information Office,/, "RIO,");
     const col = (c: { label_mr: string; label_en: string }) => (lang === "en" ? c.label_en : c.label_mr);
     const num = (n: number | null | undefined) =>
       n === null || n === undefined ? "–" : n.toLocaleString(lang === "mr" ? "mr-IN" : "en-IN");
-    return { t, tf, name, col, num, lang };
+    return { t, tf, name, shortName, col, num, lang };
   }, [lang]);
 }

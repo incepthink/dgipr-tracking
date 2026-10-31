@@ -2,12 +2,13 @@ import * as React from "react";
 import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronRight, Eye, Lock, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronRight, Eye, Lock, Pause, Play, Plus, Trash2 } from "lucide-react";
 import { api, ApiError, type Column, type FieldType, type FormDef, type FormField, type Frequency } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { RButton, RCard, RCardTitle, RCheck, RError, RInput, RLabel, RPage, RSegmented, RSelect, RSheet, RTextarea, StatusMark } from "@/components/reports/kit";
+import { DateInput } from "@/components/reports/DateInput";
 import { dayMonth, fig, fullDay } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, useToday } from "./common";
@@ -19,7 +20,7 @@ const FREQS: Frequency[] = ["daily", "once"];
 type EditField = FormField & { uid: string; optionsText: string };
 interface Draft {
   title_mr: string; title_en: string; instructions_mr: string; instructions_en: string; frequency: Frequency;
-  start_date: string; end_date: string; deadline_hours: string; entry_open: boolean; campaign_id: number | null;
+  start_date: string; end_date: string; deadline_hours: string; campaign_id: number | null;
   recipients: string[]; fields: EditField[];
 }
 
@@ -43,14 +44,14 @@ function toDraft(f: FormDef | null, allOffices: string[], today: string, columns
   if (!f) {
     return {
       title_mr: "", title_en: "", instructions_mr: "", instructions_en: "", frequency: "daily", start_date: today, end_date: "",
-      deadline_hours: "", entry_open: true, campaign_id: null, recipients: allOffices,
+      deadline_hours: "", campaign_id: null, recipients: allOffices,
       fields: columns.length ? columns.map(columnField) : [blankField()],
     };
   }
   return {
     title_mr: f.title_mr, title_en: f.title_en, instructions_mr: f.instructions_mr, instructions_en: f.instructions_en,
     frequency: f.frequency, start_date: f.start_date, end_date: f.end_date ?? "", deadline_hours: f.deadline_hours?.toString() ?? "",
-    entry_open: f.entry_open, campaign_id: f.campaign_id, recipients: f.recipients,
+    campaign_id: f.campaign_id, recipients: f.recipients,
     fields: (f.fields ?? []).map((x) => ({ ...x, uid: uid(), optionsText: x.options.join("\n") })),
   };
 }
@@ -59,7 +60,7 @@ function toPayload(d: Draft) {
   return {
     title_mr: d.title_mr, title_en: d.title_en, instructions_mr: d.instructions_mr, instructions_en: d.instructions_en,
     frequency: d.frequency, start_date: d.start_date, end_date: d.frequency === "once" ? null : d.end_date || null,
-    deadline_hours: d.deadline_hours === "" ? null : Number(d.deadline_hours), entry_open: d.entry_open, campaign_id: d.campaign_id,
+    deadline_hours: d.deadline_hours === "" ? null : Number(d.deadline_hours), campaign_id: d.campaign_id,
     recipients: d.recipients,
     fields: d.fields.map((f) => ({
       id: f.id, key: f.key || null, label_mr: f.label_mr, label_en: f.label_en, help_mr: f.help_mr, help_en: f.help_en, type: f.type,
@@ -90,7 +91,7 @@ function changesOf(a: Draft, b: Draft | null, t: (k: TKey) => string, lang: stri
   if (!b) return [];
   const out: string[] = [];
   const keys: [keyof Draft, TKey][] = [["title_mr", "title_mr"], ["title_en", "title_en"], ["instructions_mr", "instructions_mr"], ["instructions_en", "instructions_en"],
-    ["frequency", "frequency"], ["start_date", "start_date"], ["end_date", "end_date"], ["deadline_hours", "deadline_hours"], ["campaign_id", "campaign_link"], ["entry_open", "entry_open"]];
+    ["frequency", "frequency"], ["start_date", "start_date"], ["end_date", "end_date"], ["deadline_hours", "deadline_hours"], ["campaign_id", "campaign_link"]];
   keys.forEach(([k, label]) => { if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) out.push(t(label)); });
   if (a.recipients.join() !== b.recipients.join()) out.push(t("recipients_word"));
   const before = new Map(b.fields.map((f) => [f.id ?? f.uid, JSON.stringify(toPayload({ ...b, fields: [f] }).fields[0])]));
@@ -177,10 +178,15 @@ export default function FormBuilderPage() {
       setSaving(false);
     }
   };
-  const lifecycle = async (action: "publish" | "close" | "archive" | "unpublish") => {
+  const lifecycle = async (action: "publish" | "pause" | "restore" | "unpublish") => {
     if (!formId) return;
-    if (action !== "publish" && !confirm(t(`confirm_${action}` as TKey))) return;
+    if ((action === "pause" || action === "unpublish") && !confirm(t(`confirm_${action}`))) return;
     try { apply(await api.post<FormDef>(`/api/forms/${formId}/${action}`)); toast.success(t("saved")); }
+    catch (e) { toast.error(e instanceof ApiError ? e.message : String(e)); }
+  };
+  const remove = async () => {
+    if (!formId || !confirm(t("delete_confirm"))) return;
+    try { await api.del(`/api/forms/${formId}`); toast.success(t("deleted")); nav("/forms"); }
     catch (e) { toast.error(e instanceof ApiError ? e.message : String(e)); }
   };
 
@@ -208,12 +214,17 @@ export default function FormBuilderPage() {
               <span className="size-2 rounded-full bg-r-accepted" aria-hidden />{t("status_published")}
             </span>
           )}
+          {status === "paused" && (
+            <span className="flex items-center gap-1.5 self-start rounded-full bg-r-returned-soft px-2.5 py-[3px] text-sm font-bold text-r-returned-ink">
+              <span className="size-2 rounded-full bg-r-returned" aria-hidden />{t("status_paused")}
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {status === "published" && <RButton size="sm" variant="danger" onClick={() => lifecycle("close")}>{t("close_form")}</RButton>}
-          {status === "closed" && <RButton size="sm" onClick={() => lifecycle("publish")}>{t("reopen")}</RButton>}
-          {status === "closed" && <RButton size="sm" onClick={() => lifecycle("archive")}>{t("archive")}</RButton>}
-          {status === "archived" && <RButton size="sm" onClick={() => lifecycle("close")}>{t("restore")}</RButton>}
+          {status === "published" && <RButton size="sm" title={t("pause_hint")} onClick={() => lifecycle("pause")}><Pause aria-hidden /> {t("pause")}</RButton>}
+          {status === "paused" && <RButton size="sm" variant="pri" onClick={() => lifecycle("publish")}><Play aria-hidden /> {t("resume")}</RButton>}
+          {status === "archived" && <RButton size="sm" onClick={() => lifecycle("restore")}>{t("restore")}</RButton>}
+          {!!formId && status !== "archived" && <RButton size="sm" variant="danger" onClick={remove}><Trash2 aria-hidden /> {t("delete")}</RButton>}
         </div>
       </div>
 
@@ -245,19 +256,19 @@ export default function FormBuilderPage() {
             {draft.frequency === "once" ? (
               <RLabel small label={t("report_day")} hint={t("once_hint")}>
                 {scheduleLocked ? <LockedChip>{dayMonth(draft.start_date, lang)}</LockedChip> : (
-                  <RInput type="date" required value={draft.start_date} aria-invalid={!draft.start_date} onChange={(e) => up({ start_date: e.target.value })} className="w-44" />
+                  <DateInput required value={draft.start_date} aria-invalid={!draft.start_date} onChange={(d) => up({ start_date: d })} />
                 )}
               </RLabel>
             ) : (
               <div className="flex flex-wrap gap-4">
                 <RLabel small label={t("start_date")}>
                   {scheduleLocked ? <LockedChip>{dayMonth(draft.start_date, lang)}</LockedChip> : (
-                    <RInput type="date" required value={draft.start_date} aria-invalid={!draft.start_date} onChange={(e) => up({ start_date: e.target.value })} className="w-44" />
+                    <DateInput required value={draft.start_date} aria-invalid={!draft.start_date} onChange={(d) => up({ start_date: d })} />
                   )}
                 </RLabel>
                 <RLabel small label={t("end_date")}>
-                  <RInput type="date" required={draft.frequency === "daily"} value={draft.end_date} min={draft.start_date} aria-invalid={needEnd}
-                    onChange={(e) => up({ end_date: e.target.value })} className="w-44" />
+                  <DateInput required={draft.frequency === "daily"} value={draft.end_date} min={draft.start_date} aria-invalid={needEnd}
+                    onChange={(d) => up({ end_date: d })} />
                 </RLabel>
               </div>
             )}
@@ -270,7 +281,6 @@ export default function FormBuilderPage() {
                 </div>
               </div>
             )}
-            <RCheck checked={draft.entry_open} onChange={(entry_open) => up({ entry_open })} className="self-start">{t("entry_open")}</RCheck>
           </RCard>
 
           <RCard>

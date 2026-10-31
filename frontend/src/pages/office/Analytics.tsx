@@ -6,7 +6,8 @@ import { api, type Attention, type FormField, type GroupKey, type Groups, type H
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn, qs } from "@/lib/utils";
-import { RButton, RCard, RCardTitle, RError, RFilterBar, RInput, RLabel, RPage, RSegmented, RSelect, RTitle } from "@/components/reports/kit";
+import { RButton, RCard, RCardTitle, RError, RFilterBar, RLabel, RPage, RSegmented, RSelect, RTitle } from "@/components/reports/kit";
+import { DateInput } from "@/components/reports/DateInput";
 import { fig, rangeText } from "@/components/reports/period";
 import { AttentionList } from "@/components/analytics/AttentionList";
 import { AskBox } from "@/components/analytics/AskBox";
@@ -114,8 +115,8 @@ export function FormAnalyticsPage() {
         </RLabel>
         {(custom || span === "custom") && (
           <>
-            <RLabel small label={t("from")}><RInput type="date" value={f.start} min={f.form?.start_date} max={f.end} onChange={(e) => e.target.value && f.set({ start: e.target.value })} /></RLabel>
-            <RLabel small label={t("to")}><RInput type="date" value={f.end} min={f.start} max={f.lastDay} onChange={(e) => e.target.value && f.set({ end: e.target.value })} /></RLabel>
+            <RLabel small label={t("from")}><DateInput value={f.start} min={f.form?.start_date} max={f.end} onChange={(d) => d && f.set({ start: d })} /></RLabel>
+            <RLabel small label={t("to")}><DateInput value={f.end} min={f.start} max={f.lastDay} onChange={(d) => d && f.set({ end: d })} /></RLabel>
           </>
         )}
         <DivisionPicker f={f} />

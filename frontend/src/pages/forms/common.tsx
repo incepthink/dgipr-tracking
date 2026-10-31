@@ -5,11 +5,12 @@ import { api, type FormDef, type FormField, type SubStatus } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
-import { addDays, cn } from "@/lib/utils";
-import { Badge, Card, Field, Input, Select } from "@/components/ui/primitives";
+import { addDays, cn, dmy } from "@/lib/utils";
+import { Badge, Card, Field, Select } from "@/components/ui/primitives";
+import { DateInput } from "@/components/reports/DateInput";
 import { Button } from "@/components/ui/button";
 
-/** Forms the user can see (state: all but archived; others: live/closed forms sent to their offices). */
+/** Forms the user can see (state: all but archived; others: live/paused forms sent to their offices). */
 export function useForms() {
   return useQuery({ queryKey: ["forms"], queryFn: () => api.get<FormDef[]>("/api/forms"), staleTime: 30_000 });
 }
@@ -122,15 +123,15 @@ export function FilterBar({ f, single, extra }: { f: FormFilters; single?: boole
         <FormSelect f={f} />
         {single ? (
           <Field label={t("date")}>
-            <Input type="date" value={f.end} max={f.lastDay} onChange={(e) => e.target.value && f.set({ start: e.target.value, end: e.target.value })} />
+            <DateInput look="plain" value={f.end} max={f.lastDay} onChange={(d) => d && f.set({ start: d, end: d })} />
           </Field>
         ) : (
           <>
             <Field label={t("from")}>
-              <Input type="date" value={f.start} max={f.end} onChange={(e) => e.target.value && f.set({ start: e.target.value, end: e.target.value > f.end ? e.target.value : f.end })} />
+              <DateInput look="plain" value={f.start} max={f.end} onChange={(d) => d && f.set({ start: d, end: d > f.end ? d : f.end })} />
             </Field>
             <Field label={t("to")}>
-              <Input type="date" value={f.end} min={f.start} max={f.lastDay} onChange={(e) => e.target.value && f.set({ end: e.target.value })} />
+              <DateInput look="plain" value={f.end} min={f.start} max={f.lastDay} onChange={(d) => d && f.set({ end: d })} />
             </Field>
           </>
         )}
@@ -150,15 +151,15 @@ export function FilterBar({ f, single, extra }: { f: FormFilters; single?: boole
   );
 }
 
-/** Day label like "बुध, १५ ऑक्टो" / "Wed, 15 Oct". */
-export function dayLabel(iso: string, lang: string, withYear = false) {
+/** Day label like "बुध, 15/10/2026" / "Wed, 15/10/2026". */
+export function dayLabel(iso: string, lang: string) {
   const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString(lang === "mr" ? "mr-IN" : "en-IN", { weekday: "short", day: "numeric", month: "short", ...(withYear ? { year: "numeric" } : {}) });
+  return `${d.toLocaleDateString(lang === "mr" ? "mr-IN" : "en-IN", { weekday: "short" })}, ${dmy(iso)}`;
 }
 
 export function periodText(p: { period_start: string; period_end: string }, lang: string) {
-  return p.period_start === p.period_end ? dayLabel(p.period_start, lang, true)
-    : `${dayLabel(p.period_start, lang)} – ${dayLabel(p.period_end, lang, true)}`;
+  return p.period_start === p.period_end ? dayLabel(p.period_start, lang)
+    : `${dayLabel(p.period_start, lang)} – ${dayLabel(p.period_end, lang)}`;
 }
 
 export const SUB_TONE: Record<SubStatus, "neutral" | "warning" | "info" | "danger" | "success"> = {
@@ -182,5 +183,6 @@ export function SubBadge({ status, late }: { status: SubStatus; late?: boolean }
 
 export function fmtInstant(iso: string | null | undefined, lang: string) {
   if (!iso) return "";
-  return new Date(iso).toLocaleString(lang === "mr" ? "mr-IN" : "en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const d = new Date(iso);
+  return `${dmy(d)}, ${d.toLocaleTimeString(lang === "mr" ? "mr-IN" : "en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}`;
 }

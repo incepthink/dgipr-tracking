@@ -153,7 +153,7 @@ export default function MyFormsPage() {
 // --------------------------------------------------------------------------- district: Today
 function DistrictToday({ listOnly }: { listOnly: boolean }) {
   const me = useUser();
-  const { t, tf, name, lang } = useT();
+  const { t, tf, shortName, lang } = useT();
   const { data: meta } = useMeta();
   const { inbox: { error, isLoading }, office, today, forms, recent } = useOfficeForms();
   const division = meta?.divisions.find((d) => d.offices.some((o) => o.code === office));
@@ -173,7 +173,7 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
     <RPage className="mx-auto w-full max-w-[1040px] gap-4">
       <header className="flex min-w-0 flex-col gap-0.5">
         <span className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{today ? longDay(today, lang) : ""}</span>
-        <h1 className="disp m-0 text-[28px] leading-[1.1] font-bold">{t("district_officer")}: {name(me.office) || me.display_name}</h1>
+        <h1 className="disp m-0 text-[28px] leading-[1.1] font-bold">{t("district_officer")}: {shortName(me.office) || me.display_name}</h1>
         {division && <span className="text-sm text-r-muted">{division.label_mr}</span>}
       </header>
 
@@ -229,7 +229,7 @@ function FormCard({ form, periods, office }: { form: InboxForm; periods?: Submis
     : form.to_fill > 0;
 
   const p = ps.at(-1);
-  const sub = form.status === "closed" ? t("status_closed")
+  const sub = form.status === "paused" ? t("status_paused")
     : form.frequency === "daily" && ps.length > 1 ? `${freq} · ${rangeText(form.start_date, form.end_date ?? p!.period_start, lang)} · ${tf("days_sent_of", { a: sent, b: ps.length })}`
     : p ? `${form.frequency === "weekly" ? tf("week_of", { range: rangeText(p.period_start, p.period_end, lang) }) : freq} · ${t(`sub_${p.status}` as TKey)}${p.deadline && (p.status === "none" || p.status === "draft") ? ` · ${tf("due_by", { when: whenText(p.deadline, lang) })}` : ""}`
     : freq;
@@ -264,7 +264,7 @@ function FormsOverview() {
   const { data, error, isLoading } = useInbox();
   return (
     <RPage>
-      <RTitle title={t("my_forms_title")} sub={t("my_forms_desc")} />
+      <RTitle title={t("my_forms_title")} />
       {error ? <RError error={error} /> : isLoading || !data ? <SkeletonCards /> : !data.length ? (
         <RCard className="items-center py-10 text-center"><b>{t("no_forms")}</b></RCard>
       ) : (

@@ -130,8 +130,8 @@ class OfficeEntry(Base):
 # --------------------------------------------------------------------------- forms (अहवाल फॉर्म)
 class Form(Base):
     """A report form the state admin defines and sends to offices. frequency daily|weekly|once sets the periods
-    offices fill in; status draft|published|closed|archived sets who sees it (offices see the published and
-    closed forms they receive; only published forms with entry_open accept entries)."""
+    offices fill in; status draft|published|paused|archived sets who sees it (offices see the live and paused
+    forms they receive; only live (published) forms accept entries)."""
     __tablename__ = "forms"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     slug: Mapped[str] = mapped_column(String(100), unique=True)
@@ -144,7 +144,7 @@ class Form(Base):
     end_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     deadline_hours: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # after the period's last day
     status: Mapped[str] = mapped_column(String(12), default="draft")
-    entry_open: Mapped[bool] = mapped_column(Boolean, default=True)
+    entry_open: Mapped[bool] = mapped_column(Boolean, default=True)  # unused: pausing is now status "paused"
     campaign_id: Mapped[Optional[int]] = mapped_column(ForeignKey("campaigns.id"), nullable=True)
     created_by: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

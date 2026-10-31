@@ -1,6 +1,6 @@
 ﻿import { Link } from "react-router-dom";
 import { TrendingUp, ArrowRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, dmy } from "@/lib/utils";
 import { PLATFORM_LABEL } from "@/lib/status";
 import { useT } from "@/lib/i18n";
 import { RCard, RPage } from "@/components/reports/kit";
@@ -123,7 +123,7 @@ function WeekViews() {
     d.setDate(d.getDate() + i);
     return {
       day: d.toLocaleDateString(loc, { weekday: "short" }),
-      date: d.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "short" }),
+      date: `${d.toLocaleDateString(loc, { weekday: "long" })}, ${dmy(d)}`,
       thisWeek: v * 100000, lastWeek: o.lastWeek[i] * 100000,
     };
   });
@@ -216,12 +216,11 @@ function SinceTracking() {
   const { t, tf, lang } = useT();
   const s = OVERVIEW.since;
   const n = s.trend.length;
-  const loc = lang === "mr" ? "mr-IN" : "en-IN";
   // one point per week, the last being this week (starting WEEK.start)
   const data = s.trend.map((v, i) => {
     const d = new Date(WEEK.start + "T00:00:00");
     d.setDate(d.getDate() - (n - 1 - i) * 7);
-    return { i, v, date: d.toLocaleDateString(loc, { day: "numeric", month: "short" }), campaign: i > s.campaignFrom };
+    return { i, v, date: dmy(d), campaign: i > s.campaignFrom };
   });
   const ticks = data.filter((r) => (n - 1 - r.i) % 2 === 0).map((r) => r.i);
   const c = chartChrome();

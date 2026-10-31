@@ -1,12 +1,13 @@
 import * as React from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSpreadsheet, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Clock, FileSpreadsheet, RotateCcw, Undo2 } from "lucide-react";
 import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
-import { addDays, cn } from "@/lib/utils";
+import { addDays, cn, dmy } from "@/lib/utils";
 import { RButton, RError, RInput, RLabel, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
-import { fig, periodOf, rangeText, stepOf, timeOf, whenText } from "@/components/reports/period";
+import { fig, periodOf, rangeText, shortDay, stepOf, timeOf, whenText } from "@/components/reports/period";
+import { MonthCalendar } from "@/components/reports/DateInput";
 import { fieldLabel, formTitle, useFormFilters } from "./common";
 import { periodName, useResponses } from "../office/shared";
 
@@ -30,6 +31,36 @@ export const shortOffice = (r: ResponseRow, lang: string) => officeName(r, lang)
   .replace(/^(विमाका|जिमाका|संचालक|मुख्यालय),?\s*/, "$1 ");
 const norm = (s: string) => s.toLocaleLowerCase().trim();
 
+/** A column sort, as in a spreadsheet: "office", "sent" or a field key. */
+type Sort = { key: string; dir: "asc" | "desc" };
+const OFFICE = "office";
+const SENT_COL = "sent";
+
+/** The value a row sorts by in a column; null (blank, or not sent) always sinks to the bottom. */
+function sortValue(r: ResponseRow, key: string, fields: FormField[], lang: string): number | string | null {
+  if (key === OFFICE) return shortOffice(r, lang);
+  if (key === SENT_COL) return SENT.includes(r.status) && r.submitted_at ? r.submitted_at : null;
+  if (!SENT.includes(r.status) && r.status !== "draft") return null;
+  const v = r.values[key];
+  if (v === null || v === undefined || v === "") return null;
+  if (fields.find((x) => x.key === key)?.type === "yesno") return v === "yes" ? 1 : 0;
+  if (typeof v === "number") return v;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : String(v);
+}
+
+function sortRows(rows: ResponseRow[], sort: Sort | null, fields: FormField[], lang: string) {
+  if (!sort) return rows;
+  const sign = sort.dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = sortValue(a, sort.key, fields, lang);
+    const y = sortValue(b, sort.key, fields, lang);
+    if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1;
+    if (typeof x === "number" && typeof y === "number") return sign * (x - y);
+    return sign * String(x).localeCompare(String(y), lang === "mr" ? "mr" : "en", { numeric: true });
+  });
+}
+
 /** Every period of a form so far, capped at the latest 62 (the most the API serves at once). */
 export function allRange(form: FormDef, today: string) {
   const last = form.end_date && form.end_date < today ? form.end_date : today;
@@ -37,18 +68,24 @@ export function allRange(form: FormDef, today: string) {
   return { start: [form.start_date, addDays(end, -61 * stepOf(form))].sort().at(-1)!, end };
 }
 
-/** Forms that have started, newest first. */
-export function startedForms(forms: FormDef[], today: string) {
-  return forms.filter((x) => (x.status === "published" || x.status === "closed") && x.start_date <= today)
+/** Forms that have started, newest first (live and paused; archived too when asked). */
+export function startedForms(forms: FormDef[], today: string, archived = false) {
+  return forms.filter((x) => (x.status === "published" || x.status === "paused" || (archived && x.status === "archived")) && x.start_date <= today)
     .sort((a, b) => b.start_date.localeCompare(a.start_date));
 }
+
+const GROUPS = ["published", "paused", "archived"] as const;
+const GROUP_DOT: Record<(typeof GROUPS)[number], string> = { published: "bg-r-accepted", paused: "bg-r-returned", archived: "border-2 border-r-faint" };
 
 export default function ResponsesPage() {
   const { t, tf } = useT();
   const f = useFormFilters();
   const today = f.today;
   const q = f.params.get("q") || "";
-  const forms = React.useMemo(() => (f.forms && today ? startedForms(f.forms, today) : []), [f.forms, today]);
+  // the shared form list leaves out archived forms; this one includes them
+  const { data: withArchived } = useQuery({ queryKey: ["forms", { archived: true }], queryFn: () => api.get<FormDef[]>("/api/forms?archived=true") });
+  const all = withArchived ?? f.forms;
+  const forms = React.useMemo(() => (all && today ? startedForms(all, today, true) : []), [all, today]);
 
   // sections opened by hand; while searching, matching sections open unless closed by hand.
   // A link that names a form (?form=, e.g. Review on the desk) opens that section, at ?day= if given.
@@ -74,13 +111,26 @@ export default function ResponsesPage() {
 
       <RSearch value={q} placeholder={t("resp_search")} onChange={(v) => f.set({ q: v || null })} />
 
-      <div className="mt-5 flex flex-col gap-3">
-        {!f.forms ? <div className="h-40 animate-pulse rounded-2xl bg-r-sunk" />
+      <div className="mt-5 flex flex-col gap-6">
+        {!all ? <div className="h-40 animate-pulse rounded-2xl bg-r-sunk" />
           : !forms.length ? <p className="m-0 rounded-2xl bg-r-card p-5 text-r-muted">{t("no_forms")}</p>
-          : forms.map((x) => (
-            <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} division="" q={q}
-              open={isOpen(x.id)} focus={x.id === target} onToggle={() => toggle(x.id)} onHits={onHits} />
-          ))}
+          : GROUPS.map((g) => {
+            const list = forms.filter((x) => x.status === g);
+            // while searching, a group hides once none of its forms match
+            if (!list.length || (q.trim() && list.every((x) => hits[x.id] === 0))) return null;
+            return (
+              <section key={g} aria-labelledby={`resp-${g}`} className="flex flex-col gap-3">
+                <h2 id={`resp-${g}`} className="m-0 flex items-center gap-2 text-[15px] font-bold text-r-muted">
+                  <span className={cn("size-2 rounded-full", GROUP_DOT[g])} aria-hidden />
+                  {t(`resp_group_${g}`)} <span className="num font-normal">· {list.length}</span>
+                </h2>
+                {list.map((x) => (
+                  <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} division="" q={q}
+                    open={isOpen(x.id)} focus={x.id === target} onToggle={() => toggle(x.id)} onHits={onHits} />
+                ))}
+              </section>
+            );
+          })}
         {noMatch && <p className="m-0 rounded-2xl bg-r-card p-5 text-r-muted">{tf("resp_no_match", { q: q.trim() })}</p>}
       </div>
     </RPage>
@@ -116,13 +166,19 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
   }, [all, needle, form]);
   React.useEffect(() => { if (data) onHits(form.id, rows.length); }, [data, rows.length, form.id, onHits]);
 
-  // newest date first, each date under its own band
+  // as in a spreadsheet: a header click sorts high → low (offices A → Z), each further click reverses it
+  const [sort, setSort] = React.useState<Sort | null>(null);
+  const sortBy = (key: string) => setSort((s) => (s?.key === key
+    ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
+    : { key, dir: key === OFFICE ? "asc" : "desc" }));
+
+  // newest date first, each date under its own band; the sort applies within each band
   const groups = React.useMemo(() => {
-    if (!byDate) return [{ ps: "", rows }];
+    if (!byDate) return [{ ps: "", rows: sortRows(rows, sort, fields, lang) }];
     const m = new Map<string, ResponseRow[]>();
     rows.forEach((r) => m.set(r.period_start, [...(m.get(r.period_start) ?? []), r]));
-    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([p, rs]) => ({ ps: p, rows: rs }));
-  }, [rows, byDate]);
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([p, rs]) => ({ ps: p, rows: sortRows(rs, sort, fields, lang) }));
+  }, [rows, byDate, sort, fields, lang]);
 
   const [busy, setBusy] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; key: string } | null>(null);
@@ -187,18 +243,20 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
           {error ? <div className="p-4"><RError error={error} /></div> : isLoading || !data ? <div className="m-4 h-40 animate-pulse rounded-xl bg-r-sunk" /> : !rows.length ? (
             <p className="m-0 p-5 text-r-muted">{t("resp_no_rows")}</p>
           ) : (
-            <div className={cn("max-h-[70vh] overflow-y-auto scrollbar-thin transition-opacity", isFetching && "opacity-60")}>
-              <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
+            <div className={cn("max-h-[70vh] overflow-auto scrollbar-thin transition-opacity", isFetching && "opacity-60")}>
+              {/* on a narrow screen the value columns keep a readable width and the grid scrolls sideways */}
+              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 112 + 64 + fields.length * 80 }}>
                 <colgroup>
-                  <col className="w-[148px]" />
+                  <col className="w-[112px] md:w-[148px]" />
                   <col className="w-[64px]" />
                   {fields.map((x) => <col key={x.key} />)}
                 </colgroup>
                 <thead className="sticky top-0 z-20">
                   <tr>
-                    <th scope="col" className="sticky left-0 z-30 border-b border-r-line bg-r-card px-3 py-2 text-left align-bottom text-xs font-bold text-r-muted">{t("office")}</th>
-                    <th scope="col" className="border-b border-r-line bg-r-card px-1.5 py-2 text-left align-bottom text-xs font-bold text-r-muted first-letter:uppercase">{t("sent")}</th>
-                    {fields.map((x) => <th key={x.key} scope="col" title={fieldLabel(x, lang)} className="border-b border-r-line bg-r-card px-1.5 py-2 text-right align-bottom text-[11px] leading-tight font-bold break-words hyphens-auto text-r-muted">{fieldLabel(x, lang)}</th>)}
+                    <SortHead col={OFFICE} label={t("office")} sort={sort} onSort={sortBy} className="sticky left-0 z-30 pl-1.5 text-xs" />
+                    <SortHead col={SENT_COL} label={t("sent")} sort={sort} onSort={sortBy} className="px-0 text-xs first-letter:uppercase" />
+                    {fields.map((x) => <SortHead key={x.key} col={x.key} label={fieldLabel(x, lang)} sort={sort} onSort={sortBy} right
+                      className="px-0.5 text-[11px] leading-tight break-words hyphens-auto" />)}
                   </tr>
                 </thead>
                 {groups.map((g) => (
@@ -249,6 +307,29 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
   );
 }
 
+/** A column heading that sorts the table when clicked, with an arrow showing the current direction. */
+function SortHead({ col, label, sort, onSort, right, className }: {
+  col: string; label: string; sort: Sort | null; onSort: (key: string) => void; right?: boolean; className?: string;
+}) {
+  const { tf } = useT();
+  const dir = sort?.key === col ? sort.dir : null;
+  const Arrow = dir === "asc" ? ArrowUp : ArrowDown;
+  // the button fills the whole cell (h-px on the cell lets h-full reach its height), so a click anywhere in a tall heading
+  // sorts; the sorted column is tinted, distinct from the hover, so the first click visibly takes
+  return (
+    <th scope="col" aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}
+      className={cn("h-px border-b border-r-line bg-r-card p-1 align-bottom font-bold", className)}>
+      <button type="button" onClick={() => onSort(col)} title={tf("sort_by", { f: label })}
+        className={cn("group flex h-full w-full cursor-pointer items-end gap-1 rounded-lg border-0 px-1.5 py-1.5 font-[inherit] leading-[inherit] select-none",
+          right ? "justify-end text-right" : "text-left",
+          dir ? "bg-r-action-soft text-r-action" : "bg-transparent text-r-muted hover:bg-r-sunk hover:text-r-ink")}>
+        <span className="min-w-0">{label}</span>
+        <Arrow className={cn("mb-px size-3 shrink-0", dir ? "opacity-100" : "opacity-0 group-hover:opacity-50")} aria-hidden />
+      </button>
+    </th>
+  );
+}
+
 function Row({ r, fields, canEdit, editing, onEdit }: {
   r: ResponseRow; fields: FormField[]; canEdit: boolean; editing: string | null; onEdit: (key: string) => void;
 }) {
@@ -269,11 +350,11 @@ function Row({ r, fields, canEdit, editing, onEdit }: {
         const shown = c ? <span className="corr">{showValue(x, v, t)}</span> : !sent && r.status !== "draft" ? "—" : showValue(x, v, t);
         const tip = c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : undefined;
         return (
-          <td key={x.key} className={cn("num truncate border-b border-r-line-soft text-right", !sent && "text-r-faint", canEdit && sent ? "p-0.5" : "px-1.5 py-1.5")}>
-            {canEdit && sent ? (
+          <td key={x.key} className={cn("num truncate border-b border-r-line-soft text-right", !sent && "text-r-faint", canEdit ? "p-0.5" : "px-1.5 py-1.5")}>
+            {canEdit ? (
               <button type="button" onClick={() => onEdit(x.key)} title={tip ?? t("edit_value")} aria-label={`${t("edit_value")}: ${fieldLabel(x, lang)}, ${officeName(r, lang)}`}
-                className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-right text-sm text-r-ink hover:bg-r-card hover:ring-1 hover:ring-r-line",
-                  editing === x.key && "bg-r-card ring-2 ring-r-action")}>
+                className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-right text-sm hover:bg-r-card hover:text-r-ink hover:ring-1 hover:ring-r-line",
+                  sent ? "text-r-ink" : "text-r-faint", editing === x.key && "bg-r-card ring-2 ring-r-action")}>
                 {shown}
               </button>
             ) : <span title={tip}>{shown}</span>}
@@ -301,6 +382,7 @@ function EditSheet({ form, row, field, busy, onSave, onRevert, onClose }: {
   const changed = value.trim() !== asText(cur);
   const c = row.corrections[field.key];
   const edits = editsOf(row, field.key);
+  const sentValue = edits.length ? edits[edits.length - 1].before : SENT.includes(row.status) ? cur : null;
   const show = (v: AnswerValue) => showValue(field, v, t);
   const submit = (e?: React.FormEvent) => { e?.preventDefault(); if (changed && !busy) onSave(value, note.trim()); };
 
@@ -345,8 +427,10 @@ function EditSheet({ form, row, field, busy, onSave, onRevert, onClose }: {
           <li className={cn("flex gap-3 py-3", edits.length > 0 && "border-t border-r-sunk")}>
             <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-r-action" aria-hidden />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
-              <span>{tf("district_sent", { o: officeName(row, lang), v: show(edits.length ? edits[edits.length - 1].before : cur) })}</span>
-              <span className="text-r-muted">{row.submitted_at ? whenText(row.submitted_at, lang) : ""}{row.submitted_by ? ` · ${row.submitted_by}` : ""}</span>
+              {same(sentValue, null) ? <span>{officeName(row, lang)} · {t("sub_none")}</span> : <>
+                <span>{tf("district_sent", { o: officeName(row, lang), v: show(sentValue) })}</span>
+                <span className="text-r-muted">{row.submitted_at ? whenText(row.submitted_at, lang) : ""}{row.submitted_by ? ` · ${row.submitted_by}` : ""}</span>
+              </>}
             </div>
             {!edits.length && <span className="self-center rounded-full bg-r-sunk px-2.5 py-0.5 text-xs font-bold text-r-muted">{t("current_value")}</span>}
           </li>
@@ -433,10 +517,6 @@ function HistoryModal({ form, when, byDate, rows, fields, canEdit, busy, onRever
 }
 
 // --------------------------------------------------------------------------- date picker
-const loc = (lang: string) => (lang === "mr" ? "mr-IN" : "en-IN");
-const utc = (iso: string) => new Date(iso + "T00:00:00Z");
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-
 /** A compact date button that opens a month calendar. `max` is today; days after it, before `min` or after `last` can't be picked.
  *  `iconOnly` draws just the calendar icon; `align` picks which edge the calendar opens from. */
 export function DatePicker({ value, max, min = "", last, onChange, iconOnly, align = "right", className }: {
@@ -445,11 +525,7 @@ export function DatePicker({ value, max, min = "", last, onChange, iconOnly, ali
 }) {
   const { t, lang } = useT();
   const [open, setOpen] = React.useState(false);
-  const [shown, setMonth] = React.useState(value.slice(0, 7));
   const box = React.useRef<HTMLDivElement>(null);
-  React.useEffect(() => { setMonth(value.slice(0, 7)); }, [open, value]);
-  // `value` may arrive after mount, before the effect above has synced `shown`
-  const month = /^\d{4}-\d{2}$/.test(shown) ? shown : value.slice(0, 7);
   React.useEffect(() => {
     if (!open) return;
     const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
@@ -460,52 +536,22 @@ export function DatePicker({ value, max, min = "", last, onChange, iconOnly, ali
   }, [open]);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
 
-  // six weeks starting on the Monday on or before the 1st
-  const first = utc(month + "-01");
-  const lead = (first.getUTCDay() + 6) % 7;
-  const days = Array.from({ length: 42 }, (_, i) => addDays(iso(first), i - lead));
-  const shift = (n: number) => { const d = utc(month + "-01"); d.setUTCMonth(d.getUTCMonth() + n); setMonth(iso(d).slice(0, 7)); };
   const hi = last && last < max ? last : max;
   const ok = (d: string) => d >= min && d <= hi;
-  const prevOk = !min || month > min.slice(0, 7);
-  const nextOk = month < hi.slice(0, 7);
-  const fmt = (d: string, o: Intl.DateTimeFormatOptions) => utc(d).toLocaleDateString(loc(lang), { timeZone: "UTC", ...o });
   const pick = (d: string) => { onChange(d); setOpen(false); };
-  const nav = "flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-r-ink hover:bg-r-sunk disabled:cursor-not-allowed disabled:opacity-30";
 
   return (
     <div ref={box} className="relative shrink-0">
       <button type="button" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)}
-        aria-label={`${t("date")}: ${fmt(value, { day: "numeric", month: "long", year: "numeric" })}`} title={iconOnly ? fmt(value, { weekday: "short", day: "numeric", month: "short" }) : undefined}
+        aria-label={`${t("date")}: ${dmy(value)}`} title={iconOnly ? shortDay(value, lang) : undefined}
         className={cn("flex h-11 cursor-pointer items-center gap-2 rounded-xl border-0 text-[15px] font-semibold text-r-ink hover:bg-r-sunk", iconOnly ? "w-11 justify-center" : "px-3", open && "bg-r-sunk", className)}>
         <CalendarDays className={cn("size-[18px]", iconOnly ? "text-r-ink" : "text-r-muted")} aria-hidden />
-        {!iconOnly && <span className="whitespace-nowrap">{value === max ? t("today") : fmt(value, { weekday: "short", day: "numeric", month: "short" })}</span>}
+        {!iconOnly && <span className="whitespace-nowrap">{value === max ? t("today") : shortDay(value, lang)}</span>}
         {!iconOnly && <ChevronDown className={cn("size-4 text-r-muted transition-transform", open && "rotate-180")} aria-hidden />}
       </button>
       {open && (
         <div role="dialog" aria-label={t("date")} className={cn("absolute top-full z-40 mt-2 w-[296px] rounded-2xl border border-r-line bg-r-card p-3 shadow-xl", align === "left" ? "left-0" : "right-0")}>
-          <div className="mb-2 flex items-center justify-between">
-            <button type="button" className={nav} aria-label={t("earlier")} disabled={!prevOk} onClick={() => shift(-1)}><ChevronLeft className="size-4" /></button>
-            <b className="text-[15px]">{fmt(month + "-01", { month: "long", year: "numeric" })}</b>
-            <button type="button" className={nav} aria-label={t("later")} disabled={!nextOk} onClick={() => shift(1)}><ChevronRight className="size-4" /></button>
-          </div>
-          <div className="grid grid-cols-7 gap-0.5 text-center">
-            {days.slice(0, 7).map((d) => <span key={d} className="py-1 text-[11px] font-bold text-r-faint uppercase">{fmt(d, { weekday: "narrow" })}</span>)}
-            {days.map((d) => {
-              const inMonth = d.slice(0, 7) === month;
-              const sel = d === value;
-              const isToday = d === max;
-              return (
-                <button key={d} type="button" disabled={!ok(d)} onClick={() => pick(d)} aria-pressed={sel} aria-label={fmt(d, { day: "numeric", month: "long", year: "numeric" })}
-                  className={cn("num relative flex h-9 cursor-pointer items-center justify-center rounded-lg border-0 text-sm disabled:cursor-not-allowed disabled:opacity-25",
-                    sel ? "bg-r-action font-bold text-white" : "bg-transparent hover:bg-r-sunk",
-                    !sel && (inMonth ? "text-r-ink" : "text-r-faint"),
-                    isToday && !sel && "font-bold text-r-action ring-1 ring-r-action ring-inset")}>
-                  {fmt(d, { day: "numeric" })}
-                </button>
-              );
-            })}
-          </div>
+          <MonthCalendar value={value} min={min} max={hi} today={max} onPick={pick} />
           <div className="mt-2 flex justify-between border-t border-r-sunk pt-2">
             <button type="button" className="cursor-pointer rounded-lg border-0 bg-transparent px-2.5 py-1.5 text-[13px] font-semibold text-r-muted hover:bg-r-sunk disabled:cursor-not-allowed disabled:opacity-30" disabled={!ok(addDays(max, -1))} onClick={() => pick(addDays(max, -1))}>{t("yesterday")}</button>
             <button type="button" className="cursor-pointer rounded-lg border-0 bg-transparent px-2.5 py-1.5 text-[13px] font-semibold text-r-action hover:bg-r-sunk disabled:cursor-not-allowed disabled:opacity-30" disabled={!ok(max)} onClick={() => pick(max)}>{t("today")}</button>

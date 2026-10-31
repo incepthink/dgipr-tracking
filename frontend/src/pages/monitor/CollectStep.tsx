@@ -2,10 +2,11 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { AlertCircle, ArrowRight, CalendarDays, Check, ChevronDown, ChevronRight, Info, Loader2, RotateCw, X } from "lucide-react";
 import type { Account, Meta, RunDetail, Task } from "@/lib/api";
-import { addDays, cn } from "@/lib/utils";
+import { addDays, cn, dmyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { PLATFORM_LABEL } from "@/lib/status";
 import { RButton, RCheck, RInput, RSelect, RTick } from "@/components/reports/kit";
+import { DateInput } from "@/components/reports/DateInput";
 import {
   ActiveCard, dayLabel, duration, Eyebrow, parseIst, PlatformBadge, rangeLabel, StepFrame, TASK_DONE,
 } from "./shared";
@@ -92,10 +93,10 @@ export function CollectForm({ meta, accounts, start, end, campaignId, onPeriod, 
             {custom && (
               <div className="mt-3 flex flex-wrap items-end gap-3">
                 <label className="flex flex-col gap-1 text-[13px] font-bold text-r-muted">{t("p_from")}
-                  <RInput type="date" value={start} max={end} onChange={(e) => e.target.value && onPeriod(e.target.value, end < e.target.value ? e.target.value : end)} className="w-44" />
+                  <DateInput value={start} max={end} onChange={(d) => d && onPeriod(d, end < d ? d : end)} />
                 </label>
                 <label className="flex flex-col gap-1 text-[13px] font-bold text-r-muted">{t("p_to")}
-                  <RInput type="date" value={end} min={start} onChange={(e) => e.target.value && onPeriod(start, e.target.value)} className="w-44" />
+                  <DateInput value={end} min={start} onChange={(d) => d && onPeriod(start, d)} />
                 </label>
               </div>
             )}
@@ -442,7 +443,7 @@ export function CollectDone({ run, accounts, onRetry, retrying }: { run: RunDeta
             </div>
             <PlatformRows tasks={run.tasks} />
             <TaskList tasks={run.tasks} accounts={accounts} limit={8} />
-            <p className="m-0 text-xs text-r-muted">{run.mode} · {run.overlap_hours}h overlap · {run.triggered_by || "—"} · {run.created_at}</p>
+            <p className="m-0 text-xs text-r-muted">{run.mode} · {run.overlap_hours}h overlap · {run.triggered_by || "—"} · {dmyText(run.created_at)}</p>
           </div>
         )}
       </div>

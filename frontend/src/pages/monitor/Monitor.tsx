@@ -100,7 +100,6 @@ export default function MonitorPage() {
         <div className="min-w-0">
           <div className="text-xs font-bold tracking-[0.08em] text-r-muted uppercase">{t("mon_eyebrow")}</div>
           <h1 className="disp m-0 mt-1.5 text-[30px] leading-[1.1] font-bold sm:text-[34px]">{t("mon_title")}</h1>
-          {!run && <p className="m-0 mt-2 max-w-[620px] text-[15px] text-r-muted">{t("mon_sub")}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {lastSnap && (

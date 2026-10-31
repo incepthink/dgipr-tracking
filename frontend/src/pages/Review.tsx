@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Check, CheckCheck, ExternalLink, FileSearch, Image, Pin, RotateCcw, Tag, X } from "lucide-react";
 import { api, type Cls, type ReviewData, type ReviewRow } from "@/lib/api";
 import { useAction, useMeta, usePeriod } from "@/lib/hooks";
-import { cn, qs } from "@/lib/utils";
+import { cn, dmyText, qs } from "@/lib/utils";
 import { labelOf, PLATFORM_LABEL } from "@/lib/status";
 import { Badge, Card, Field, Select, Textarea, Tip } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ function ReviewCard({ row, onDecide, busy, hasTerm }: { row: ReviewRow; onDecide
             <PlatformIcon platform={pub.platform} />
             <span className="text-sm font-semibold">{pub.account.handle}</span>
             <span className="text-sm text-muted-foreground">{pub.office ? pub.office.name_mr : <span className="text-warning">unmapped</span>}</span>
-            <span className="text-xs text-muted-foreground">· {pub.published_at}</span>
+            <span className="text-xs text-muted-foreground">· {dmyText(pub.published_at)}</span>
             <div className="flex flex-wrap gap-1">
               <Badge>{pub.content_type}</Badge>
               {flags.map((f) => <Badge key={f}>{f === "pinned" && <Pin className="size-3" />}{f}</Badge>)}

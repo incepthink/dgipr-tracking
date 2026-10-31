@@ -5,10 +5,24 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** Every date on the site reads dd/mm/yyyy (Latin digits in both languages). A "YYYY-MM-DD" day is taken as written; an instant is read in IST. */
+export function dmy(d: string | Date) {
+  if (typeof d === "string") {
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+  const x = new Date(d);
+  if (Number.isNaN(x.getTime())) return String(d);
+  return x.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Asia/Kolkata" });
+}
+
+/** Rewrites every "YYYY-MM-DD" inside a server string, e.g. "2026-10-19 11:42 IST" → "19/10/2026 11:42 IST". */
+export function dmyText(s: string | null | undefined) {
+  return (s ?? "").replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, "$3/$2/$1");
+}
+
 export function fmtDate(iso: string) {
-  const d = new Date(iso + "T00:00:00");
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  return dmy(iso);
 }
 
 export function periodLabel(start: string, end: string) {

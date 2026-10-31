@@ -9,6 +9,7 @@ import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
 import { RAlert, RButton, RCheck, RError, RLabel, RPage, RSelect, RSheet, RTextarea, StatusMark, markOf, type Mark } from "@/components/reports/kit";
+import { DateInput } from "@/components/reports/DateInput";
 import { dayMonth, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, useToday } from "./common";
@@ -495,8 +496,7 @@ function FieldRow({ f, first, value, disabled, corrected, changed, zero, problem
   ) : f.type === "text" ? (
     <RTextarea id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn("text-base", corrected && "text-r-corrected-ink")} />
   ) : f.type === "date" ? (
-    <input id={id} type="date" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}
-      className="min-h-[54px] w-full rounded-xl border-[1.5px] border-r-faint bg-r-card px-3.5 text-base text-r-ink" />
+    <DateInput id={id} big value={value} disabled={disabled} onChange={onChange} className="w-full" />
   ) : (
     <span className={cn("relative", corrected && "[&>input]:pr-6")}>
       <input id={id} type="text" inputMode={f.integer ? "numeric" : "decimal"} placeholder={t("not_entered")} value={value} disabled={disabled}

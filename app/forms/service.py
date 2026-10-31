@@ -35,14 +35,14 @@ Value = Any  # float | str | None
 
 # --------------------------------------------------------------------------- visibility
 def visible_forms(s: Session, user: User, include_archived: bool = False) -> list[Form]:
-    """state: every form; others: published/closed forms sent to an office they can see."""
+    """state: every form; others: live/paused forms sent to an office they can see."""
     q = select(Form).order_by(Form.id.desc())
     if user.role == "state":
         if not include_archived:
             q = q.where(Form.status != "archived")
         return list(s.scalars(q).all())
     offices = visible_office_codes(s, user)
-    q = (q.where(Form.status.in_(("published", "closed")))
+    q = (q.where(Form.status.in_(("published", "paused")))
          .where(Form.id.in_(select(FormRecipient.form_id).where(FormRecipient.office_code.in_(offices or ["-"])))))
     return list(s.scalars(q).all())
 
@@ -205,8 +205,6 @@ def editable(user: User, form: Form, office: str, ps: date, sub: Optional[FormSu
             return "already submitted — edit the values on the responses page"
         return None
     if form.status != "published":
-        return "this form is closed"
-    if not form.entry_open:
         return "data entry is paused for this form"
     # offices fill a day until 11:59 PM IST that day; afterwards only the state office changes it, unless it
     # returned the period to the office for a fix
@@ -334,6 +332,31 @@ def _review_target(s: Session, form: Form, office: str, ps: date) -> FormSubmiss
     return sub
 
 
+def _entry_target(s: Session, admin: User, form: Form, office: str, ps: date) -> FormSubmission:
+    """The period an admin edits a value of. One the office hasn't sent (or never opened) is taken as sent by
+    the admin, so the values it enters count in reports like any sent period's."""
+    sub = find(s, form, office, ps)
+    if sub is not None and sub.status in COUNTED:
+        return sub
+    if s.get(Office, office) is None:
+        raise FormError(f"unknown office {office}", 404)
+    if office not in recipient_codes(s, form):
+        raise FormError("this office does not receive this form", 403)
+    if not is_period_start(form, ps):
+        raise FormError("not a reporting period of this form")
+    if ps > today_ist():
+        raise FormError("this period has not started yet")
+    if sub is None:
+        sub = FormSubmission(form_id=form.id, office_code=office, period_start=ps, status="draft")
+        s.add(sub)
+        s.flush()
+    before = sub.status
+    sub.status, sub.submitted_at, sub.submitted_by = "submitted", utcnow(), admin.username
+    audit.record(s, admin.username, "form_submission.submit", "form_submission", _eid(form, office, ps),
+                 before={"status": before}, after={"status": "submitted"}, note="entered by the state office")
+    return sub
+
+
 def return_(s: Session, admin: User, form: Form, office: str, ps: date, note: str) -> FormSubmission:
     note = (note or "").strip()
     if not note:
@@ -357,13 +380,13 @@ def edit_json(e: FormValueEdit) -> dict[str, Any]:
 
 def correct(s: Session, admin: User, form: Form, office: str, ps: date, key: str, value: Any,
             note: str = "", reverts: Optional[FormValueEdit] = None) -> FormValueEdit:
-    """Admin edit of one submitted value. The office's value is kept as the original; editing back to the
-    original removes the highlight. Every edit is kept as a FormValueEdit."""
+    """Admin edit of one value, sent by the office or not. The office's value is kept as the original; editing
+    back to the original removes the highlight. Every edit is kept as a FormValueEdit."""
     note = (note or "").strip()
     f = next((x for x in form.fields if x.key == key), None)
     if f is None:
         raise FormError(f"unknown field {key}")
-    sub = _review_target(s, form, office, ps)
+    sub = _entry_target(s, admin, form, office, ps)
     n, t = clean_value(f, value)
     row = next((v for v in sub.values if v.field_id == f.id), None)
     if row is None:
@@ -491,11 +514,11 @@ def inbox(s: Session, user: User, today: Optional[date] = None) -> list[dict[str
         dl = deadline(form, latest) if latest else None
         out.append({"id": form.id, "slug": form.slug, "title_mr": form.title_mr, "title_en": form.title_en,
                     "instructions_mr": form.instructions_mr, "instructions_en": form.instructions_en,
-                    "frequency": form.frequency, "status": form.status, "entry_open": form.entry_open,
+                    "frequency": form.frequency, "status": form.status,
                     "start_date": form.start_date.isoformat(),
                     "end_date": form.end_date.isoformat() if form.end_date else None,
                     "offices": offices, "pending": pending if form.status == "published" else 0,
-                    "to_fill": to_fill if form.status == "published" and form.entry_open else 0,
+                    "to_fill": to_fill if form.status == "published" else 0,
                     "overdue": overdue if form.status == "published" else 0, "returned": returned,
                     "first_pending": next_ps.isoformat() if next_ps else None,
                     "latest_period": latest.isoformat() if latest else None,

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { DownloadCloud, Plus } from "lucide-react";
 import { api, type RunBrief } from "@/lib/api";
-import { periodLabel } from "@/lib/utils";
+import { dmyText, periodLabel } from "@/lib/utils";
 import { Card, StatusBadge } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { EmptyState, ErrorState, LoadingRows, PageHeader } from "@/components/common";
@@ -40,7 +40,7 @@ export default function RunsPage() {
                       <td className="px-5 py-3 capitalize text-muted-foreground">{r.mode}</td>
                       <td className="px-5 py-3 text-right tabular">{r.tasks}</td>
                       <td className="px-5 py-3">{r.triggered_by || "—"}</td>
-                      <td className="px-5 py-3 text-muted-foreground">{r.created_at}</td>
+                      <td className="px-5 py-3 text-muted-foreground">{dmyText(r.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

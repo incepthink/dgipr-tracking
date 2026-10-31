@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, Bell, Check, CheckCircle2, ChevronRight, Loader2, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, dmy } from "@/lib/utils";
 import { useT, type Lang, type TKey } from "@/lib/i18n";
 import { PLATFORM_LABEL } from "@/lib/status";
 import type { Account, Meta, RunDetail } from "@/lib/api";
@@ -33,18 +33,16 @@ export function PlatformBadge({ platform, className }: { platform: string; class
   );
 }
 
-/** "Mon, 19 Oct" in the viewer's language. */
+/** "Mon, 19/10/2026" in the viewer's language. */
 export function dayLabel(iso: string, lang: Lang) {
   const d = new Date(iso + "T00:00:00");
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(lang === "mr" ? "mr-IN" : "en-IN", { weekday: "short", day: "numeric", month: "short" });
+  return `${d.toLocaleDateString(lang === "mr" ? "mr-IN" : "en-IN", { weekday: "short" })}, ${dmy(iso)}`;
 }
 
 export function rangeLabel(start: string, end: string, lang: Lang) {
   if (start === end) return dayLabel(start, lang);
-  const opts: Intl.DateTimeFormatOptions = { day: "numeric", month: "short" };
-  const loc = lang === "mr" ? "mr-IN" : "en-IN";
-  return `${new Date(start + "T00:00:00").toLocaleDateString(loc, opts)} – ${new Date(end + "T00:00:00").toLocaleDateString(loc, opts)}`;
+  return `${dmy(start)} – ${dmy(end)}`;
 }
 
 /** "2026-10-19 11:42 IST" → Date. */

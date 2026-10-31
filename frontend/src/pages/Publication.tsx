@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { api, type Publication } from "@/lib/api";
 import { PLATFORM_LABEL } from "@/lib/status";
+import { dmyText } from "@/lib/utils";
 import { Badge, Card, CardContent, CardHeader, CardTitle, StatusBadge, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
 import { ErrorState, JsonBlock, LoadingRows, PageHeader, PlatformIcon } from "@/components/common";
@@ -28,7 +29,7 @@ export default function PublicationPage() {
       <Button variant="ghost" size="sm" className="mb-3 -ml-2" onClick={() => navigate(-1)}><ArrowLeft /> Back</Button>
       <PageHeader
         title={<span className="flex items-center gap-3"><PlatformIcon platform={p.platform} className="size-8 text-xs" /> Publication #{p.id}</span>}
-        description={<>{PLATFORM_LABEL[p.platform]} · {p.account.handle} · {p.published_at}</>}
+        description={<>{PLATFORM_LABEL[p.platform]} · {p.account.handle} · {dmyText(p.published_at)}</>}
         actions={<Button variant="outline" asChild><a href={p.url} target="_blank" rel="noopener">Open original <ExternalLink /></a></Button>}
       />
       <div className="grid gap-6 xl:grid-cols-[1fr_440px]">
@@ -53,8 +54,8 @@ export default function PublicationPage() {
             <CardHeader><CardTitle>Details</CardTitle></CardHeader>
             <CardContent className="divide-y">
               <Row label="Account">{p.account.handle} → {p.office ? `${p.office.name_mr} (${p.office.name_en})` : <span className="text-warning">unmapped</span>}</Row>
-              <Row label="Published">{p.published_at} · <span className="text-muted-foreground">{p.published_at_utc} UTC</span></Row>
-              <Row label="Reporting date">{p.reporting_date} (IST)</Row>
+              <Row label="Published">{dmyText(p.published_at)} · <span className="text-muted-foreground">{dmyText(p.published_at_utc)} UTC</span></Row>
+              <Row label="Reporting date">{dmyText(p.reporting_date)} (IST)</Row>
               <Row label="Type">
                 <div className="flex flex-wrap gap-1">
                   <Badge>{p.content_type}</Badge>
@@ -65,9 +66,9 @@ export default function PublicationPage() {
                 <div className="flex flex-wrap gap-x-4 gap-y-1">
                   {Object.entries(p.metrics).map(([k, v]) => <span key={k}><span className="text-muted-foreground">{k}</span> <b className="tabular">{v ?? "n/a"}</b></span>)}
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">observed {p.metrics_observed_at} · n/a means not supplied by the provider (not zero)</div>
+                <div className="mt-1 text-xs text-muted-foreground">observed {dmyText(p.metrics_observed_at)} · n/a means not supplied by the provider (not zero)</div>
               </Row>
-              <Row label="Collected">first {p.first_collected_at} (run {p.first_run_id}) · last {p.last_collected_at} (run {p.last_run_id})</Row>
+              <Row label="Collected">first {dmyText(p.first_collected_at)} (run {p.first_run_id}) · last {dmyText(p.last_collected_at)} (run {p.last_run_id})</Row>
               <Row label="Provider">{p.provider} · post ID <span className="font-mono text-xs">{p.platform_post_id}</span></Row>
             </CardContent>
           </Card>
@@ -96,7 +97,7 @@ export default function PublicationPage() {
                       <li key={h.id} className="text-xs">
                         <span className="absolute -left-[5px] mt-1 size-2.5 rounded-full border-2 border-card bg-primary" />
                         <div className="font-medium">{h.action} · {h.actor}</div>
-                        <div className="text-muted-foreground">{h.at}{h.note && ` — ${h.note}`}</div>
+                        <div className="text-muted-foreground">{dmyText(h.at)}{h.note && ` — ${h.note}`}</div>
                       </li>
                     ))}
                   </ol>
@@ -118,7 +119,7 @@ export default function PublicationPage() {
                 <TabsContent value="evidence" className="mt-3"><JsonBlock value={p.classifications.map((c) => c.auto_evidence)} /></TabsContent>
                 <TabsContent value="raw" className="mt-3">
                   {p.raw ? <>
-                    <div className="mb-2 text-xs text-muted-foreground">{p.raw.provider} · fetched {p.raw.fetched_at} · sha256 {p.raw.sha256.slice(0, 16)}…</div>
+                    <div className="mb-2 text-xs text-muted-foreground">{p.raw.provider} · fetched {dmyText(p.raw.fetched_at)} · sha256 {p.raw.sha256.slice(0, 16)}…</div>
                     <JsonBlock value={p.raw.payload} />
                   </> : <span className="text-sm text-muted-foreground">No raw record.</span>}
                 </TabsContent>

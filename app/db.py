@@ -37,6 +37,16 @@ def init_db(engine: Engine) -> None:
     _allow_reports_without_campaign(engine)
     _drop_accepted_status(engine)
     _add_edit_source(engine)
+    _pause_closed_forms(engine)
+
+
+def _pause_closed_forms(engine: Engine) -> None:
+    """Forms are live, paused or archived: an older 'closed' form, or a live one with entry switched off, is paused."""
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE forms SET status = 'paused' WHERE status = 'closed' "
+                          "OR (status = 'published' AND entry_open = :off)"), {"off": False})
+        conn.execute(text("UPDATE forms SET entry_open = :on WHERE entry_open = :off"), {"on": True, "off": False})
 
 
 def _add_edit_source(engine: Engine) -> None:

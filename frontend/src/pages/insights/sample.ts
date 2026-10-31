@@ -73,7 +73,7 @@ const P = (id: string, caption: string, office: Office, platform: Platform, form
 
 export const POSTS: Post[] = [
   P("mohol-tanker", "मोहोळ तालुक्यात टँकरने पाणीपुरवठा सुरू — जिल्हाधिकाऱ्यांची पाहणी", OFFICES.solapur, "instagram", "short_video", 2,
-    { mr: "गुरु. २३ ऑक्टो., सायं. ७", en: "Thu 23 Oct, 7 pm" }, 382000, 4.6, "#c9b28a",
+    { mr: "गुरु. 23/10/2026, सायं. ७", en: "Thu, 23/10/2026, 7 pm" }, 382000, 4.6, "#c9b28a",
     T(2240, [72, 19, 9], [["thanks", 610], ["officer_came", 420], ["tagging", 390], ["tanker_when", 214, false], ["tanker_rare", 180, true]]), {
       curve: [0, 12, 48, 96, 170, 252, 318, 350, 374, 382],
       event: { hour: 9, label: { mr: "राज्य खात्याने शेअर केले", en: "State account shared it" } },
@@ -89,28 +89,28 @@ export const POSTS: Post[] = [
       ],
     }),
   P("fodder-visit", "चारा छावणीला पालकमंत्र्यांची भेट", OFFICES.beed, "facebook", "long_video", 1,
-    { mr: "शुक्र. २४ ऑक्टो., सायं. ६", en: "Fri 24 Oct, 6 pm" }, 124000, 3.1, "#9fb3a0",
+    { mr: "शुक्र. 24/10/2026, सायं. ६", en: "Fri, 24/10/2026, 6 pm" }, 124000, 3.1, "#9fb3a0",
     T(780, [64, 24, 12], [["officer_came", 210], ["fodder_register", 160, true], ["thanks", 120], ["tagging", 90], ["not_on_list", 74, false]])),
   P("how-to-apply", "दुष्काळग्रस्त तालुक्यांसाठी मदत — अर्ज कसा करावा", OFFICES.dgipr, "x", "short_video", 0,
     { mr: "आज, दु. १", en: "Today, 1 pm" }, 86000, 2.8, "#a9b8cf",
     T(610, [48, 38, 14], [["apply_where", 190, false], ["useful_info", 140], ["tagging", 110], ["form_hard", 86, false]])),
   P("crop-insurance-qa", "पीक विमा: शेतकऱ्यांचे प्रश्न, अधिकाऱ्यांची उत्तरे", OFFICES.jalna, "youtube", "long_video", 3,
-    { mr: "बुध. २२ ऑक्टो., सायं. ८", en: "Wed 22 Oct, 8 pm" }, 71000, 2.4, "#d0a99a",
+    { mr: "बुध. 22/10/2026, सायं. ८", en: "Wed, 22/10/2026, 8 pm" }, 71000, 2.4, "#d0a99a",
     T(940, [31, 34, 35], [["insurance_when", 380, true], ["form_hard", 140, false], ["useful_info", 120], ["not_on_list", 96, false]])),
   P("kinwat-schedule", "किनवट तालुक्यातील टँकर वेळापत्रक जाहीर", OFFICES.nanded, "facebook", "poster", 2,
-    { mr: "गुरु. २३ ऑक्टो., सकाळी ११", en: "Thu 23 Oct, 11 am" }, 64000, 1.9, "#b7a7c4",
+    { mr: "गुरु. 23/10/2026, सकाळी ११", en: "Thu, 23/10/2026, 11 am" }, 64000, 1.9, "#b7a7c4",
     T(410, [52, 26, 22], [["thanks", 98], ["tanker_rare", 92, true], ["tanker_when", 70, true], ["not_on_list", 64, false]])),
   P("jalyukt-review", "जलयुक्त शिवार: गावागावातील कामांचा आढावा", OFFICES.kolhapur, "instagram", "short_video", 4,
-    { mr: "मंगळ. २१ ऑक्टो., सायं. ७", en: "Tue 21 Oct, 7 pm" }, 48000, 1.7, "#a5c0bd",
+    { mr: "मंगळ. 21/10/2026, सायं. ७", en: "Tue, 21/10/2026, 7 pm" }, 48000, 1.7, "#a5c0bd",
     T(260, [70, 22, 8], [["thanks", 90], ["tagging", 50], ["officer_came", 48]])),
   P("free-fodder-list", "जनावरांसाठी मोफत चारा — केंद्रांची यादी", OFFICES.nashik, "facebook", "poster", 3,
-    { mr: "बुध. २२ ऑक्टो., दु. १२", en: "Wed 22 Oct, 12 pm" }, 52000, 1.6, "#cbbf95",
+    { mr: "बुध. 22/10/2026, दु. १२", en: "Wed, 22/10/2026, 12 pm" }, 52000, 1.6, "#cbbf95",
     T(350, [58, 30, 12], [["fodder_register", 120, true], ["useful_info", 96], ["not_on_list", 40, false]])),
   P("save-water", "पाणी जपून वापरा — नागरिकांना आवाहन", OFFICES.pune, "facebook", "poster", 5,
-    { mr: "सोम. २० ऑक्टो., सकाळी १०", en: "Mon 20 Oct, 10 am" }, 33000, 1.0, "#c8b7a3",
+    { mr: "सोम. 20/10/2026, सकाळी १०", en: "Mon, 20/10/2026, 10 am" }, 33000, 1.0, "#c8b7a3",
     T(120, [55, 35, 10], [["useful_info", 44], ["tagging", 30], ["tanker_rare", 22, false]])),
   P("press-note-meeting", "प्रेस नोट: दुष्काळ निवारण बैठक", OFFICES.latur, "facebook", "text", 2,
-    { mr: "गुरु. २३ ऑक्टो., सकाळी ९", en: "Thu 23 Oct, 9 am" }, 6200, 0.4, "#d9dcd4",
+    { mr: "गुरु. 23/10/2026, सकाळी ९", en: "Thu, 23/10/2026, 9 am" }, 6200, 0.4, "#d9dcd4",
     T(18, [22, 50, 28], [["too_long", 7, false], ["apply_where", 4, false]]), {
       why: [
         { t: { mr: "फक्त मजकूर, चित्र किंवा व्हिडिओ नाही", en: "Text only, no picture or video" }, b: { mr: "मजकूर पोस्टना नेहमीच्या पोस्टच्या निम्मा प्रतिसाद मिळतो.", en: "Text posts get under half of a usual post." } },
@@ -118,7 +118,7 @@ export const POSTS: Post[] = [
       ],
     }),
   P("lake-desilting", "तलाव गाळमुक्ती अभियानाला सुरुवात", OFFICES.gadchiroli, "instagram", "poster", 4,
-    { mr: "मंगळ. २१ ऑक्टो., सकाळी ८", en: "Tue 21 Oct, 8 am" }, 4100, 0.3, "#c2cbb8",
+    { mr: "मंगळ. 21/10/2026, सकाळी ८", en: "Tue, 21/10/2026, 8 am" }, 4100, 0.3, "#c2cbb8",
     T(11, [64, 36, 0], [["thanks", 6]])),
 ];
 
@@ -132,7 +132,7 @@ export const OVERVIEW = {
   views: 4260000, viewsDelta: 38,
   /** Views per day in lakh, Mon..Sun. */
   thisWeek: [4.9, 5.6, 5.1, 6.3, 7.4, 7.0, 6.3], lastWeek: [4.1, 4.6, 3.9, 4.4, 5.2, 4.8, 4.0],
-  since: { start: { mr: "१ जुलै २०२६", en: "1 Jul 2026" }, before: 1450, now: 3320, accounts: 142,
+  since: { start: { mr: "01/07/2026", en: "01/07/2026" }, before: 1450, now: 3320, accounts: 142,
     trend: [1450, 1470, 1520, 1490, 1580, 1560, 1640, 1700, 1690, 2240, 2610, 2980, 3320], campaignFrom: 8.5 },
   kpis: [
     { label: { mr: "प्रसिद्ध पोस्ट", en: "Posts published" }, value: "1,284", delta: { mr: "▲ मागील आठवड्यापेक्षा १२%", en: "▲ 12% vs last week" }, good: true },
@@ -145,7 +145,7 @@ export const OVERVIEW = {
     { n: 480, mr: "पीक विम्याचे पैसे कधी मिळणार?", en: "When will the crop insurance money come?" },
   ],
   alerts: [
-    { level: "bad" as const, title: { mr: "हिंगोलीने ३ दिवस पोस्ट केलेले नाही", en: "Hingoli hasn’t posted for 3 days" }, body: { mr: "शेवटची पोस्ट २२ ऑक्टोबरला.", en: "Last post on 22 Oct." } },
+    { level: "bad" as const, title: { mr: "हिंगोलीने ३ दिवस पोस्ट केलेले नाही", en: "Hingoli hasn’t posted for 3 days" }, body: { mr: "शेवटची पोस्ट 22/10/2026 रोजी.", en: "Last post on 22/10/2026." } },
     { level: "warn" as const, title: { mr: "लातूरचे व्ह्यूज निम्म्याने घटले", en: "Latur’s views dropped by half" }, body: { mr: "या आठवड्यातील सर्व पोस्ट मजकूर प्रेस नोट होत्या.", en: "All its posts this week were text press notes." } },
   ],
   tip: {
@@ -175,7 +175,7 @@ export const DISTRICT_OF_WEEK = { office: OFFICES.solapur, postId: "mohol-tanker
 
 export const NEED_CALL: { office: Office; t: Bi }[] = [
   { office: OFFICES.hingoli, t: { mr: "३ दिवस एकही पोस्ट नाही.", en: "No posts for 3 days." } },
-  { office: OFFICES.latur, t: { mr: "२१ ऑक्टो. रोजी १४ पोस्ट नोंदवल्या — आम्हाला फक्त ९ सापडल्या.", en: "Reported 14 posts on 21 Oct — we could find only 9." } },
+  { office: OFFICES.latur, t: { mr: "21/10/2026 रोजी १४ पोस्ट नोंदवल्या — आम्हाला फक्त ९ सापडल्या.", en: "Reported 14 posts on 21/10/2026 — we could find only 9." } },
   { office: OFFICES.gadchiroli, t: { mr: "सर्वात कमी प्रतिसाद (१.४%). या महिन्यात एकही व्हिडिओ नाही.", en: "Lowest engagement (1.4%). No videos this month." } },
 ];
 

@@ -1,5 +1,5 @@
 import type { FormDef, SubStatus } from "@/lib/api";
-import { addDays } from "@/lib/utils";
+import { addDays, dmy } from "@/lib/utils";
 
 type Sched = Pick<FormDef, "frequency" | "start_date" | "end_date"> & { deadline_hours?: number | null };
 
@@ -38,42 +38,45 @@ export function isOverdue(status: SubStatus, deadline: Date | string | null | un
 
 const loc = (lang: string) => (lang === "mr" ? "mr-IN" : "en-IN");
 
-/** "Fri 16 Oct" / "शुक्र, १६ ऑक्टो" */
+/** Weekday name in the viewer's language: "Fri" / "शुक्र". */
+export function weekday(iso: string, lang: string, style: "short" | "long" = "short") {
+  return new Date(iso + "T00:00:00").toLocaleDateString(loc(lang), { weekday: style });
+}
+
+/** "Fri, 16/10/2026" / "शुक्र, 16/10/2026" */
 export function shortDay(iso: string, lang: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString(loc(lang), { weekday: "short", day: "numeric", month: "short" });
+  return `${weekday(iso, lang)}, ${dmy(iso)}`;
 }
 
-/** "Friday 16 October" */
+/** "Friday, 16/10/2026" */
 export function longDay(iso: string, lang: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString(loc(lang), { weekday: "long", day: "numeric", month: "long" });
+  return `${weekday(iso, lang, "long")}, ${dmy(iso)}`;
 }
 
-/** "18 October 2026" */
-export function fullDay(iso: string, lang: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString(loc(lang), { day: "numeric", month: "long", year: "numeric" });
+/** "18/10/2026" */
+export function fullDay(iso: string, _lang?: string) {
+  return dmy(iso);
 }
 
-/** "16 Oct" */
-export function dayMonth(iso: string, lang: string) {
-  return new Date(iso + "T00:00:00").toLocaleDateString(loc(lang), { day: "numeric", month: "short" });
+/** "16/10/2026" */
+export function dayMonth(iso: string, _lang?: string) {
+  return dmy(iso);
 }
 
-/** "3 – 16 Oct" or "28 Sep – 4 Oct" */
-export function rangeText(a: string, b: string, lang: string) {
-  if (a === b) return dayMonth(a, lang);
-  const da = new Date(a + "T00:00:00"), db = new Date(b + "T00:00:00");
-  const left = da.getMonth() === db.getMonth()
-    ? da.toLocaleDateString(loc(lang), { day: "numeric" }) : dayMonth(a, lang);
-  return `${left} – ${dayMonth(b, lang)}`;
+/** "03/10/2026 – 16/10/2026" */
+export function rangeText(a: string, b: string, _lang?: string) {
+  return a === b ? dmy(a) : `${dmy(a)} – ${dmy(b)}`;
 }
 
 export function timeOf(d: Date | string, lang: string) {
   return new Date(d).toLocaleTimeString(loc(lang), { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
 }
 
-/** "Thu 15 Oct, 11:20 am" in IST. */
+/** "Thu, 15/10/2026, 11:20 am" in IST. */
 export function whenText(d: Date | string, lang: string) {
-  return new Date(d).toLocaleString(loc(lang), { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" });
+  const x = new Date(d);
+  const wd = x.toLocaleDateString(loc(lang), { weekday: "short", timeZone: "Asia/Kolkata" });
+  return `${wd}, ${dmy(x)}, ${timeOf(x, lang)}`;
 }
 
 /** "3 h 20 min" until (or since) a moment. */

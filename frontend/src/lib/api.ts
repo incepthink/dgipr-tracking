@@ -199,7 +199,7 @@ export interface Me {
 // --------------------------------------------------------------------------- report forms
 export type FieldType = "number" | "text" | "yesno" | "choice" | "date";
 export type Frequency = "daily" | "weekly" | "once";
-export type FormStatus = "draft" | "published" | "closed" | "archived";
+export type FormStatus = "draft" | "published" | "paused" | "archived";
 export type SubStatus = "none" | "draft" | "submitted" | "returned";
 
 export interface FormField {
@@ -211,7 +211,7 @@ export interface FormField {
 export interface FormDef {
   id: number; slug: string; title_mr: string; title_en: string; instructions_mr: string; instructions_en: string;
   frequency: Frequency; start_date: string; end_date: string | null; deadline_hours: number | null;
-  status: FormStatus; entry_open: boolean; campaign_id: number | null; created_by: string; created_at: string;
+  status: FormStatus; campaign_id: number | null; created_by: string; created_at: string;
   updated_at: string; recipients: string[]; schedule_locked: boolean; fields?: FormField[];
 }
 
@@ -223,7 +223,7 @@ export interface FormBrief extends FormDef {
 /** Office inbox entry. */
 export interface InboxForm {
   id: number; slug: string; title_mr: string; title_en: string; instructions_mr: string; instructions_en: string;
-  frequency: Frequency; status: FormStatus; entry_open: boolean; start_date: string; end_date: string | null;
+  frequency: Frequency; status: FormStatus; start_date: string; end_date: string | null;
   offices: string[]; pending: number; to_fill: number; overdue: number; returned: number; first_pending: string | null;
   latest_period: string | null; latest_deadline: string | null;
 }

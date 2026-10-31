@@ -19,7 +19,7 @@ from app.models import Division, Form, FormField, FormRecipient, FormSubmission,
 from app.timeutil import today_ist, utcnow
 
 FIELD_TYPES = ("number", "text", "yesno", "choice", "date")
-STATUSES = ("draft", "published", "closed", "archived")
+STATUSES = ("draft", "published", "paused", "archived")
 AGGREGATES = ("sum", "none")
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]{0,39}$")
 
@@ -96,7 +96,7 @@ def form_json(s: Session, form: Form, *, fields: bool = True) -> dict[str, Any]:
         "instructions_mr": form.instructions_mr, "instructions_en": form.instructions_en,
         "frequency": form.frequency, "start_date": form.start_date.isoformat(),
         "end_date": form.end_date.isoformat() if form.end_date else None, "deadline_hours": form.deadline_hours,
-        "status": form.status, "entry_open": form.entry_open, "campaign_id": form.campaign_id,
+        "status": form.status, "campaign_id": form.campaign_id,
         "created_by": form.created_by, "created_at": form.created_at.isoformat() + "Z",
         "updated_at": form.updated_at.isoformat() + "Z", "recipients": recipient_codes(s, form),
         "schedule_locked": has_submissions(s, form),
@@ -178,8 +178,6 @@ def _apply_details(form: Form, data: dict[str, Any], schedule_locked: bool) -> N
         if dh is not None and not 0 <= dh <= 24 * 60:
             raise FormError("deadline must be 0–1440 hours after the period")
         form.deadline_hours = dh
-    if "entry_open" in data:
-        form.entry_open = bool(data["entry_open"])
     if "campaign_id" in data:
         form.campaign_id = data["campaign_id"] or None
 
@@ -291,7 +289,7 @@ def set_status(s: Session, actor: str, form: Form, status: str) -> Form:
     if status == "published":
         _check_publishable(s, form)
     if status == "draft" and has_submissions(s, form):
-        raise FormError("offices already sent data; close the form instead")
+        raise FormError("offices already sent data; pause the form instead")
     before = form.status
     form.status = status
     form.updated_at = utcnow()
@@ -311,11 +309,20 @@ def duplicate_form(s: Session, actor: str, form: Form) -> Form:
     return copy
 
 
-def delete_form(s: Session, actor: str, form: Form) -> None:
-    if has_submissions(s, form):
-        raise FormError("offices already sent data for this form; archive it instead")
-    audit.record(s, actor, "form.delete", "form", form.id, before=form_json(s, form))
-    s.delete(form)
+def delete_form(s: Session, actor: str, form: Form) -> Form:
+    """What the admin sees as deleting: the form is archived, from any status, so nothing it collected is lost."""
+    before = form.status
+    form.status = "archived"
+    form.updated_at = utcnow()
+    audit.record(s, actor, "form.delete", "form", form.id, before={"status": before}, after={"status": "archived"})
+    return form
+
+
+def restore_form(s: Session, actor: str, form: Form) -> Form:
+    """Bring back an archived form: paused if offices sent data for it, otherwise a draft to publish again."""
+    if form.status != "archived":
+        raise FormError("only a deleted form can be restored")
+    return set_status(s, actor, form, "paused" if has_submissions(s, form) else "draft")
 
 
 def form_brief(s: Session, form: Form, today: Optional[date] = None) -> dict[str, Any]:

@@ -4,6 +4,7 @@ import { AlertTriangle, Inbox, Info, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PLATFORM_LABEL } from "@/lib/status";
 import { Card, Field, Input, Select, Skeleton } from "@/components/ui/primitives";
+import { DateInput } from "@/components/reports/DateInput";
 import { Button } from "@/components/ui/button";
 import { useMeta } from "@/lib/hooks";
 import { addDays } from "@/lib/utils";
@@ -215,13 +216,13 @@ export function PeriodPicker({
           )}
         </Field>
         <Field label="From (IST)">
-          <Input type="date" value={start} max={end || undefined} disabled={lockPeriod}
+          <DateInput look="plain" value={start} max={end || undefined} disabled={lockPeriod}
             title={lockPeriod ? "Period is set in the Collect step" : undefined}
-            onChange={(e) => e.target.value && onChange({ start: e.target.value, end: e.target.value > end ? e.target.value : end })} />
+            onChange={(d) => d && onChange({ start: d, end: d > end ? d : end })} />
         </Field>
         <Field label="To (IST)">
-          <Input type="date" value={end} min={start || undefined} disabled={lockPeriod}
-            title={lockPeriod ? "Period is set in the Collect step" : undefined} onChange={(e) => e.target.value && onChange({ end: e.target.value })} />
+          <DateInput look="plain" value={end} min={start || undefined} disabled={lockPeriod}
+            title={lockPeriod ? "Period is set in the Collect step" : undefined} onChange={(d) => d && onChange({ end: d })} />
         </Field>
         {!lockPeriod && <div className="flex flex-wrap gap-1.5 pb-0.5">
           {presets.map((p) => {

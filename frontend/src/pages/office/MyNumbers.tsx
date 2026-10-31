@@ -12,7 +12,7 @@ import { fieldLabel, formTitle, scopeQs, sumColumns, useFormFilters, type FormFi
 /** The district office's own figures: what is still to send, its own unusual figures, periods sent, coverage, a
  * day-by-day bar for one field, and totals vs before and per day vs the division's average. */
 export default function MyNumbersPage() {
-  const { t, tf, name, lang } = useT();
+  const { t, tf, shortName, lang } = useT();
   const me = useUser();
   const f = useFormFilters(14);
   const office = me.office?.code ?? "";
@@ -50,7 +50,7 @@ export default function MyNumbersPage() {
       <header className="flex flex-col gap-3">
         <div>
           <h1 className="disp m-0 text-[28px] leading-[1.1] font-bold">{t("nav_my_numbers")}</h1>
-          <span className="text-sm text-r-muted">{name(me.office)}{f.form && <> · {formTitle(f.form, lang)}</>}</span>
+          <span className="text-sm text-r-muted">{shortName(me.office)}{f.form && <> · {formTitle(f.form, lang)}</>}</span>
         </div>
         {(f.forms?.length ?? 0) > 1 && (
           <RLabel small label={t("form")}>

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { api, type Dashboard } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
-import { fmtDate, periodLabel, qs } from "@/lib/utils";
+import { dmyText, fmtDate, periodLabel, qs } from "@/lib/utils";
 import { PLATFORM_LABEL } from "@/lib/status";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, StatusBadge, Skeleton } from "@/components/ui/primitives";
 import { Button } from "@/components/ui/button";
@@ -124,7 +124,7 @@ export default function DashboardPage() {
                       <div className="flex size-9 items-center justify-center rounded-lg bg-muted"><FileText className="size-4 text-muted-foreground" /></div>
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-medium">{periodLabel(s.period_start, s.period_end)}</div>
-                        <div className="truncate text-xs text-muted-foreground">#{s.id} · {s.created_by} · {s.created_at}</div>
+                        <div className="truncate text-xs text-muted-foreground">#{s.id} · {s.created_by} · {dmyText(s.created_at)}</div>
                       </div>
                       <div className="flex gap-1.5">
                         {s.is_sample && <Badge tone="warning">Sample</Badge>}

@@ -5,9 +5,8 @@ import { api, type Role, type UserRow } from "@/lib/api";
 import { useAction, useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { cn, dmyText } from "@/lib/utils";
 import { RAlert, RButton, RError, RInput, RLabel, RPage, RSelect, RSheet, RTitle } from "@/components/reports/kit";
-import { whenText } from "@/components/reports/period";
 
 type Form = { username: string; display_name: string; role: Role; office_code: string; division_code: string };
 const EMPTY: Form = { username: "", display_name: "", role: "district", office_code: "", division_code: "" };
@@ -28,7 +27,7 @@ const statusOf = (u: UserRow): StatusKey => (!u.active ? "off" : u.must_change_p
 /** Accounts in official order: the state team, then each division's zone officer and its offices. */
 export default function UsersPage() {
   const me = useUser();
-  const { t, tf, name, lang } = useT();
+  const { t, tf, name } = useT();
   const { data: meta } = useMeta();
   const { data, error, isLoading } = useQuery({ queryKey: ["users"], queryFn: () => api.get<UserRow[]>("/api/users") });
   const [q, setQ] = React.useState("");
@@ -80,7 +79,7 @@ export default function UsersPage() {
 
   return (
     <RPage>
-      <RTitle title={t("nav_users")} sub={t("users_sub")}
+      <RTitle title={t("nav_users")}
         actions={<>
           <RButton onClick={() => setEditing({ id: null, form: EMPTY })}><Plus aria-hidden /> {t("new_user")}</RButton>
           <RButton variant="pri" loading={bulk.isPending} onClick={() => confirm(tf("bulk_confirm", { o: offices.length, d: zoneCount })) && bulk.mutate(undefined)}>
@@ -123,7 +122,7 @@ export default function UsersPage() {
                       <td className="px-3">{u.role === "zone" ? divName(u.division_code) : u.role === "state" ? u.display_name : officeName(u.office_code) || u.display_name}</td>
                       <td className="px-3 whitespace-nowrap">{roleLabel(u.role)}</td>
                       <td className="px-3 whitespace-nowrap"><span className={cn("inline-flex items-center gap-1.5 text-[13px] font-bold", s.cls)}><span className={s.dot} aria-hidden />{t(s.label)}</span></td>
-                      <td className="px-3 whitespace-nowrap text-r-muted">{u.last_login_at ? whenText(u.last_login_at.endsWith("Z") ? u.last_login_at : u.last_login_at + "Z", lang) : t("never")}</td>
+                      <td className="px-3 whitespace-nowrap text-r-muted">{u.last_login_at ? dmyText(u.last_login_at) : t("never")}</td>
                       <td className="px-3 text-right whitespace-nowrap">
                         <span className="inline-flex gap-1.5">
                           <RButton size="sm" variant="ghost" onClick={() => setEditing({ id: u.id, form: { username: u.username, display_name: u.display_name, role: u.role, office_code: u.office_code ?? "", division_code: u.division_code ?? "" } })}>{t("edit")}</RButton>

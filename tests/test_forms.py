@@ -151,7 +151,7 @@ def test_recipients_see_the_form_others_dont(test_form, solapur, pune, zone_pune
 def test_only_state_defines_forms(solapur, zone_pune, test_form):
     assert solapur.post("/api/forms", json={"title_mr": "x"}).status_code == 403
     assert zone_pune.put(f"/api/forms/{test_form['id']}", json={"title_mr": "x"}).status_code == 403
-    assert solapur.post(f"/api/forms/{test_form['id']}/close").status_code == 403
+    assert solapur.post(f"/api/forms/{test_form['id']}/pause").status_code == 403
 
 
 def test_district_writes_only_its_own_office(test_form, solapur, pune, zone_pune, entry_open):
@@ -257,6 +257,28 @@ def test_admin_correction_is_kept_and_highlighted(test_form, solapur, admin_clie
                                                   ({"meetings": 21}, {"meetings": 12})]
 
 
+def test_admin_enters_values_the_office_never_sent(test_form, solapur, admin_client, entry_open):
+    day = D - timedelta(days=5)
+    edit = lambda office, d, v: admin_client.post(url(test_form, office, d, "correct"),  # noqa: E731
+                                                  json={"key": "meetings", "value": v})
+    # nothing on file: the state office's value makes the period sent, highlighted as having no original
+    r = edit("satara", day, 8)
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["status"] == "submitted" and got["submitted_by"] == "admin" and got["values"]["meetings"] == 8
+    assert got["corrections"]["meetings"]["original"] is None
+    assert (got["edits"][0]["before"], got["edits"][0]["after"]) == (None, 8)
+    # an office draft is taken over the same way, keeping the office's value as the original
+    solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 3}})
+    got = edit("solapur", day, 4).json()
+    assert got["status"] == "submitted" and got["corrections"]["meetings"]["original"] == 3
+    # a failed edit leaves an unsent period untouched
+    assert edit("satara", day - timedelta(days=1), None).status_code == 400
+    resp = admin_client.get(f"/api/forms/{test_form['id']}/responses?start={day - timedelta(days=1)}&end={day - timedelta(days=1)}").json()
+    assert next(x for x in resp["rows"] if x["office"] == "satara")["status"] == "none"
+    assert edit("satara", TODAY + timedelta(days=1), 1).status_code == 400  # future periods stay closed
+
+
 def test_edit_history_and_undo(test_form, solapur, admin_client, entry_open):
     day = D - timedelta(days=4)
     solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 5}, "submit": True})
@@ -306,16 +328,31 @@ def test_entry_closes_at_midnight_ist():
     assert P.entry_closes(w, date(2026, 10, 1)) == datetime(2026, 10, 7, 18, 30)  # end of the week's last day
 
 
-def test_compliance_and_closed_form(test_form, solapur, admin_client, zone_pune):
+def test_compliance_and_paused_form(test_form, solapur, admin_client, zone_pune):
     c = zone_pune.get(f"/api/forms/{test_form['id']}/compliance?start={D - timedelta(days=3)}&end={D}").json()
     assert [r["code"] for r in c["rows"]] == ["solapur", "satara"] and len(c["periods"]) == 4
     satara = c["rows"][1]
     assert all(x["status"] == "none" and x["late"] for x in satara["cells"])
     assert all("satara" in m for m in c["missing"])
-    assert admin_client.post(f"/api/forms/{test_form['id']}/close").json()["status"] == "closed"
+    assert admin_client.post(f"/api/forms/{test_form['id']}/pause").json()["status"] == "paused"
+    assert any(x["id"] == test_form["id"] for x in solapur.get("/api/forms/mine").json())  # still visible, read-only
     r = solapur.put(url(test_form, "solapur", TODAY), json={"values": {"meetings": 1}})
-    assert r.status_code == 400 and "closed" in r.json()["detail"]
+    assert r.status_code == 400 and "paused" in r.json()["detail"]
     assert admin_client.post(f"/api/forms/{test_form['id']}/publish").json()["status"] == "published"
+
+
+def test_delete_archives_and_restore_brings_back(test_form, solapur, admin_client):
+    fid = test_form["id"]
+    assert admin_client.delete(f"/api/forms/{fid}").json() == {"ok": True}
+    assert admin_client.get(f"/api/forms/{fid}").json()["status"] == "archived"  # kept, with its data
+    assert all(x["id"] != fid for x in admin_client.get("/api/forms").json())
+    assert all(x["id"] != fid for x in solapur.get("/api/forms/mine").json())
+    assert admin_client.post(f"/api/forms/{fid}/restore").json()["status"] == "paused"  # it has submissions
+    assert admin_client.post(f"/api/forms/{fid}/restore").status_code == 400
+    assert admin_client.post(f"/api/forms/{fid}/publish").json()["status"] == "published"
+    draft = admin_client.post("/api/forms", json={"title_mr": "रिकामा", "start_date": TODAY.isoformat()}).json()
+    admin_client.delete(f"/api/forms/{draft['id']}")
+    assert admin_client.post(f"/api/forms/{draft['id']}/restore").json()["status"] == "draft"
 
 
 def test_zone_cannot_review(test_form, zone_pune):

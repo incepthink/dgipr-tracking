@@ -2,9 +2,11 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, Download } from "lucide-react";
 import type { SheetTable } from "@/lib/api";
+import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
-import { RAlert, RButton, RCard, RCardTitle, RError, RFilterBar, RInput, RLabel, RPage, RSegmented, RSelect, RStat, RTitle } from "@/components/reports/kit";
+import { RAlert, RButton, RCard, RCardTitle, RError, RFilterBar, RLabel, RPage, RSegmented, RSelect, RStat, RTitle } from "@/components/reports/kit";
+import { DateInput } from "@/components/reports/DateInput";
 import { fig, stepOf } from "@/components/reports/period";
 import { fieldLabel, formTitle, scopeQs, sumColumns, useFormFilters } from "../forms/common";
 import { CampaignSearch, DivisionPicker, FormStateChip, OfficePicker, Stepper, formRange, formState } from "./shared";
@@ -22,6 +24,7 @@ const kindOf = (report: Report, level: Level): Kind =>
 /** The workbook's five tables on screen: pick a campaign, pick a date, read the table, send it on. */
 export default function ReportsPage() {
   const { t, tf, lang } = useT();
+  const me = useUser();
   const f = useFormFilters(7);
   const form = f.form;
   const once = form?.frequency === "once";
@@ -32,8 +35,11 @@ export default function ReportsPage() {
   const raw = f.params.get("table");
   let kind: Kind = isKind(raw) ? raw : "cumulative_division";
   if (once && !kind.startsWith("cumulative_")) kind = kind === "daily_office" ? "cumulative_office" : "cumulative_division";
+  // a district office only sees its own district, so it always reads the district-level tables
+  const districtOnly = me.role === "district";
+  if (districtOnly && kind.endsWith("_division")) kind = kind.replace("_division", "_office") as Kind;
   const report: Report = kind === "datewise" ? "datewise" : kind.startsWith("daily_") ? "daily" : "cumulative";
-  const level: Level = kind === "datewise" ? (f.params.get("level") === "district" ? "district" : "division")
+  const level: Level = districtOnly ? "district" : kind === "datewise" ? (f.params.get("level") === "district" ? "district" : "division")
     : kind.endsWith("_office") ? "district" : "division";
   // a division-level table sums whole divisions, so a single-office filter only applies to district / date-wise
   const setView = (r: Report, l: Level) => f.set({ table: kindOf(r, l), level: r === "datewise" ? l : null,
@@ -73,7 +79,7 @@ export default function ReportsPage() {
 
   return (
     <RPage>
-      <RTitle title={t("nav_reports")} sub={t("rep_desc")} />
+      <RTitle title={t("nav_reports")} />
 
       {/* campaign bar */}
       {f.forms && !f.forms.length ? <RAlert tone="info">{t("no_forms")}</RAlert> : (
@@ -101,7 +107,7 @@ export default function ReportsPage() {
         <Ctl label={t("rep_report")}>
           <RSegmented label={t("rep_report")} value={report} options={reports} onChange={(r) => setView(r, level)} />
         </Ctl>
-        {report !== "datewise" && (
+        {report !== "datewise" && !districtOnly && (
           <Ctl label={t("rep_level")}>
             <RSegmented label={t("rep_level")} value={level} onChange={(l) => setView(report, l)}
               options={[{ value: "division", label: t("lvl_division") }, { value: "district", label: t("lvl_district") }]} />
@@ -112,8 +118,8 @@ export default function ReportsPage() {
             <label htmlFor="rep-as-of" className="text-[13px] font-bold text-r-muted">{t("as_of")}</label>
             <Stepper prevOk={!!asOf && asOf > lo} nextOk={!!asOf && asOf < hi}
               onPrev={() => setAsOf(addDays(asOf, -step))} onNext={() => setAsOf(addDays(asOf, step))}
-              label={<RInput id="rep-as-of" type="date" className="num w-auto font-normal" value={asOf} min={lo} max={hi}
-                disabled={!asOf} onChange={(e) => e.target.value && setAsOf(e.target.value)} />} />
+              label={<DateInput id="rep-as-of" className="font-normal" value={asOf} min={lo} max={hi}
+                disabled={!asOf} onChange={(d) => d && setAsOf(d)} />} />
           </div>
         )}
         <DivisionPicker f={f} />
