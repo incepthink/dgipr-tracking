@@ -14,7 +14,7 @@ export type DateRange = { start: string; end: string };
 export type RangePreset = { label: string; start: string; end: string };
 
 /** A from–to date range: the field shows "dd/mm/yyyy – dd/mm/yyyy"; the panel has presets, typed From / To
- * fields and two months (one on a phone). The first click on a day starts the range, the second ends it. */
+ * fields and two months (one below desktop width). The panel shifts left as needed to stay on screen. The first click on a day starts the range, the second ends it. */
 export function DateRangeInput({ value, onChange, min = "", max = "", presets = [], id, className }: {
   value: DateRange; onChange: (r: DateRange) => void; min?: string; max?: string; presets?: RangePreset[];
   id?: string; className?: string;
@@ -26,6 +26,23 @@ export function DateRangeInput({ value, onChange, min = "", max = "", presets = 
   const [hover, setHover] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState((value.end || todayIst()).slice(0, 7));
   const box = React.useRef<HTMLDivElement>(null);
+  const panel = React.useRef<HTMLDivElement>(null);
+  // how far the panel moves sideways from the field's left edge to stay 16px inside the window
+  const [dx, setDx] = React.useState(0);
+
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      if (!box.current || !panel.current) return;
+      const left = box.current.getBoundingClientRect().left;
+      const room = document.documentElement.clientWidth - 16;
+      const over = left + panel.current.offsetWidth - room;
+      setDx(over > 0 ? Math.max(16 - left, -over) : 0);
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -61,8 +78,8 @@ export function DateRangeInput({ value, onChange, min = "", max = "", presets = 
         {value.start && value.end && <span className="text-[13px] font-normal text-r-muted">· {tf("rng_days", { n: daysBetween(value.start, value.end) })}</span>}
       </button>
       {open && (
-        <div role="dialog" aria-label={t("rng_label")}
-          className="absolute top-full left-0 z-50 mt-2 flex w-[min(calc(100vw-2rem),340px)] flex-col gap-4 rounded-2xl border border-r-line bg-r-card p-4 text-r-ink shadow-xl sm:w-auto sm:flex-row">
+        <div ref={panel} role="dialog" aria-label={t("rng_label")} style={{ left: dx }}
+          className="absolute top-full z-50 mt-2 flex w-[min(calc(100vw-2rem),340px)] flex-col gap-4 rounded-2xl border border-r-line bg-r-card p-4 text-r-ink shadow-xl sm:w-max sm:max-w-[calc(100vw-2rem)] sm:flex-row">
           {presets.length > 0 && (
             <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0 sm:w-44 sm:flex-col sm:flex-nowrap sm:border-r sm:border-r-line-soft sm:pr-4">
               {presets.map((p) => {
@@ -99,7 +116,7 @@ export function DateRangeInput({ value, onChange, min = "", max = "", presets = 
             </div>
             <div className="flex gap-6" onMouseLeave={() => setHover(null)}>
               <RangeMonth month={month} lo={lo} hi={hi} min={min} max={max} onPick={pick} onHover={setHover} />
-              <RangeMonth month={shiftMonth(month, 1)} lo={lo} hi={hi} min={min} max={max} onPick={pick} onHover={setHover} className="hidden sm:block" />
+              <RangeMonth month={shiftMonth(month, 1)} lo={lo} hi={hi} min={min} max={max} onPick={pick} onHover={setHover} className="hidden lg:block" />
             </div>
           </div>
         </div>

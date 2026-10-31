@@ -183,6 +183,10 @@ def test_api_scoping(admin_client, web):
     assert [r["code"] for r in m["rows"]] == ["satara"]
     peer = dist.get(f"/api/forms/{fid}/analytics/peer{qs}").json()
     assert peer["per_day"]["facebook"] == 5.0 and peer["offices"] == 4  # pune division: विमाका + 3 districts
+    assert peer["mine"]["periods_reported"] == 0 and peer["mine"]["per_day"]["facebook"] is None  # satara sent nothing
+    pune = make_user(admin_client, web, "ins_pune", "district", office="pune")
+    mine = pune.get(f"/api/forms/{fid}/analytics/peer{qs}").json()["mine"]
+    assert mine["periods_reported"] == 1 and mine["per_day"]["facebook"] == 5.0 and mine["totals"]["facebook"] == 5
     assert dist.get(f"/api/forms/{fid}/analytics/map{qs}&division=nashik").status_code == 403
     zone = make_user(admin_client, web, "ins_zone", "zone", division="nashik")
     mv = zone.get(f"/api/forms/{fid}/analytics/movers{qs}&column=facebook").json()

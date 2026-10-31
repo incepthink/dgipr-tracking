@@ -28,6 +28,11 @@ export function deadlineOf(form: Sched, ps: string): Date | null {
   return new Date(midnightIst + form.deadline_hours * 3_600_000);
 }
 
+/** Mirrors app/forms/periods.py entry_closes: offices stop editing at 11:59 PM IST on the period's last day. */
+export function entryClosed(periodEndDay: string, now = Date.now()) {
+  return Date.parse(addDays(periodEndDay, 1) + "T00:00:00+05:30") <= now;
+}
+
 /** Nothing sent (or only a draft) and the deadline has passed. */
 export function isOverdue(status: SubStatus, deadline: Date | string | null | undefined, now = Date.now()) {
   if (status !== "none" && status !== "draft") return false;

@@ -31,7 +31,11 @@ export const shortOffice = (r: ResponseRow, lang: string) => officeName(r, lang)
   .replace(/^Headquarters,?\s*/i, "HQ ")
   .replace(/\bChhatrapati\s+/g, "Chh. ")
   .replace(/^(विमाका|जिमाका|संचालक|मुख्यालय),?\s*/, "$1 ");
-const norm = (s: string) => s.toLocaleLowerCase().trim();
+/** Lower case, punctuation as spaces, one space between words: "District Information Office, Pune" → "district information office pune". */
+const norm = (s: string) => s.normalize("NFC").toLocaleLowerCase().replace(/[^\p{L}\p{M}\p{N}]+/gu, " ").trim();
+/** The words of a search; a row matches when every word is found somewhere in what it is searched against. */
+const words = (q: string) => norm(q).split(" ").filter(Boolean);
+const matches = (hay: string, ws: string[]) => ws.every((w) => hay.includes(w));
 
 /** A column sort, as in a spreadsheet: "office", "sent" or a field key. */
 type Sort = { key: string; dir: "asc" | "desc" };
@@ -212,13 +216,17 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   const all = React.useMemo(() => (data?.rows ?? []).filter((r) => r.period_start >= start && r.period_start <= end && (!office || r.office === office)),
     [data, start, end, office]);
 
-  // a form whose title matches shows all its offices; otherwise only matching offices
-  const needle = norm(q);
+  // each search word must match the form's title or the office (any spelling of its name, its code or its zone),
+  // so "pune", "dist pune", "जिमाका पुणे" and "<form title> pune" all work
+  const ws = React.useMemo(() => words(q), [q]);
   const rows = React.useMemo(() => {
-    if (!needle || norm(form.title_mr).includes(needle) || norm(form.title_en).includes(needle)) return all;
-    return all.filter((r) => [r.office_name_mr, r.office_name_en, r.office].some((s) => norm(s ?? "").includes(needle)));
-  }, [all, needle, form]);
-  React.useEffect(() => { if (data) onHits(form.id, rows.length); }, [data, rows.length, form.id, onHits]);
+    if (!ws.length) return all;
+    const title = norm(`${form.title_mr} ${form.title_en ?? ""}`);
+    return all.filter((r) => matches(`${title} ${norm([r.office_name_mr, r.office_name_en, shortOffice(r, "en"), shortOffice(r, "mr"),
+      r.office, r.division_mr].join(" "))}`, ws));
+  }, [all, ws, form]);
+  // a section that could not load counts as no match, so it does not hold up "nothing matches"
+  React.useEffect(() => { if (data) onHits(form.id, rows.length); else if (error) onHits(form.id, 0); }, [data, error, rows.length, form.id, onHits]);
 
   // as in a spreadsheet: a header click sorts high → low (offices A → Z), each further click reverses it
   const [sort, setSort] = React.useState<Sort | null>(null);
@@ -283,7 +291,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
     } catch (e) { fail(e); } finally { setBusy(null); }
   };
 
-  if (q.trim() && data && !rows.length) return null;
+  if (ws.length && (data || error) && !rows.length) return null;
   const sent = all.filter((r) => SENT.includes(r.status)).length;
   const edited = all.filter((r) => Object.keys(r.corrections).length > 0).length;
   const bodyId = `form-${form.id}`;

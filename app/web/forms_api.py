@@ -456,7 +456,8 @@ def api_an_heatmap(column: str = "", group: str = "", qs=Depends(_q)):
 @app.get("/api/forms/{form_id}/analytics/peer")
 def api_an_peer(qs=Depends(_q)):
     """A district office's division average per reported period (averages only, never another office's own
-    figures). Other roles get their own scope's average."""
+    figures), with the caller's own totals and average counted the same way under `mine`. Other roles get their
+    own scope's average."""
     q, s = qs
     peers = q.offices
     if q.user.role == "district" and q.user.office_code:
@@ -464,7 +465,10 @@ def api_an_peer(qs=Depends(_q)):
         own = s.get(Office, q.user.office_code)
         peers = [c for c in schema.recipient_codes(s, q.form)
                  if own and (o := s.get(Office, c)) is not None and o.division_code == own.division_code]
-    return insights.peer_average(s, q.form, peers, q.start, q.end)
+    mine = insights.peer_average(s, q.form, q.offices, q.start, q.end)
+    return {**insights.peer_average(s, q.form, peers, q.start, q.end),
+            "mine": {"periods_reported": mine["periods_reported"], "per_day": mine["per_day"],
+                     "totals": analytics.totals(s, q.form, q.offices, q.start, q.end)}}
 
 
 def _scope_key(q) -> str:

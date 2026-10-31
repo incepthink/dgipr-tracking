@@ -220,7 +220,10 @@ function FormCard({ form, periods, office }: { form: InboxForm; periods?: Submis
   const { t, tf, lang } = useT();
   const ps = periods ?? [];
   const sent = ps.filter((p) => ["submitted", "returned"].includes(p.status)).length;
-  const target = ps.find((p) => p.status === "returned") ?? ps.find((p) => p.status === "none" || p.status === "draft") ?? ps.at(-1);
+  // today's period first while it can still be filled; else a returned one, then the oldest unsent
+  const latest = ps.at(-1);
+  const todayOpen = latest && !latest.read_only_reason && ["none", "draft", "returned"].includes(latest.status) ? latest : undefined;
+  const target = todayOpen ?? ps.find((p) => p.status === "returned") ?? ps.find((p) => p.status === "none" || p.status === "draft") ?? latest;
   const to = fillTo(form.id, office, target?.period_start ?? form.first_pending ?? form.latest_period ?? "");
   const freq = t(`freq_${form.frequency}` as TKey);
   // input needed: a returned period, or an open period not yet sent (falls back to the inbox count while periods load)

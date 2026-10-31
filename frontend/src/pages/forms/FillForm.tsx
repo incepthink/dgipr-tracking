@@ -10,7 +10,7 @@ import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
 import { RAlert, RButton, RCheck, RError, RLabel, RPage, RSelect, RSheet, RTextarea, StatusMark, markOf, type Mark } from "@/components/reports/kit";
 import { DateInput } from "@/components/reports/DateInput";
-import { dayMonth, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
+import { dayMonth, entryClosed, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, useToday } from "./common";
 
@@ -239,7 +239,7 @@ export default function FillFormPage() {
             </Link>
             <div className="flex min-w-0 flex-col">
               <h1 className={cn("m-0 leading-[1.15] font-bold", sheetMode ? "disp text-[32px]" : "text-[19px]")}>{form ? formTitle(form, lang) : "…"}</h1>
-              <span className="text-sm text-r-muted">
+              <span className={cn("text-sm text-r-muted", !sheetMode && "hidden sm:inline")}>
                 {name(officeRef)}
                 {form && sheetMode && <> · {t(`freq_${form.frequency}` as TKey)}, {rangeText(form.start_date, form.end_date ?? lastDay, lang)}{form.deadline_hours !== null && <> · {tf("each_due", { h: form.deadline_hours })}</>}</>}
               </span>
@@ -260,11 +260,19 @@ export default function FillFormPage() {
                       on ? "border-2 border-r-ink bg-r-ground" : "border-[1.5px] border-r-line bg-r-card")}>
                     <span className="text-xs font-bold">{new Date(p.period_start + "T00:00:00").toLocaleDateString(lang === "mr" ? "mr-IN" : "en-IN", { weekday: "short" })}</span>
                     <span className="num text-lg font-semibold">{new Date(p.period_start + "T00:00:00").getDate()}</span>
-                    <StatusMark mark={dirtyOf(p.period_start) ? "draft" : markOf(p.status, isOverdue(p.status, p.deadline))} late={p.late} />
+                    <StatusMark className="hidden sm:inline-flex" mark={dirtyOf(p.period_start) ? "draft" : markOf(p.status, isOverdue(p.status, p.deadline))} late={p.late} />
+                    <DayDot className="sm:hidden" kind={dotOf(p)} />
                   </button>
                 );
               })}
             </div>
+          </div>
+        )}
+        {!sheetMode && form && form.frequency !== "once" && periods.length > 0 && (
+          <div className="flex gap-4 text-[13px] text-r-muted sm:hidden">
+            {(["sent", "missed", "fill"] as const).map((k) => (
+              <span key={k} className="flex items-center gap-1.5"><DayDot kind={k} decorative />{t(DOT_LABEL[k])}</span>
+            ))}
           </div>
         )}
       </header>
@@ -299,6 +307,24 @@ export default function FillFormPage() {
       )}
     </RPage>
   );
+}
+
+/** Phone day strip: one plain coloured circle per day — sent, missed, or still to fill. */
+type DotKind = "sent" | "missed" | "fill";
+const DOT_LABEL: Record<DotKind, TKey> = { sent: "dot_sent", missed: "dot_missed", fill: "dot_to_fill" };
+const DOT_BG: Record<DotKind, string> = { sent: "bg-r-accepted", missed: "bg-r-overdue", fill: "bg-r-focus" };
+
+/** Missed once entry has closed (11:59 PM) or the deadline passed with nothing sent; a returned day is open again. */
+function dotOf(p: Submission): DotKind {
+  if (p.status === "submitted") return "sent";
+  if (p.status === "returned") return "fill";
+  return isOverdue(p.status, p.deadline) || entryClosed(p.period_end) ? "missed" : "fill";
+}
+
+function DayDot({ kind, decorative, className }: { kind: DotKind; decorative?: boolean; className?: string }) {
+  const { t } = useT();
+  return <span className={cn("inline-block size-3 flex-none rounded-full", DOT_BG[kind], className)}
+    role={decorative ? undefined : "img"} aria-hidden={decorative || undefined} aria-label={decorative ? undefined : t(DOT_LABEL[kind])} />;
 }
 
 /** After sending: what went, and what's next. */

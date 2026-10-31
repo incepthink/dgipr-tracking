@@ -320,7 +320,10 @@ export interface HeatCell extends ComplianceCell { total: number | null; due: bo
 export interface Heatmap extends Omit<Compliance, "rows"> {
   column: string; rows: (Omit<ComplianceRow, "cells"> & { cells: HeatCell[] })[];
 }
-export interface Peer { offices: number; periods_reported: number; per_day: Record<string, number | null> }
+export interface Peer {
+  offices: number; periods_reported: number; per_day: Record<string, number | null>;
+  mine: { periods_reported: number; per_day: Record<string, number | null>; totals: Record<string, number> };
+}
 export interface Brief {
   period: string | null; text: string; source: "ai" | "template" | "none"; reason?: string; created_at?: string;
   ai_configured: boolean;

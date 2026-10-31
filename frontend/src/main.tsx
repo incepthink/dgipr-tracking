@@ -43,7 +43,7 @@ const insights = (el: React.ReactNode) => <RequireRole roles={["state", "zone"]}
 
 function Home() {
   const me = useUser();
-  return <Navigate to={me.role === "state" ? "/monitor" : me.role === "zone" ? "/office/board" : "/forms/mine"} replace />;
+  return <Navigate to={me.role === "state" ? "/office/desk" : me.role === "zone" ? "/office/board" : "/forms/mine"} replace />;
 }
 
 /** The old collect / review / report pages now live on the one Monitoring page; keep their links working. */

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { FileSpreadsheet, Search, X } from "lucide-react";
+import { ChevronDown, FileSpreadsheet, Search, X } from "lucide-react";
 import { backendUrl, type CampaignBrief, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
@@ -52,9 +52,23 @@ function matchesForm(x: FormDef, campaign: CampaignBrief | undefined, needle: st
   return !needle || [x.title_mr, x.title_en, x.slug, campaign?.title_mr, campaign?.title_en].some((s) => s && norm(s).includes(needle));
 }
 
-/** A dropdown of today's forms: focus lists them all, typing narrows the list and the cards below, picking one shows only
+/** The search box's state for a list of form cards: typing narrows `shown`, picking one shows only that card until the text
+ * changes. Used by the Desk and the Report forms list. */
+export function useFormSearch<F extends FormDef>(forms: F[]) {
+  const { lang } = useT();
+  const { data: meta } = useMeta();
+  const [q, setQ] = React.useState("");
+  const [picked, setPicked] = React.useState<{ id: number; q: string } | null>(null);
+  const campaignOf = React.useCallback((x: FormDef) => meta?.campaigns.find((c) => c.id === x.campaign_id), [meta]);
+  const needle = norm(q.trim());
+  const shown = picked && picked.q === q ? forms.filter((x) => x.id === picked.id) : forms.filter((x) => matchesForm(x, campaignOf(x), needle));
+  const onPick = (x: FormDef) => { const title = formTitle(x, lang); setQ(title); setPicked({ id: x.id, q: title }); };
+  return { q, setQ, needle, shown, campaignOf, onPick };
+}
+
+/** A dropdown of the page's forms: focus lists them all, typing narrows the list and the cards below, picking one shows only
  * that card. It never navigates. */
-function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
+export function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
   q: string; setQ: (q: string) => void; forms: FormDef[];
   campaignOf: (x: FormDef) => CampaignBrief | undefined; onPick: (x: FormDef) => void;
 }) {
@@ -127,40 +141,56 @@ function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
   );
 }
 
+// --------------------------------------------------------------------------- minimized cards
+/** Which form cards are minimized, kept per browser so the Desk opens the way it was left. A card nobody has toggled starts
+ * minimized on a phone (below Tailwind's sm, 640px) and open on anything wider. */
+const MIN_KEY = "desk-minimized";
+
+function useMinimized() {
+  const [phone] = React.useState(() => window.matchMedia("(max-width: 639px)").matches);
+  const [set, setSet] = React.useState<Record<string, boolean>>(() => {
+    try { const v = JSON.parse(localStorage.getItem(MIN_KEY) || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+    catch { return {}; }
+  });
+  const isMin = (id: number) => set[id] ?? phone;
+  return {
+    isMin,
+    toggle: (id: number) => {
+      const next = { ...set, [id]: !isMin(id) };
+      setSet(next);
+      try { localStorage.setItem(MIN_KEY, JSON.stringify(next)); } catch { /* storage off */ }
+    },
+  };
+}
+
 // --------------------------------------------------------------------------- page
 /** Every form running today, newest first, one card under another; the search hides the ones that don't match.
  * A form that has ended or not yet started is left out: the Desk is today's work only. */
 export default function DeskPage() {
-  const { t, tf, lang } = useT();
+  const { t, tf } = useT();
   const { data: forms } = useForms();
-  const { data: meta } = useMeta();
   const today = useToday();
-  const [q, setQ] = React.useState("");
 
   const live = React.useMemo(() => (forms ?? [])
     .filter((x) => (x.status === "published" || x.status === "paused") && x.start_date <= today
       && (x.frequency === "once" ? x.start_date === today : !x.end_date || x.end_date >= today))
     .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id), [forms, today]);
-  const campaignOf = React.useCallback((x: FormDef) => meta?.campaigns.find((c) => c.id === x.campaign_id), [meta]);
-  // a picked form shows alone until the search text changes
-  const [picked, setPicked] = React.useState<{ id: number; q: string } | null>(null);
-  const needle = norm(q.trim());
-  const shown = picked && picked.q === q ? live.filter((x) => x.id === picked.id) : live.filter((x) => matchesForm(x, campaignOf(x), needle));
+  const { q, setQ, needle, shown, campaignOf, onPick } = useFormSearch(live);
+  const min = useMinimized();
 
   return (
     <div className="rpt flex flex-col gap-6 sm:gap-8">
-      <DeskSearch q={q} setQ={setQ} forms={live} campaignOf={campaignOf}
-        onPick={(x) => { const title = formTitle(x, lang); setQ(title); setPicked({ id: x.id, q: title }); }} />
+      <DeskSearch q={q} setQ={setQ} forms={live} campaignOf={campaignOf} onPick={onPick} />
       <h1 className="disp m-0 px-1 text-2xl font-bold sm:text-[28px]">{t("desk_heading")}</h1>
       {!forms || !today ? <div className="h-96 animate-pulse rounded-2xl bg-r-sunk" />
         : !live.length ? <p className="m-0 px-1 text-sm text-r-muted">{t("desk_nothing_today")}</p>
         : needle && !shown.length ? <p className="m-0 px-1 text-sm text-r-muted">{tf("desk_no_match", { q: q.trim() })}</p>
-        : shown.map((x) => <DeskCard key={x.id} formId={x.id} />)}
+        : shown.map((x) => <DeskCard key={x.id} formId={x.id} minimized={min.isMin(x.id)} onToggle={() => min.toggle(x.id)} />)}
     </div>
   );
 }
 
-function DeskCard({ formId }: { formId: number }) {
+function DeskCard({ formId, minimized, onToggle }: { formId: number; minimized: boolean; onToggle: () => void }) {
   const tr = useT();
   const { t, tf, lang } = tr;
   const { data: form, error: formError } = useFormDef(formId);
@@ -208,7 +238,7 @@ function DeskCard({ formId }: { formId: number }) {
   if (error) return <RError error={error} />;
   if (!form || !resp.data) return <div className="h-96 animate-pulse rounded-2xl bg-r-sunk" />;
   return (
-    <RCard className="gap-7 p-5 sm:gap-8 sm:p-8">
+    <RCard className={cn("p-5 sm:p-8", minimized ? "gap-5" : "gap-7 sm:gap-8")}>
       {/* header: which form, which period, how far along */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2">
@@ -221,6 +251,10 @@ function DeskCard({ formId }: { formId: number }) {
           {count("none") > 0 && chase && <CopyButton text={chase} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />}
           <RButton asChild size="sm" variant="ghost">
             <a href={backendUrl(`/api/forms/${formId}/export${qs({ start: form.start_date, end: lastDay })}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
+          </RButton>
+          <RButton size="sm" variant="ghost" aria-expanded={!minimized} onClick={onToggle}>
+            <ChevronDown className={cn("transition-transform", minimized ? "-rotate-90" : "rotate-180")} aria-hidden />
+            {t(minimized ? "desk_expand" : "desk_minimize")}
           </RButton>
         </div>
       </div>
@@ -236,6 +270,7 @@ function DeskCard({ formId }: { formId: number }) {
         </div>
       </div>
 
+      {!minimized && <>
       {/* filter chips double as the at-a-glance counts */}
       <div className="flex flex-wrap gap-2" role="group" aria-label={t("show")}>
         {chips.map((c) => (
@@ -275,6 +310,7 @@ function DeskCard({ formId }: { formId: number }) {
           })}
         </div>
       )}
+      </>}
     </RCard>
   );
 }

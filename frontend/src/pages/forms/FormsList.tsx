@@ -10,18 +10,21 @@ import { RButton, RCard, RError, RPage, RTitle } from "@/components/reports/kit"
 import { dayMonth, fig, rangeText, whenText } from "@/components/reports/period";
 import { formTitle } from "./common";
 import { STATUS_DOT } from "../office/shared";
+import { DeskSearch, useFormSearch } from "../office/Desk";
 
 
 export default function FormsListPage() {
-  const { t } = useT();
+  const { t, tf } = useT();
   const nav = useNavigate();
   const { data, error, isLoading } = useQuery({
     queryKey: ["forms", { archived: true }], queryFn: () => api.get<FormBrief[]>("/api/forms?archived=true"),
   });
+  const { q, setQ, needle, shown, campaignOf, onPick } = useFormSearch(data ?? []);
   return (
     <RPage>
       <RTitle title={t("forms_title")}
         actions={<RButton variant="pri" onClick={() => nav("/forms/new")}><FilePlus2 aria-hidden /> {t("new_form")}</RButton>} />
+      {!!data?.length && <DeskSearch q={q} setQ={setQ} forms={data} campaignOf={campaignOf} onPick={onPick} />}
       {error ? <RError error={error} /> : isLoading || !data ? (
         <div className="grid gap-4 lg:grid-cols-2">{[0, 1].map((i) => <div key={i} className="h-48 animate-pulse rounded-2xl bg-r-sunk" />)}</div>
       ) : !data.length ? (
@@ -30,8 +33,10 @@ export default function FormsListPage() {
           <p className="m-0 text-r-muted">{t("no_forms_state")}</p>
           <RButton variant="pri" onClick={() => nav("/forms/new")}><FilePlus2 aria-hidden /> {t("new_form")}</RButton>
         </RCard>
+      ) : needle && !shown.length ? (
+        <p className="m-0 px-1 text-sm text-r-muted">{tf("desk_no_match", { q: q.trim() })}</p>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">{data.map((f) => <FormCard key={f.id} f={f} />)}</div>
+        <div className="grid gap-5 lg:grid-cols-2">{shown.map((f) => <FormCard key={f.id} f={f} />)}</div>
       )}
     </RPage>
   );
