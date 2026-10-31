@@ -461,7 +461,8 @@ def compliance(s: Session, form: Form, offices: list[str], start: date, end: dat
 
 
 def inbox(s: Session, user: User, today: Optional[date] = None) -> list[dict[str, Any]]:
-    """Forms for the user's offices with what is pending (due, not submitted), overdue and returned."""
+    """Forms for the user's offices with what is pending (due, not submitted), overdue and returned, plus
+    to_fill: the pending periods an office can still save (returned, or not sent before its entry closes)."""
     today = today or today_ist()
     now = utcnow()
     visible = set(visible_office_codes(s, user))
@@ -470,7 +471,7 @@ def inbox(s: Session, user: User, today: Optional[date] = None) -> list[dict[str
         offices = [c for c in recipient_codes(s, form) if c in visible]
         due = periods(form, today=today)
         subs = _subs(s, form, offices, due)
-        pending = overdue = returned = 0
+        pending = overdue = returned = to_fill = 0
         next_ps = None
         for ps in due:
             for o in offices:
@@ -480,6 +481,8 @@ def inbox(s: Session, user: User, today: Optional[date] = None) -> list[dict[str
                     returned += 1
                 if st in ("none", "draft", "returned"):
                     pending += 1
+                    if st == "returned" or now < entry_closes(form, ps):
+                        to_fill += 1
                     if _late(form, ps, sub, now):
                         overdue += 1
                     if next_ps is None or ps < next_ps:
@@ -492,6 +495,7 @@ def inbox(s: Session, user: User, today: Optional[date] = None) -> list[dict[str
                     "start_date": form.start_date.isoformat(),
                     "end_date": form.end_date.isoformat() if form.end_date else None,
                     "offices": offices, "pending": pending if form.status == "published" else 0,
+                    "to_fill": to_fill if form.status == "published" and form.entry_open else 0,
                     "overdue": overdue if form.status == "published" else 0, "returned": returned,
                     "first_pending": next_ps.isoformat() if next_ps else None,
                     "latest_period": latest.isoformat() if latest else None,

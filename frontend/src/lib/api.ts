@@ -224,7 +224,7 @@ export interface FormBrief extends FormDef {
 export interface InboxForm {
   id: number; slug: string; title_mr: string; title_en: string; instructions_mr: string; instructions_en: string;
   frequency: Frequency; status: FormStatus; entry_open: boolean; start_date: string; end_date: string | null;
-  offices: string[]; pending: number; overdue: number; returned: number; first_pending: string | null;
+  offices: string[]; pending: number; to_fill: number; overdue: number; returned: number; first_pending: string | null;
   latest_period: string | null; latest_deadline: string | null;
 }
 

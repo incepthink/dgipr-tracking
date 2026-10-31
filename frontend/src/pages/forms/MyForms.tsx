@@ -17,11 +17,11 @@ export function useInbox(enabled = true) {
   return useQuery({ queryKey: ["forms-mine"], enabled, queryFn: () => api.get<InboxForm[]>("/api/forms/mine"), staleTime: 30_000 });
 }
 
-/** Pending + returned periods across a district office's forms (sidebar badge). */
+/** Periods a district office can still fill (open today, or returned) across its forms (sidebar badge). */
 export function useInboxCount() {
   const me = useUser();
   const { data } = useInbox(me.role === "district");
-  return (data ?? []).reduce((n, f) => n + f.pending, 0);
+  return (data ?? []).reduce((n, f) => n + f.to_fill, 0);
 }
 
 export function Instructions({ text, className }: { text: string; className?: string }) {
@@ -226,7 +226,7 @@ function FormCard({ form, periods, office }: { form: InboxForm; periods?: Submis
   // input needed: a returned period, or an open period not yet sent (falls back to the inbox count while periods load)
   const needsInput = periods
     ? form.status === "published" && ps.some((p) => !p.read_only_reason && ["none", "draft", "returned"].includes(p.status))
-    : form.pending > 0;
+    : form.to_fill > 0;
 
   const p = ps.at(-1);
   const sub = form.status === "closed" ? t("status_closed")

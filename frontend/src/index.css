@@ -5,7 +5,7 @@
 @import "@fontsource/atkinson-hyperlegible-next/400.css";
 @import "@fontsource/atkinson-hyperlegible-next/500.css";
 @import "@fontsource/atkinson-hyperlegible-next/700.css";
-@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/plus-jakarta-sans";
 @import "@fontsource/ibm-plex-mono/400.css";
 @import "@fontsource/ibm-plex-mono/500.css";
 @import "@fontsource/ibm-plex-mono/600.css";
@@ -210,7 +210,7 @@
 
 @theme inline {
   --font-body: "Atkinson Hyperlegible Next", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif;
-  --font-display: "Bricolage Grotesque Variable", "Noto Sans Devanagari", system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans Variable", "Noto Sans Devanagari", system-ui, sans-serif;
   --font-figure: "IBM Plex Mono", ui-monospace, "Noto Sans Devanagari", monospace;
   --color-r-ink: var(--r-ink);
   --color-r-ground: var(--r-ground);
