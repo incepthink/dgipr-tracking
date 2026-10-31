@@ -2,7 +2,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Check, Copy } from "lucide-react";
-import { api, type Compliance, type ComplianceRow, type FormDef, type ResponsesData } from "@/lib/api";
+import { api, type Compliance, type ComplianceRow, type FormDef, type FormStatus, type ResponsesData } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
@@ -60,20 +60,19 @@ export function OfficePicker({ f }: { f: FormFilters }) {
 }
 
 // --------------------------------------------------------------------------- campaign search
-export type FormState = "open" | "ended" | "draft";
+/** The status dot, as on the forms list: live green, paused amber, deleted a faint ring, draft dashed. */
+export const STATUS_DOT: Record<FormStatus, string> = {
+  draft: "border-2 border-dashed border-r-muted", published: "bg-r-accepted", paused: "bg-r-returned", archived: "border-2 border-r-faint",
+};
 
-/** Open: published and not past its end date. Ended: closed, archived or past its end date. */
-export function formState(form: Pick<FormDef, "status" | "end_date">, today: string): FormState {
-  if (form.status === "draft") return "draft";
-  if (form.status === "published" && !(form.end_date && today && form.end_date < today)) return "open";
-  return "ended";
-}
-
-const STATE_LABEL: Record<FormState, TKey> = { open: "cs_open", ended: "cs_ended", draft: "status_draft" };
-
-export function FormStateChip({ state }: { state: FormState }) {
+/** Live / Paused / Deleted / Draft, with its dot. */
+export function FormStatusChip({ status, className }: { status: FormStatus; className?: string }) {
   const { t } = useT();
-  return <RChip tone={state === "open" ? "ink" : state === "draft" ? "outline" : "plain"} className="shrink-0">{t(STATE_LABEL[state])}</RChip>;
+  return (
+    <RChip className={cn("shrink-0", status === "published" ? "bg-r-accepted-soft text-r-accepted" : "bg-r-sunk text-r-ink", className)}>
+      <span className={cn("size-2 rounded-full", STATUS_DOT[status])} aria-hidden />{t(`status_${status}` as TKey)}
+    </RChip>
+  );
 }
 
 /** "3 – 16 Oct", or "3 Oct →" while a form has no end date. */
@@ -97,7 +96,7 @@ function pushRecent(id: number) {
 
 const norm = (s: string) => s.normalize("NFC").toLowerCase();
 
-/** The campaign bar's picker: search forms by Marathi / English title, slug or campaign; grouped Open / Ended / Drafts. */
+/** The campaign bar's picker: search forms by Marathi / English title, slug or campaign; grouped Live / Paused / Deleted / Drafts. */
 export function CampaignSearch({ f, open, onClose }: { f: FormFilters; open: boolean; onClose: () => void }) {
   const { t, tf, lang } = useT();
   const me = useUser();
@@ -121,9 +120,9 @@ export function CampaignSearch({ f, open, onClose }: { f: FormFilters; open: boo
     const rec = recent.map((id) => forms.find((x) => x.id === id)).filter((x): x is FormDef => !!x);
     if (rec.length) groups.push({ key: "recent", label: t("cs_recent"), items: rec });
   }
-  (["open", "ended", "draft"] as const).forEach((s) => {
-    const items = hits.filter((x) => formState(x, f.today) === s);
-    if (items.length) groups.push({ key: s, label: t(s === "draft" ? "cs_drafts" : s === "open" ? "cs_open" : "cs_ended"), items });
+  (["published", "paused", "archived", "draft"] as const).forEach((s) => {
+    const items = hits.filter((x) => x.status === s);
+    if (items.length) groups.push({ key: s, label: t(s === "draft" ? "cs_drafts" : `status_${s}`), items });
   });
   const flat = groups.flatMap((g) => g.items.map((x) => ({ g: g.key, x })));
   const cur = Math.min(active, Math.max(0, flat.length - 1));
@@ -176,7 +175,11 @@ export function CampaignSearch({ f, open, onClose }: { f: FormFilters; open: boo
                     <span className="num text-[13px] text-r-muted">{formRange(x, lang)}</span>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <RChip>{t(`freq_${x.frequency}` as TKey)}</RChip>
+                    <span className="flex flex-wrap justify-end gap-1">
+                      {/* the group says it too, but the recent list mixes statuses */}
+                      {g.key === "recent" && <FormStatusChip status={x.status} />}
+                      <RChip>{t(`freq_${x.frequency}` as TKey)}</RChip>
+                    </span>
                     {isCur && <span className="flex items-center gap-1 text-xs font-bold text-r-action"><Check className="size-3.5" aria-hidden />{t("cs_current")}</span>}
                   </div>
                 </div>

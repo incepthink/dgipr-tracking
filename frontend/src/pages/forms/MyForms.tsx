@@ -1,13 +1,13 @@
 import * as React from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Bell, CheckCircle2, ChevronRight, ClipboardList } from "lucide-react";
+import { Bell, CheckCircle2, ChevronRight, ClipboardList } from "lucide-react";
 import { api, type InboxForm, type PeriodsResponse, type Submission } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn, qs } from "@/lib/utils";
-import { RButton, RCard, RError, RPage, RSearch, RSheet, RTitle, StatusMark } from "@/components/reports/kit";
+import { RCard, RError, RPage, RSearch, RSheet, RTitle, StatusMark } from "@/components/reports/kit";
 import {
   dayMonth, isOverdue, longDay, periodOf, rangeText, stepOf, whenText,
 } from "@/components/reports/period";
@@ -170,12 +170,10 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
     && (!needle || [f.title_mr, f.title_en].some((s) => s.toLocaleLowerCase().includes(needle))));
 
   return (
-    <RPage className="mx-auto w-full max-w-[1040px] gap-4">
-      <header className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{today ? longDay(today, lang) : ""}</span>
-        <h1 className="disp m-0 text-[28px] leading-[1.1] font-bold">{t("district_officer")}: {shortName(me.office) || me.display_name}</h1>
-        {division && <span className="text-sm text-r-muted">{division.label_mr}</span>}
-      </header>
+    <RPage>
+      <RTitle eyebrow={today ? longDay(today, lang) : undefined}
+        title={<>{t("district_officer")}: {shortName(me.office) || me.display_name}</>}
+        sub={division?.label_mr} />
 
       {error ? <RError error={error} /> : isLoading ? <SkeletonCards /> : !forms.length ? (
         <RCard className="items-center py-10 text-center">
@@ -198,7 +196,9 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
                 </button>
               ))}
             </div>
-            {shown.map(({ f, i }) => <FormCard key={f.id} form={f} periods={recent[i]?.data?.periods} office={office} />)}
+            <div className="mt-2 grid gap-5 lg:grid-cols-2">
+              {shown.map(({ f, i }) => <FormCard key={f.id} form={f} periods={recent[i]?.data?.periods} office={office} />)}
+            </div>
             {!shown.length && (
               <p className="m-0 rounded-[14px] bg-r-card p-4 text-r-muted">{needle ? tf("resp_no_match", { q: q.trim() }) : t("mine_none_in_filter")}</p>
             )}
@@ -229,38 +229,68 @@ function FormCard({ form, periods, office }: { form: InboxForm; periods?: Submis
     : form.to_fill > 0;
 
   const p = ps.at(-1);
-  const sub = form.status === "paused" ? t("status_paused")
-    : form.frequency === "daily" && ps.length > 1 ? `${freq} · ${rangeText(form.start_date, form.end_date ?? p!.period_start, lang)} · ${tf("days_sent_of", { a: sent, b: ps.length })}`
-    : p ? `${form.frequency === "weekly" ? tf("week_of", { range: rangeText(p.period_start, p.period_end, lang) }) : freq} · ${t(`sub_${p.status}` as TKey)}${p.deadline && (p.status === "none" || p.status === "draft") ? ` · ${tf("due_by", { when: whenText(p.deadline, lang) })}` : ""}`
-    : freq;
+  const paused = form.status === "paused";
+  const period = form.frequency === "weekly" && p ? rangeText(p.period_start, p.period_end, lang)
+    : form.frequency === "daily" && p && ps.length > 1 ? rangeText(form.start_date, form.end_date ?? p.period_start, lang)
+    : p ? dayMonth(p.period_start, lang)
+    : rangeText(form.start_date, form.end_date ?? form.start_date, lang);
+  const open = p && (p.status === "none" || p.status === "draft");
+  const pct = ps.length ? Math.round((sent / ps.length) * 100) : 0;
   return (
-    <Link to={to} className="flex items-center gap-3.5 rounded-[14px] bg-r-card p-4 text-r-ink no-underline hover:outline-2 hover:outline-r-line">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <b>{formTitle(form, lang)}</b>
-        <span className="text-sm text-r-muted">{sub}</span>
+    <Link to={to} className="group flex min-w-0 flex-col gap-5 rounded-2xl border border-r-line bg-r-card p-6 shadow-[0_1px_2px_rgb(21_32_43/0.06),0_4px_12px_rgb(21_32_43/0.06)] text-r-ink no-underline transition-colors hover:border-r-field">
+      <div className="flex items-start gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-xs font-bold tracking-[0.06em] text-r-muted uppercase">{freq}</span>
+          <h3 className="m-0 text-[17px] leading-snug font-bold">{formTitle(form, lang)}</h3>
+        </div>
+        <span className={cn("shrink-0 rounded-full px-3 py-1 text-[13px] font-bold",
+          paused ? "bg-r-sunk text-r-muted" : needsInput ? "bg-r-accepted text-r-card" : "bg-r-accepted-soft text-r-accepted")}>
+          {paused ? t("status_paused") : t(needsInput ? "chip_fill" : "chip_completed")}
+        </span>
       </div>
-      <span className={cn("shrink-0 rounded-full px-3 py-1 text-[13px] font-bold",
-        needsInput ? "bg-r-accepted text-r-card" : "bg-r-accepted-soft text-r-accepted")}>
-        {t(needsInput ? "chip_fill" : "chip_completed")}
+      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-r-line-soft pt-4 sm:grid-cols-3">
+        <Fact label={t("period")}>{period}</Fact>
+        <Fact label={t("status")}>{p ? t(`sub_${p.status}` as TKey) : "—"}</Fact>
+        <Fact label={t("deadline")}>{open && p.deadline && !paused ? whenText(p.deadline, lang) : "—"}</Fact>
+      </dl>
+      {ps.length > 1 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="font-bold text-r-muted">{t("progress")}</span>
+            <span className="num text-r-muted">{tf("days_sent_of", { a: sent, b: ps.length })}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-r-sunk" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+            <div className="h-full rounded-full bg-r-accepted" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+      )}
+      <span className="flex items-center gap-1 self-end text-sm font-bold text-r-action group-hover:underline">
+        {t(needsInput && !paused ? "fill_now" : "view")} <ChevronRight className="size-4" aria-hidden />
       </span>
-      <ChevronRight className="size-5 shrink-0 text-r-faint" aria-hidden />
     </Link>
+  );
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <dt className="text-xs font-bold tracking-[0.04em] text-r-muted uppercase">{label}</dt>
+      <dd className="m-0 truncate text-[15px] font-semibold">{children}</dd>
+    </div>
   );
 }
 
 function SkeletonCards() {
   return (
-    <div className="flex flex-col gap-3" aria-busy>
-      <div className="h-44 animate-pulse rounded-[18px] bg-r-sunk" />
-      <div className="h-24 animate-pulse rounded-[14px] bg-r-sunk" />
-      <div className="h-24 animate-pulse rounded-[14px] bg-r-sunk" />
+    <div className="grid gap-5 lg:grid-cols-2" aria-busy>
+      {[0, 1].map((i) => <div key={i} className="h-48 animate-pulse rounded-2xl bg-r-sunk" />)}
     </div>
   );
 }
 
 // --------------------------------------------------------------------------- zone / state: forms they can open
 function FormsOverview() {
-  const { t, tf, lang } = useT();
+  const { t, lang } = useT();
   const { data, error, isLoading } = useInbox();
   return (
     <RPage>
@@ -268,26 +298,30 @@ function FormsOverview() {
       {error ? <RError error={error} /> : isLoading || !data ? <SkeletonCards /> : !data.length ? (
         <RCard className="items-center py-10 text-center"><b>{t("no_forms")}</b></RCard>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-2">
           {data.map((f) => (
-            <RCard key={f.id} className="gap-3">
-              <div className="flex items-baseline justify-between gap-2">
-                <b className="text-[17px]">{formTitle(f, lang)}</b>
-                <span className="text-[13px] whitespace-nowrap text-r-muted">{t(`freq_${f.frequency}` as TKey)}</span>
+            <section key={f.id} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-r-line bg-r-card p-5 shadow-[0_1px_2px_rgb(21_32_43/0.06),0_4px_12px_rgb(21_32_43/0.06)]">
+              <div className="flex items-start gap-4">
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-xs font-bold tracking-[0.06em] text-r-muted uppercase">{t(`freq_${f.frequency}` as TKey)}</span>
+                  <h3 className="m-0 text-[17px] leading-snug font-bold">{formTitle(f, lang)}</h3>
+                </div>
+                {f.status === "paused" && <span className="shrink-0 rounded-full bg-r-sunk px-3 py-1 text-[13px] font-bold text-r-muted">{t("status_paused")}</span>}
               </div>
-              <span className="text-sm text-r-muted">
-                {rangeText(f.start_date, f.end_date ?? f.latest_period ?? f.start_date, lang)}
-                {f.latest_deadline && f.status === "published" && <> · {tf("due_by", { when: whenText(f.latest_deadline, lang) })}</>}
-              </span>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                {f.pending > 0 && <span className="flex items-center gap-1.5"><StatusMark mark="pend" /> {t("pending")}: <b className="num">{f.pending}</b></span>}
-                {f.overdue > 0 && <span className="flex items-center gap-1.5"><StatusMark mark="over" /> {t("overdue")}: <b className="num">{f.overdue}</b></span>}
-                {f.returned > 0 && <span className="flex items-center gap-1.5"><StatusMark mark="ret" /> {t("returned_n")}: <b className="num">{f.returned}</b></span>}
-                <RButton asChild size="sm" className="ml-auto">
-                  <Link to={`/forms/responses?form=${f.id}`}>{t("nav_responses")} <ArrowRight aria-hidden /></Link>
-                </RButton>
+              <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 border-t border-r-line-soft pt-4 sm:grid-cols-3">
+                <Fact label={t("period")}>{rangeText(f.start_date, f.end_date ?? f.latest_period ?? f.start_date, lang)}</Fact>
+                <Fact label={t("deadline")}>{f.latest_deadline && f.status === "published" ? whenText(f.latest_deadline, lang) : "—"}</Fact>
+                <Fact label={t("offices_n")}><span className="num">{f.offices.length}</span></Fact>
+              </dl>
+              <div className="grid grid-cols-3 gap-2">
+                {([["pend", "pending", f.pending], ["over", "overdue", f.overdue], ["ret", "returned_n", f.returned]] as const).map(([mark, label, n]) => (
+                  <div key={mark} className="flex flex-col gap-1.5 rounded-xl bg-r-sunk px-3 py-2.5">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-r-muted"><StatusMark mark={mark} /> {t(label)}</span>
+                    <b className={cn("num text-xl leading-none", !n && "text-r-faint")}>{n}</b>
+                  </div>
+                ))}
               </div>
-            </RCard>
+            </section>
           ))}
         </div>
       )}

@@ -1,13 +1,15 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Clock, FileSpreadsheet, RotateCcw, Undo2 } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Clock, FileSpreadsheet, Maximize2, Minimize2, RotateCcw, Undo2, X } from "lucide-react";
 import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn, dmy } from "@/lib/utils";
 import { RButton, RError, RInput, RLabel, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
 import { fig, periodOf, rangeText, shortDay, stepOf, timeOf, whenText } from "@/components/reports/period";
 import { MonthCalendar } from "@/components/reports/DateInput";
+import { useMeta } from "@/lib/hooks";
+import { useUser } from "@/lib/auth";
 import { fieldLabel, formTitle, useFormFilters } from "./common";
 import { periodName, useResponses } from "../office/shared";
 
@@ -125,7 +127,7 @@ export default function ResponsesPage() {
                   {t(`resp_group_${g}`)} <span className="num font-normal">· {list.length}</span>
                 </h2>
                 {list.map((x) => (
-                  <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} division="" q={q}
+                  <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} q={q}
                     open={isOpen(x.id)} focus={x.id === target} onToggle={() => toggle(x.id)} onHits={onHits} />
                 ))}
               </section>
@@ -137,13 +139,63 @@ export default function ResponsesPage() {
   );
 }
 
+// --------------------------------------------------------------------------- zone / district filters
+/** Zone (state users only; a zone officer already sees just their own) and district, which lists the chosen zone's offices.
+ * Drawn like the "All dates" button and the date picker beside them: dark outline once something is picked. */
+function PlaceFilters({ division, office, onChange }: {
+  division: string; office: string; onChange: (p: { division?: string; office?: string }) => void;
+}) {
+  const me = useUser();
+  const { data: meta } = useMeta();
+  const { t, name } = useT();
+  const divs = meta?.divisions.filter((d) => !division || d.code === division) ?? [];
+  const zones = me.role === "state" && (meta?.divisions.length ?? 0) > 1;
+  const districts = divs.flatMap((d) => d.offices).length > 1;
+  if (!zones && !districts) return null;
+  return (
+    <>
+      {zones && (
+        <PlaceSelect label={t("role_zone")} value={division} onChange={(v) => onChange({ division: v, office: "" })}>
+          <option value="">{t("resp_all_zones")}</option>
+          {meta!.divisions.map((d) => <option key={d.code} value={d.code}>{d.label_mr}</option>)}
+        </PlaceSelect>
+      )}
+      {districts && (
+        <PlaceSelect label={t("zb_district")} value={office} onChange={(v) => onChange({ office: v })}>
+          <option value="">{t("resp_all_districts")}</option>
+          {divs.map((d) => (
+            <optgroup key={d.code} label={d.label_mr}>
+              {d.offices.map((o) => <option key={o.code} value={o.code}>{name(o)}</option>)}
+            </optgroup>
+          ))}
+        </PlaceSelect>
+      )}
+    </>
+  );
+}
+
+function PlaceSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  return (
+    <span className={cn("relative min-w-0 flex-1 rounded-xl border-[1.5px] sm:max-w-56 sm:flex-none", value ? "border-r-ink" : "border-r-line")}>
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}
+        className={cn("h-11 w-full min-w-0 cursor-pointer appearance-none truncate rounded-xl border-0 bg-r-card py-0 pr-9 pl-3 text-[15px] font-semibold outline-none hover:bg-r-sunk focus-visible:ring-2 focus-visible:ring-r-action",
+          value ? "text-r-ink" : "text-r-muted")}>
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-r-muted" aria-hidden />
+    </span>
+  );
+}
+
 // --------------------------------------------------------------------------- one form, as a dropdown
 /** All dates by default; the calendar inside narrows the dropdown to one date. */
-function FormSection({ form, today, day, division, q, open, focus, onToggle, onHits }: {
-  form: FormDef; today: string; day: string | null; division: string; q: string; open: boolean; focus: boolean;
+function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
+  form: FormDef; today: string; day: string | null; q: string; open: boolean; focus: boolean;
   onToggle: () => void; onHits: (id: number, n: number) => void;
 }) {
-  const { t, tf, lang } = useT();
+  const [place, setPlace] = React.useState({ division: "", office: "" });
+  const { division, office } = place;
+  const { t, lang } = useT();
   const box = React.useRef<HTMLElement>(null);
   React.useEffect(() => { if (focus) box.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focus]);
   const qc = useQueryClient();
@@ -156,7 +208,9 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
   const { data, error, isLoading, isFetching } = useResponses(form.id, start, end, division);
   const fields = (data?.form.fields ?? []).filter((x) => !x.archived);
   const canEdit = data?.can_review ?? false;
-  const all = React.useMemo(() => (data?.rows ?? []).filter((r) => r.period_start >= start && r.period_start <= end), [data, start, end]);
+  // the zone is filtered by the server; one district is picked out here
+  const all = React.useMemo(() => (data?.rows ?? []).filter((r) => r.period_start >= start && r.period_start <= end && (!office || r.office === office)),
+    [data, start, end, office]);
 
   // a form whose title matches shows all its offices; otherwise only matching offices
   const needle = norm(q);
@@ -180,9 +234,33 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([p, rs]) => ({ ps: p, rows: sortRows(rs, sort, fields, lang) }));
   }, [rows, byDate, sort, fields, lang]);
 
+  // the date band sticks just under the column headings, whose height depends on how their labels wrap
+  const head = React.useRef<HTMLTableSectionElement>(null);
+  const [headH, setHeadH] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const el = head.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeadH(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [data, rows.length]);
+
   const [busy, setBusy] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; key: string } | null>(null);
   const [showLog, setShowLog] = React.useState(false);
+
+  // full screen: the same body, laid over the page; Escape leaves it unless an edit or the history is open on top
+  const [full, setFull] = React.useState(false);
+  const overlaid = !!editing || showLog;
+  React.useEffect(() => {
+    if (!full) return;
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !overlaid) setFull(false); };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", esc);
+    return () => { document.body.style.overflow = prev; document.removeEventListener("keydown", esc); };
+  }, [full, overlaid]);
+  React.useEffect(() => { if (!open) setFull(false); }, [open]);
 
   const rowId = (r: ResponseRow) => `${r.office}:${r.period_start}`;
   const base = (r: ResponseRow) => `/api/forms/${form.id}/submissions/${r.office}/${r.period_start}`;
@@ -214,58 +292,91 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
   const when = byDate ? `${t("zb_all_dates")} · ${rangeText(start, end, lang)}` : periodName(form, ps, lang);
 
   return (
-    <section ref={box} className="scroll-mt-4 rounded-2xl border border-r-line bg-r-card">
+    <section ref={box} className="scroll-mt-4 rounded-2xl border border-r-line bg-r-card transition-shadow has-[>button:hover]:shadow-lg">
       <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}
-        className={cn("flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-5 py-4 text-left text-r-ink hover:bg-r-ground", open ? "rounded-t-2xl" : "rounded-2xl")}>
+        className={cn("flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-5 py-4 text-left text-r-ink", open ? "rounded-t-2xl" : "rounded-2xl")}>
         <ChevronDown className={cn("size-5 shrink-0 text-r-muted transition-transform", !open && "-rotate-90")} aria-hidden />
         <span className="flex min-w-0 flex-1 flex-col">
           <b className="truncate text-[17px]">{formTitle(form, lang)}</b>
           <span className="text-[13px] text-r-muted">{when}</span>
+          {/* on a phone the chips go under the title, which keeps the full width */}
+          {data && <CountChips sent={sent} total={all.length} edited={edited} small className="mt-1.5 sm:hidden" />}
         </span>
-        {data && <span className="num shrink-0 text-[13px] text-r-muted">{tf("resp_counts", { a: sent, b: all.length })}{edited > 0 && ` · ${tf("resp_edited", { n: edited })}`}</span>}
+        {data && <CountChips sent={sent} total={all.length} edited={edited} className="hidden justify-end sm:flex" />}
       </button>
 
+      {open && full && <div className="fixed inset-0 z-40 bg-[#15202b]/55" aria-hidden onClick={() => setFull(false)} />}
       {open && (
-        <div id={bodyId} className="border-t border-r-line">
-          {!once && (
-            <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-1">
-              <button type="button" aria-pressed={byDate} onClick={() => setSel(null)}
-                className={cn("inline-flex h-11.75 cursor-pointer items-center rounded-xl border-[1.5px] px-4 text-[15px] font-semibold",
-                  byDate ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
-                {t("zb_all_dates")}
-              </button>
-              <span className={cn("rounded-xl border-[1.5px]", !byDate ? "border-r-ink" : "border-r-line")}>
-                <DatePicker align="left" value={sel ?? range.end} max={today} min={form.start_date} last={form.end_date ?? undefined} onChange={setSel}
-                  className={byDate ? "text-r-muted" : undefined} />
+        <div id={bodyId} role={full ? "dialog" : undefined} aria-modal={full || undefined} aria-label={full ? formTitle(form, lang) : undefined}
+          className={cn(full ? "fixed inset-2 z-40 flex flex-col overflow-hidden rounded-2xl border border-r-line bg-r-card shadow-2xl sm:inset-4" : "border-t border-r-line")}>
+          {full && (
+            <div className="flex items-center gap-3 border-b border-r-line py-2.5 pr-2.5 pl-4 sm:py-3 sm:pr-3 sm:pl-5">
+              <span className="flex min-w-0 flex-1 flex-col">
+                <b className="truncate text-[15px] sm:text-[17px]">{formTitle(form, lang)}</b>
+                <span className="truncate text-[13px] text-r-muted">{when}</span>
+                {data && <CountChips sent={sent} total={all.length} edited={edited} small className="mt-1.5 sm:hidden" />}
               </span>
+              {data && <CountChips sent={sent} total={all.length} edited={edited} className="hidden justify-end sm:flex" />}
+              <button type="button" onClick={() => setFull(false)} aria-label={t("close")} title={t("close")}
+                className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-r-sunk text-r-ink hover:bg-r-line">
+                <X className="size-5" aria-hidden />
+              </button>
             </div>
           )}
+          <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-1">
+            {!once && (
+              <>
+                <button type="button" aria-pressed={byDate} onClick={() => setSel(null)}
+                  className={cn("inline-flex h-11.75 cursor-pointer items-center rounded-xl border-[1.5px] px-4 text-[15px] font-semibold",
+                    byDate ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
+                  {t("zb_all_dates")}
+                </button>
+                <span className={cn("rounded-xl border-[1.5px]", !byDate ? "border-r-ink" : "border-r-line")}>
+                  <DatePicker align="left" value={sel ?? range.end} max={today} min={form.start_date} last={form.end_date ?? undefined} onChange={setSel}
+                    className={byDate ? "text-r-muted" : undefined} />
+                </span>
+              </>
+            )}
+            <PlaceFilters division={division} office={office} onChange={(p) => setPlace((s) => ({ ...s, ...p }))} />
+            {/* on a phone only the icon shows, so the date controls keep their row */}
+            <RButton variant="ghost" size="sm" className="ml-auto" onClick={() => setFull((f) => !f)} aria-pressed={full}
+              aria-label={t(full ? "collapse_table" : "expand_table")} title={t(full ? "collapse_table" : "expand_table")}>
+              {full ? <Minimize2 aria-hidden /> : <Maximize2 aria-hidden />}
+              <span className="hidden sm:inline">{t(full ? "collapse_table" : "expand_table")}</span>
+            </RButton>
+          </div>
           {error ? <div className="p-4"><RError error={error} /></div> : isLoading || !data ? <div className="m-4 h-40 animate-pulse rounded-xl bg-r-sunk" /> : !rows.length ? (
             <p className="m-0 p-5 text-r-muted">{t("resp_no_rows")}</p>
           ) : (
-            <div className={cn("max-h-[70vh] overflow-auto scrollbar-thin transition-opacity", isFetching && "opacity-60")}>
-              {/* on a narrow screen the value columns keep a readable width and the grid scrolls sideways */}
-              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 112 + 64 + fields.length * 80 }}>
+            <div className={cn("overflow-auto scrollbar-thin transition-opacity", full ? "min-h-0 flex-1" : "max-h-[70vh]", isFetching && "opacity-60")}>
+              {/* every value column is wide enough that its heading wraps only between words; when they don't all fit,
+                  the grid scrolls sideways with the office column pinned */}
+              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 148 + 72 + fields.length * 120 }}>
                 <colgroup>
                   <col className="w-[112px] md:w-[148px]" />
-                  <col className="w-[64px]" />
+                  <col className="w-18" />
                   {fields.map((x) => <col key={x.key} />)}
                 </colgroup>
-                <thead className="sticky top-0 z-20">
+                <thead ref={head} className="sticky top-0 z-20">
                   <tr>
                     <SortHead col={OFFICE} label={t("office")} sort={sort} onSort={sortBy} className="sticky left-0 z-30 pl-1.5 text-xs" />
-                    <SortHead col={SENT_COL} label={t("sent")} sort={sort} onSort={sortBy} className="px-0 text-xs first-letter:uppercase" />
-                    {fields.map((x) => <SortHead key={x.key} col={x.key} label={fieldLabel(x, lang)} sort={sort} onSort={sortBy} right
-                      className="px-0.5 text-[11px] leading-tight break-words hyphens-auto" />)}
+                    <SortHead col={SENT_COL} label={t("sent")} sort={sort} onSort={sortBy} className="px-0 text-xs" />
+                    {fields.map((x) => <SortHead key={x.key} col={x.key} label={fieldLabel(x, lang)} sort={sort} onSort={sortBy} center
+                      className="px-0.5 text-xs leading-snug break-normal" />)}
                   </tr>
                 </thead>
                 {groups.map((g) => (
                   <tbody key={g.ps || "one"}>
                     {byDate && (
                       <tr>
-                        <th scope="colgroup" colSpan={fields.length + 2} className="sticky left-0 border-b border-r-line bg-r-sunk px-3 py-1.5 text-left text-[13px]">
-                          <span className="font-bold">{periodName(form, g.ps, lang)}</span>
-                          <span className="num ml-2 font-normal text-r-muted">{tf("resp_counts", { a: g.rows.filter((r) => SENT.includes(r.status)).length, b: g.rows.length })}</span>
+                        <th scope="colgroup" colSpan={fields.length + 2} style={{ top: headH }}
+                          className="sticky z-15 border-b border-r-line bg-r-sunk px-3 py-1.5 text-left text-[13px]">
+                          {/* the label also stays at the left edge while the grid scrolls sideways */}
+                          <span className="sticky left-3 inline-flex items-center gap-2.5">
+                            <span className="font-bold">{periodName(form, g.ps, lang)}</span>
+                            <CountChips small sent={g.rows.filter((r) => SENT.includes(r.status)).length} total={g.rows.length}
+                              edited={g.rows.filter((r) => Object.keys(r.corrections).length > 0).length} />
+                          </span>
                         </th>
                       </tr>
                     )}
@@ -307,9 +418,24 @@ function FormSection({ form, today, day, division, q, open, focus, onToggle, onH
   );
 }
 
+/** "43 of 129 sent" (and "2 edited") as status chips, styled as on My forms: green when every office has sent,
+ * soft green part way, grey when none has. */
+function CountChips({ sent, total, edited = 0, small, className }: { sent: number; total: number; edited?: number; small?: boolean; className?: string }) {
+  const { tf } = useT();
+  const chip = cn("num inline-flex shrink-0 items-center rounded-full font-bold whitespace-nowrap", small ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-[13px]");
+  return (
+    <span className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <span className={cn(chip, sent && sent === total ? "bg-r-accepted text-r-card" : sent ? "bg-r-accepted-soft text-r-accepted" : "bg-r-sunk text-r-muted")}>
+        {tf("resp_counts", { a: sent, b: total })}
+      </span>
+      {edited > 0 && <span className={cn(chip, "bg-r-corrected/10 text-r-corrected-ink")}>{tf("resp_edited", { n: edited })}</span>}
+    </span>
+  );
+}
+
 /** A column heading that sorts the table when clicked, with an arrow showing the current direction. */
-function SortHead({ col, label, sort, onSort, right, className }: {
-  col: string; label: string; sort: Sort | null; onSort: (key: string) => void; right?: boolean; className?: string;
+function SortHead({ col, label, sort, onSort, center, className }: {
+  col: string; label: string; sort: Sort | null; onSort: (key: string) => void; center?: boolean; className?: string;
 }) {
   const { tf } = useT();
   const dir = sort?.key === col ? sort.dir : null;
@@ -318,13 +444,13 @@ function SortHead({ col, label, sort, onSort, right, className }: {
   // sorts; the sorted column is tinted, distinct from the hover, so the first click visibly takes
   return (
     <th scope="col" aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}
-      className={cn("h-px border-b border-r-line bg-r-card p-1 align-bottom font-bold", className)}>
+      className={cn("h-px border-b border-r-line bg-r-card p-1 align-middle font-bold", className)}>
       <button type="button" onClick={() => onSort(col)} title={tf("sort_by", { f: label })}
-        className={cn("group flex h-full w-full cursor-pointer items-end gap-1 rounded-lg border-0 px-1.5 py-1.5 font-[inherit] leading-[inherit] select-none",
-          right ? "justify-end text-right" : "text-left",
+        className={cn("group flex h-full w-full cursor-pointer items-center gap-1 rounded-lg border-0 px-1.5 py-1.5 font-[inherit] leading-[inherit] select-none",
+          center ? "justify-center text-center" : "justify-start text-left",
           dir ? "bg-r-action-soft text-r-action" : "bg-transparent text-r-muted hover:bg-r-sunk hover:text-r-ink")}>
-        <span className="min-w-0">{label}</span>
-        <Arrow className={cn("mb-px size-3 shrink-0", dir ? "opacity-100" : "opacity-0 group-hover:opacity-50")} aria-hidden />
+        <span className="block min-w-0 text-balance first-letter:uppercase">{label}</span>
+        <Arrow className={cn("size-3 shrink-0", dir ? "opacity-100" : "opacity-0 group-hover:opacity-50")} aria-hidden />
       </button>
     </th>
   );
@@ -350,10 +476,10 @@ function Row({ r, fields, canEdit, editing, onEdit }: {
         const shown = c ? <span className="corr">{showValue(x, v, t)}</span> : !sent && r.status !== "draft" ? "—" : showValue(x, v, t);
         const tip = c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : undefined;
         return (
-          <td key={x.key} className={cn("num truncate border-b border-r-line-soft text-right", !sent && "text-r-faint", canEdit ? "p-0.5" : "px-1.5 py-1.5")}>
+          <td key={x.key} className={cn("num truncate border-b border-r-line-soft text-center", !sent && "text-r-faint", canEdit ? "p-0.5" : "px-1.5 py-1.5")}>
             {canEdit ? (
               <button type="button" onClick={() => onEdit(x.key)} title={tip ?? t("edit_value")} aria-label={`${t("edit_value")}: ${fieldLabel(x, lang)}, ${officeName(r, lang)}`}
-                className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-right text-sm hover:bg-r-card hover:text-r-ink hover:ring-1 hover:ring-r-line",
+                className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-center text-sm hover:bg-r-card hover:text-r-ink hover:ring-1 hover:ring-r-line",
                   sent ? "text-r-ink" : "text-r-faint", editing === x.key && "bg-r-card ring-2 ring-r-action")}>
                 {shown}
               </button>

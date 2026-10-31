@@ -1,14 +1,7 @@
 @import "tailwindcss";
-@import "@fontsource-variable/inter";
-@import "@fontsource/noto-sans-devanagari/400.css";
-@import "@fontsource/noto-sans-devanagari/600.css";
-@import "@fontsource/atkinson-hyperlegible-next/400.css";
-@import "@fontsource/atkinson-hyperlegible-next/500.css";
-@import "@fontsource/atkinson-hyperlegible-next/700.css";
-@import "@fontsource-variable/plus-jakarta-sans";
-@import "@fontsource/ibm-plex-mono/400.css";
-@import "@fontsource/ibm-plex-mono/500.css";
-@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource-variable/noto-sans";
+@import "@fontsource-variable/noto-sans-devanagari";
+@import "@fontsource-variable/noto-sans-mono";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -209,9 +202,9 @@
 }
 
 @theme inline {
-  --font-body: "Atkinson Hyperlegible Next", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif;
-  --font-display: "Plus Jakarta Sans Variable", "Noto Sans Devanagari", system-ui, sans-serif;
-  --font-figure: "IBM Plex Mono", ui-monospace, "Noto Sans Devanagari", monospace;
+  --font-body: "Noto Sans Variable", "Noto Sans Devanagari Variable", "Nirmala UI", system-ui, sans-serif;
+  --font-display: "Noto Sans Variable", "Noto Sans Devanagari Variable", "Nirmala UI", system-ui, sans-serif;
+  --font-figure: "Noto Sans Variable", "Noto Sans Devanagari Variable", system-ui, sans-serif;
   --color-r-ink: var(--r-ink);
   --color-r-ground: var(--r-ground);
   --color-r-card: var(--r-card);
@@ -251,8 +244,8 @@
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", "Noto Sans Devanagari", "Nirmala UI", system-ui, sans-serif;
-  --font-mono: ui-monospace, "Cascadia Code", Consolas, "Noto Sans Devanagari", monospace;
+  --font-sans: "Noto Sans Variable", "Noto Sans Devanagari Variable", "Nirmala UI", system-ui, sans-serif;
+  --font-mono: "Noto Sans Mono Variable", ui-monospace, Consolas, "Noto Sans Devanagari Variable", monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -356,7 +349,7 @@
    so nothing escapes it and widens the page. */
 .rpt .overflow-auto, .rpt .overflow-x-auto { position: relative; }
 
-.kbd { font-family: var(--font-figure); font-size: 12px; border: 1px solid var(--r-field); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--r-card); color: var(--r-ink); }
+.kbd { font-family: var(--font-mono); font-size: 12px; border: 1px solid var(--r-field); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; background: var(--r-card); color: var(--r-ink); }
 
 /* Print / PDF from the Reports export panel: while body.rpt-printing is set, only the table container prints
    (no sidebar, controls or dialogs), in black on white whatever the theme, in the Devanagari-capable body face. */

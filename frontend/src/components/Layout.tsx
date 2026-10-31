@@ -2,12 +2,13 @@ import * as React from "react";
 import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import {
   Activity, BarChart3, CircleUserRound, ClipboardCheck, ClipboardList, Clock3,
-  Inbox, KeyRound, Languages, LayoutDashboard, LayoutGrid, LogOut, MapPinned, Menu, Moon, Newspaper, Sheet, Sun, UserCog, X,
+  Inbox, KeyRound, LayoutDashboard, LayoutGrid, MapPinned, Menu, Newspaper, Sheet, UserCog, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useLogout, useUser } from "@/lib/auth";
-import { useLang, useT, type TKey } from "@/lib/i18n";
+import { useUser } from "@/lib/auth";
+import { useT, type TKey } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { UserMenu } from "@/components/UserMenu";
 import { AttentionBell, useInboxCount } from "@/pages/forms/MyForms";
 import { OfflineBanner, RSheet } from "@/components/reports/kit";
 import { PasswordForm } from "@/pages/Account";
@@ -15,15 +16,15 @@ import type { Role } from "@/lib/api";
 import emblem from "@/assets/maharashtra-emblem.png";
 
 /** Reports section (अहवाल): offices fill their forms; the state admin builds forms and reviews responses. */
-type NavItem = { to: string; label: TKey; hint: TKey; icon: React.ElementType; roles: Role[]; badge?: boolean };
+type NavItem = { to: string; label: TKey; icon: React.ElementType; roles: Role[]; badge?: boolean };
 const OFFICE: NavItem[] = [
-  { to: "/office/desk", label: "nav_desk", hint: "nav_desk_hint", icon: Inbox, roles: ["state"] },
-  { to: "/office/board", label: "nav_board", hint: "nav_board_hint", icon: LayoutGrid, roles: ["zone"] },
-  { to: "/forms/mine", label: "nav_today", hint: "nav_today_hint", icon: Clock3, roles: ["district"], badge: true },
-  { to: "/forms", label: "nav_forms", hint: "nav_forms_hint", icon: ClipboardList, roles: ["state"] },
-  { to: "/forms/responses", label: "nav_responses", hint: "nav_responses_hint", icon: ClipboardCheck, roles: ["state"] },
-  { to: "/office/analytics", label: "nav_my_numbers", hint: "nav_my_numbers_hint", icon: BarChart3, roles: ["district"] },
-  { to: "/office/reports", label: "nav_reports", hint: "nav_reports_hint", icon: Sheet, roles: ["district", "zone", "state"] },
+  { to: "/office/desk", label: "nav_desk", icon: Inbox, roles: ["state"] },
+  { to: "/office/board", label: "nav_board", icon: LayoutGrid, roles: ["zone"] },
+  { to: "/forms/mine", label: "nav_today", icon: Clock3, roles: ["district"], badge: true },
+  { to: "/forms", label: "nav_forms", icon: ClipboardList, roles: ["state"] },
+  { to: "/forms/responses", label: "nav_responses", icon: ClipboardCheck, roles: ["state"] },
+  { to: "/office/analytics", label: "nav_my_numbers", icon: BarChart3, roles: ["district"] },
+  { to: "/office/reports", label: "nav_reports", icon: Sheet, roles: ["district", "zone", "state"] },
 ];
 
 /** The district office's phone tabs (the design's bottom bar). */
@@ -106,7 +107,7 @@ export function useTheme() {
   return { dark, toggle };
 }
 
-const ACTIVE = "bg-sidebar-accent text-white shadow-[inset_3px_0_0_var(--r-focus)]";
+const ACTIVE = "bg-sidebar-accent text-white";
 
 const navCls = (active: boolean) =>
   cn("flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition-colors hover:bg-sidebar-accent hover:text-white", active && ACTIVE);
@@ -157,13 +158,8 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             {OFFICE.filter((o) => o.roles.includes(me.role)).map((o) => {
               const active = current === o.to || (o.to === "/forms/mine" && /^\/forms\/\d+\/fill/.test(pathname));
               return (
-                <Link key={o.to + o.label} to={o.to} onClick={onNavigate}
-                  className={cn("flex items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-sidebar-accent", active && ACTIVE)}>
-                  <o.icon className={cn("size-4 shrink-0", active && "text-white")} />
-                  <span className="leading-tight">
-                    <span className={cn("block text-sm font-bold", active && "text-white")}>{t(o.label)}</span>
-                    <span className="block text-xs text-sidebar-muted">{t(o.hint)}</span>
-                  </span>
+                <Link key={o.to + o.label} to={o.to} onClick={onNavigate} className={navCls(active)}>
+                  <o.icon className="size-4 shrink-0" /> {t(o.label)}
                   {o.badge && pending > 0 && me.role === "district" && (
                     <span className="num ml-auto rounded-full bg-r-focus px-1.5 py-0.5 text-[11px] font-semibold text-[#15202b]">{pending}</span>
                   )}
@@ -219,28 +215,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function UserBadge() {
-  const me = useUser();
-  const { t, shortName } = useT();
-  const where = me.role === "zone" ? me.division?.label_mr : me.role === "district" ? shortName(me.office) : "";
-  return (
-    <div className="min-w-0 text-right leading-tight">
-      <div className="truncate text-sm font-medium">{me.display_name || me.username}</div>
-      <div className="truncate text-xs text-muted-foreground">
-        {/* On a phone the office alone says enough; the role prefix returns from sm up. */}
-        <span className={cn(where && "hidden sm:inline")}>{t(("role_" + me.role) as TKey)}{where ? " · " : ""}</span>{where}
-      </div>
-    </div>
-  );
-}
-
 export function Layout() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const { dark, toggle } = useTheme();
   const { pathname } = useLocation();
-  const { lang, setLang } = useLang();
-  const { t } = useT();
-  const logout = useLogout();
 
   React.useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
   const reports = isReportsPath(pathname);
@@ -266,12 +243,7 @@ export function Layout() {
         <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen(true)}><Menu /></Button>
         <div className="flex-1" />
         <AttentionBell />
-        <UserBadge />
-        <Button variant="ghost" size="sm" onClick={() => setLang(lang === "mr" ? "en" : "mr")} title="मराठी / English">
-          <Languages /> <span className="hidden sm:inline">{lang === "mr" ? "EN" : "मरा"}</span>
-        </Button>
-        <Button variant="ghost" size="icon-sm" onClick={toggle} title="Toggle theme">{dark ? <Sun /> : <Moon />}</Button>
-        <Button variant="ghost" size="icon-sm" onClick={logout} title={t("logout")}><LogOut /></Button>
+        <UserMenu />
       </header>
 
       <main className={cn("mx-auto w-full px-4 py-6 sm:px-6 lg:px-8 lg:py-8", pathname === "/office/board" ? "max-w-[1840px]" : "max-w-[1400px]", tabs && "pb-28 lg:pb-8")}>

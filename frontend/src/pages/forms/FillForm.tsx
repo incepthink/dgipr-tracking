@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useBlocker, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertCircle, Check, ChevronLeft, ClipboardPaste, History, Lock } from "lucide-react";
+import { AlertCircle, Check, ChevronLeft, ClipboardPaste, History, Info, Lock } from "lucide-react";
 import { api, ApiError, type AnswerValue, type FormDef, type FormField, type PeriodsResponse, type Submission } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
@@ -13,6 +13,12 @@ import { DateInput } from "@/components/reports/DateInput";
 import { dayMonth, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, useToday } from "./common";
+
+// Keys shown together are pressed together (Ctrl + V); each row is a separate shortcut.
+const SHORTCUTS: [string[], TKey][] = [
+  [["Tab"], "kb_next"], [["Enter"], "kb_down"], [["← ↑ → ↓"], "kb_arrows"],
+  [["Ctrl", "V"], "kb_paste"], [["Delete"], "kb_clear"], [["Ctrl", "S"], "kb_save"],
+];
 
 type Draft = Record<string, Record<string, string>>; // period_start -> field key -> text ("" = blank)
 type Tr = ReturnType<typeof useT>;
@@ -481,9 +487,8 @@ function FieldRow({ f, first, value, disabled, corrected, changed, zero, problem
   const { t, lang } = tr;
   const id = `f_${f.key}`;
   const hint = hintOf(f, tr);
-  const blank = value === "";
   const inputCls = cn("h-[54px] w-28 shrink-0 rounded-xl px-3.5 text-right num text-xl font-semibold text-r-ink placeholder:font-body placeholder:text-sm placeholder:font-normal placeholder:text-r-faint disabled:opacity-100",
-    blank ? "border-[1.5px] border-dashed border-r-faint bg-r-ground" : "border-[1.5px] border-r-faint bg-r-card",
+    "border-[1.5px] border-r-faint bg-r-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-r-action focus:outline-2 focus:outline-offset-0 focus:outline-r-action/30",
     zero === "ask" && "border-2 border-solid border-r-returned bg-r-returned-soft",
     problem && "border-2 border-solid border-r-overdue bg-r-overdue-soft text-r-overdue-ink",
     corrected && "text-r-corrected-ink", disabled && "border-solid bg-r-sunk/60", changed && !problem && zero !== "ask" && "border-r-action");
@@ -651,6 +656,20 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
     const el = tableRef.current?.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
     if (el) { el.focus(); if (el instanceof HTMLInputElement) el.select(); }
   };
+  // Tab with nothing focused yet jumps straight to the first box the office can fill, skipping the header links.
+  React.useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
+      if (document.activeElement && document.activeElement !== document.body) return;
+      const el = tableRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>("[data-r]:not(:disabled)");
+      if (!el) return;
+      e.preventDefault();
+      el.focus();
+      if (el instanceof HTMLInputElement) el.select();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   const onKey = (e: React.KeyboardEvent<HTMLElement>, r: number, c: number) => {
     const el = e.currentTarget as HTMLInputElement;
     const atStart = !(el instanceof HTMLInputElement) || (el.selectionStart === 0 && el.selectionEnd === 0);
@@ -725,7 +744,7 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
                   const ps = p.period_start;
                   const w = !p.read_only_reason;
                   const mark: Mark = dirtyOf(ps) && w ? "draft" : markOf(p.status, isOverdue(p.status, p.deadline));
-                  const tint = p.status === "returned" ? "bg-r-returned-soft" : !w ? "bg-r-ground" : "bg-r-card";
+                  const tint = p.status === "returned" ? "bg-r-returned-soft" : !w ? "bg-r-sunk/50" : "bg-r-card";
                   return (
                     <tr key={ps} className={tint}>
                       <th scope="row" className={cn("sticky left-0 z-10 border-r border-b border-r-line px-3 py-1.5 text-left font-normal", tint)}>
@@ -749,8 +768,7 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
                         const prob = problemOf(f, v, tr);
                         const corr = p.corrections[f.key];
                         const changed = v !== (original[ps]?.[f.key] ?? "");
-                        const cls = cn("h-9 w-full min-w-[72px] rounded-md px-1.5 text-right num text-sm font-semibold text-r-ink no-spin disabled:cursor-default",
-                          v === "" ? "border border-dashed border-r-field bg-r-ground" : "border border-r-field bg-r-card",
+                        const cls = cn("h-9 w-full min-w-[72px] rounded-md border border-r-field bg-r-card px-1.5 text-right num text-sm font-semibold text-r-ink no-spin shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] enabled:hover:border-r-faint focus:border-r-action focus:outline-2 focus:outline-offset-0 focus:outline-r-action/30 disabled:cursor-default disabled:shadow-none",
                           z === "ask" && "border-2 border-solid border-r-returned bg-r-returned-soft",
                           prob && "border-2 border-solid border-r-overdue bg-r-overdue-soft text-r-overdue-ink",
                           corr && "text-r-corrected-ink", !w && "border-transparent bg-transparent", changed && !prob && z !== "ask" && "border-r-action");
@@ -781,12 +799,18 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
               </tbody>
             </table>
           </div>
-          <div className="flex flex-wrap gap-x-[18px] gap-y-2 text-[13px] text-r-muted">
-            <span><span className="kbd">Tab</span> <span className="kbd">Enter</span> <span className="kbd">← ↑ → ↓</span> {t("kb_move")}</span>
-            <span><span className="kbd">Ctrl V</span> {t("kb_paste")}</span>
-            <span><span className="kbd">Del</span> {t("kb_clear")}</span>
-            <span><span className="kbd">Ctrl S</span> {t("kb_save")}</span>
-            <span>{t("locked_rows")}</span>
+          <div className="flex flex-col gap-2 text-[13px] text-r-muted">
+            <span className="text-xs font-bold text-r-ink">{t("kb_title")}</span>
+            <dl className="m-0 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 sm:grid-cols-[auto_1fr_auto_1fr] sm:gap-x-4">
+              {SHORTCUTS.map(([keys, k]) => (
+                <React.Fragment key={k}>
+                  <dt className="flex items-center gap-1 whitespace-nowrap">
+                    {keys.map((key, j) => <React.Fragment key={key}>{j > 0 && <span aria-hidden>+</span>}<kbd className="kbd">{key}</kbd></React.Fragment>)}
+                  </dt>
+                  <dd className="m-0">{t(k)}</dd>
+                </React.Fragment>
+              ))}
+            </dl>
           </div>
           {instructions.trim() && (
             <details id="instructions" className="rounded-xl bg-r-card px-3.5 py-3">
@@ -798,7 +822,6 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
 
         <aside aria-label={t("send_title")} className="flex w-full flex-col gap-3.5 rounded-[14px] bg-r-card p-[18px]">
           <h2 className="m-0 text-lg font-bold">{t("send_title")}</h2>
-          {candidates.length === 0 && <p className="m-0 text-sm text-r-muted">{t("nothing_to_send")}</p>}
           {candidates.length > 0 && <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">{candidates.map((p) => {
             const ps = p.period_start;
             const c = check(ps);
@@ -833,7 +856,10 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
           <RButton size="lg" variant="pri" className="w-full" disabled={!toSend.length || busy} loading={busy} onClick={() => onSend(toSend)}>
             {toSend.length ? tf("send_n", { n: toSend.length <= 3 ? toSend.map((ps) => label(ps)).join(", ") : String(toSend.length) }) : t("send_title")}
           </RButton>
-          <span className="text-[13px] text-r-muted">{t("sent_lock_note")}</span>
+          <p className="m-0 flex items-start gap-2 text-[13px] text-r-muted">
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <span>{candidates.length === 0 && `${t("nothing_to_send")} `}{t("sent_lock_note")}</span>
+          </p>
           {dirtyCount > 0 && (
             <div className="flex flex-col gap-2 border-t border-r-line pt-3">
               <span className="text-sm font-bold">{dirtyCount} · {t("unsaved")}</span>

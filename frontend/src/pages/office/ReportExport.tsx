@@ -47,8 +47,10 @@ type Fmt = "xlsx" | "csv" | "print";
 const FMT_LABEL: Record<Fmt, TKey> = { xlsx: "fmt_excel", csv: "fmt_csv", print: "fmt_print" };
 
 /** Pick a table (or the whole workbook), its dates, division and format; pre-filled from the screen. */
-export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
+export function ReportExportSheet({ f, open, onClose, kind, asOf, start, sort }: {
   f: FormFilters; open: boolean; onClose: () => void; kind: Kind; asOf: string;
+  /** The screen's range start; one later than the campaign's opens the dates on "custom". */
+  start?: string;
   /** The screen's row order (column + asc/desc); tables export in that order. */
   sort?: { sort?: string; order?: string };
 }) {
@@ -73,7 +75,8 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
 
   React.useEffect(() => {
     if (!open) return;
-    setWhat(kind); setDay(asOf); setPreset("campaign"); setFrom(lo); setTo(asOf); setDivision(f.division); setFmt("xlsx");
+    const custom = !!start && start > lo;
+    setWhat(kind); setDay(asOf); setPreset(custom ? "custom" : "campaign"); setFrom(custom ? start : lo); setTo(asOf); setDivision(f.division); setFmt("xlsx");
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // print the fetched table, then put the page back
@@ -146,32 +149,32 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
   return (
     <>
       <RSheet open={open} onClose={onClose} closeLabel={t("close")} title={t("exp_title")} description={formTitle(form, lang)} footer={footer} wide>
-        <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-          <legend className="mb-1.5 p-0 font-bold">{t("exp_what")}</legend>
-          <div role="radiogroup" aria-label={t("exp_what")} className="flex flex-col gap-2">
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className="mb-2.5 p-0 font-bold">{t("exp_what")}</legend>
+          <div role="radiogroup" aria-label={t("exp_what")} className="flex flex-col gap-1">
             {[...kinds, "workbook" as const].map((k) => (
-              <RCheck key={k} radio plain checked={what === k} onChange={() => chooseWhat(k)} className="min-h-9 text-[15px]">
+              <RCheck key={k} radio plain checked={what === k} onChange={() => chooseWhat(k)} className="min-h-10 rounded-lg px-2 text-[15px] hover:bg-r-sunk">
                 {k === "workbook" ? t("exp_workbook") : t(`t_${k}` as TKey)}
               </RCheck>
             ))}
           </div>
         </fieldset>
 
-        <fieldset className="m-0 flex flex-col gap-2.5 border-0 p-0">
-          <legend className="mb-1.5 p-0 font-bold">{t("exp_dates")}</legend>
+        <fieldset className="m-0 flex flex-col gap-3 border-0 border-t border-r-line-soft p-0 pt-5">
+          <legend className="float-left mb-2.5 w-full p-0 font-bold">{t("exp_dates")}</legend>
           {daily ? (
             <RLabel small label={t("date")} className="self-start">
               <DateInput value={day} min={lo} max={hi} onChange={(d) => d && setDay(clampDay(d))} />
             </RLabel>
           ) : (
             <>
-              <div role="radiogroup" aria-label={t("exp_dates")} className="flex flex-wrap gap-2">
+              <div role="radiogroup" aria-label={t("exp_dates")} className="flex flex-wrap gap-2.5">
                 <RCheck radio checked={preset === "campaign"} onChange={() => setPreset("campaign")}>{tf("preset_campaign", { date: rangeText(asOf, asOf, lang) })}</RCheck>
                 {!once && <RCheck radio checked={preset === "last7"} onChange={() => setPreset("last7")}>{t("last7")}</RCheck>}
                 <RCheck radio checked={preset === "custom"} onChange={() => setPreset("custom")}>{t("preset_custom")}</RCheck>
               </div>
               {preset === "custom" && (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-4">
                   <RLabel small label={t("from")}>
                     <DateInput value={from} min={lo} max={hi} onChange={(d) => d && setFrom(clampDay(d))} aria-invalid={badRange || undefined} />
                   </RLabel>
@@ -186,17 +189,17 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
         </fieldset>
 
         {me.role === "state" && (
-          <RLabel small label={t("division")} className="self-start">
-            <RSelect value={division} onChange={(e) => setDivision(e.target.value)}>
+          <RLabel small label={t("division")} className="border-t border-r-line-soft pt-5">
+            <RSelect value={division} className="self-start" onChange={(e) => setDivision(e.target.value)}>
               <option value="">{t("all_divisions")}</option>
               {meta?.divisions.map((d) => <option key={d.code} value={d.code}>{d.label_mr}</option>)}
             </RSelect>
           </RLabel>
         )}
 
-        <fieldset className="m-0 flex flex-col gap-1.5 border-0 p-0">
-          <legend className="mb-1.5 p-0 font-bold">{t("exp_format")}</legend>
-          <div role="radiogroup" aria-label={t("exp_format")} className="flex flex-wrap gap-2">
+        <fieldset className="m-0 flex flex-col gap-3 border-0 border-t border-r-line-soft p-0 pt-5">
+          <legend className="float-left mb-2.5 w-full p-0 font-bold">{t("exp_format")}</legend>
+          <div role="radiogroup" aria-label={t("exp_format")} className="flex flex-wrap gap-2.5">
             {(["xlsx", "csv", "print"] as const).map((x) => (
               <RCheck key={x} radio checked={fmt === x} disabled={!fmtOk(x)} onChange={() => setFmt(x)}>{t(FMT_LABEL[x])}</RCheck>
             ))}
