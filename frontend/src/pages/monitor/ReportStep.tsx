@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Download, Eye, FileDown, RotateCw } from "lucide-react";
-import { api, type Cell, type Issue, type ReportData, type ReportResponse } from "@/lib/api";
+import { api, backendUrl, type Cell, type Issue, type ReportData, type ReportResponse } from "@/lib/api";
 import { cn, qs } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { labelOf } from "@/lib/status";
@@ -11,7 +11,7 @@ import { ActiveCard, dayLabel, Eyebrow, PendingCard, rangeLabel, StepFrame } fro
 
 export function pdfUrls(campaignId: number, start: string, end: string) {
   const base = { campaign_id: campaignId || null, start, end };
-  return { preview: `/report/preview.pdf${qs(base)}`, download: `/report/preview.pdf${qs({ ...base, download: 1 })}` };
+  return { preview: backendUrl(`/report/preview.pdf${qs(base)}`), download: backendUrl(`/report/preview.pdf${qs({ ...base, download: 1 })}`) };
 }
 
 export function ReportTeaser({ waitingOnReview, start, end, previewUrl }: { waitingOnReview: boolean; start: string; end: string; previewUrl?: string }) {

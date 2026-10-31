@@ -17,7 +17,7 @@ export function SmallMultiples({ data, byOffice, metricLabel }: { data: Heatmap;
       const key = byOffice ? r.code : r.division;
       const p = m.get(key) ?? { key, label: byOffice ? name(r) : r.division_mr, days: data.periods.map(() => null), sent: 0, due: 0 };
       r.cells.forEach((c, j) => {
-        const isSent = c.status === "submitted" || c.status === "accepted" || c.status === "returned";
+        const isSent = c.status === "submitted" || c.status === "returned";
         if (isSent) { p.sent++; p.days[j] = (p.days[j] ?? 0) + (c.total ?? 0); }
         if (isSent || c.due) p.due++;
       });

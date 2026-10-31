@@ -23,7 +23,7 @@ export function CalendarHeatmap({ data, metricLabel }: { data: Heatmap; metricLa
   const multiDiv = new Set(data.rows.map((r) => r.division)).size > 1;
   const box = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => { if (box.current) box.current.scrollLeft = box.current.scrollWidth; }, [data.end]);
-  const sent = (s: string) => s === "submitted" || s === "accepted" || s === "returned";
+  const sent = (s: string) => s === "submitted" || s === "returned";
   return (
     <div className="flex flex-col gap-2">
       <div ref={box} className="overflow-x-auto scrollbar-thin">

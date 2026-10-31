@@ -1,3 +1,8 @@
+/** Where the FastAPI backend is mounted relative to this origin: "" when FastAPI serves the SPA itself,
+ * "/tracking/backend" on dgipr.hashcase.tech (set via VITE_BACKEND_PREFIX at build time). */
+export const BACKEND_PREFIX: string = import.meta.env.VITE_BACKEND_PREFIX ?? "";
+export const backendUrl = (path: string) => BACKEND_PREFIX + path;
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -10,7 +15,7 @@ export class ApiError extends Error {
 export const UNAUTHORIZED_EVENT = "dgipr:unauthorized";
 
 async function request<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
+  const res = await fetch(backendUrl(url), {
     method,
     credentials: "same-origin",
     headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
@@ -195,7 +200,7 @@ export interface Me {
 export type FieldType = "number" | "text" | "yesno" | "choice" | "date";
 export type Frequency = "daily" | "weekly" | "once";
 export type FormStatus = "draft" | "published" | "closed" | "archived";
-export type SubStatus = "none" | "draft" | "submitted" | "returned" | "accepted";
+export type SubStatus = "none" | "draft" | "submitted" | "returned";
 
 export interface FormField {
   id: number | null; key: string; label_mr: string; label_en: string; help_mr: string; help_en: string;
@@ -225,12 +230,14 @@ export interface InboxForm {
 
 export type AnswerValue = number | string | null;
 export interface Correction { original: AnswerValue; by: string; at: string; note: string }
+/** One change to a value after its period was sent, by the state office or the office itself; `reverts` names the edit an undo went back on. */
+export interface ValueEdit { id: number; key: string; before: AnswerValue; after: AnswerValue; by: string; at: string; note: string; reverts: number | null; source: "office" | "state" }
 
 export interface Submission {
   form_id: number; office: string; period_start: string; period_end: string; label: string; status: SubStatus;
   late: boolean; deadline: string | null; submitted_at: string | null; submitted_by: string; reviewed_at: string | null;
   reviewed_by: string; review_note: string; note: string; values: Record<string, AnswerValue>;
-  corrections: Record<string, Correction>; entered_by: string | null; entered_at: string | null;
+  corrections: Record<string, Correction>; edits: ValueEdit[]; entered_by: string | null; entered_at: string | null;
   read_only_reason?: string | null;
 }
 

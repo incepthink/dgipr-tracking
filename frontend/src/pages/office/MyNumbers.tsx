@@ -38,7 +38,7 @@ export default function MyNumbersPage() {
   const ps = periods.data?.periods ?? [];
   const toSend = ps.filter((p) => (p.status === "none" || p.status === "draft" || p.status === "returned") && !p.read_only_reason);
   const flags = [...(att.data?.spikes ?? []), ...(att.data?.repeats ?? [])];
-  const sent = ps.filter((p) => ["submitted", "accepted", "returned"].includes(p.status));
+  const sent = ps.filter((p) => ["submitted", "returned"].includes(p.status));
   const late = sent.filter((p) => p.late).length;
   const s = summary.data;
   const comparable = !!s && !!f.form && s.previous.start >= f.form.start_date;

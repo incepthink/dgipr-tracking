@@ -44,7 +44,7 @@ def test_workbook_layout_totals_and_highlights(session):
     assert wb["सूचना"]["A3"].value == "ओळ एक" and wb["सूचना"]["A4"].value == "ओळ दोन"
 
     de = wb["डेटा एंट्री"]
-    assert [c.value for c in de[3]] == ["दिनांक", "विभागाचे नाव", "जिल्ह्याचे नाव", "लेख", "वृत्त", "शेरा", "स्थिती"]
+    assert [c.value for c in de[3]] == ["दिनांक", "विभागाचे नाव", "कार्यालयाचे नाव", "लेख", "वृत्त", "शेरा", "स्थिती"]
     rows = [[c.value for c in r] for r in de.iter_rows(min_row=4)]
     assert len(rows) == 2 * 3  # every office × day, blanks included
     by = {(r[0].date(), r[2]): r for r in rows}

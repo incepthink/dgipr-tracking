@@ -1,35 +1,22 @@
 import * as React from "react";
 import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, FileSpreadsheet } from "lucide-react";
-import { api, type FormDef, type FormField, type ResponseRow, type ResponsesData } from "@/lib/api";
+import { api, backendUrl, type FormDef, type FormField, type ResponseRow, type ResponsesData } from "@/lib/api";
 import { useUser } from "@/lib/auth";
 import { useT } from "@/lib/i18n";
-import { addDays, cn, qs } from "@/lib/utils";
+import { cn, qs } from "@/lib/utils";
 import { RButton, RError, RPage, RSearch, StatusMark, markOf } from "@/components/reports/kit";
-import { deadlineOf, durationText, fig, isOverdue, longDay, periodOf, rangeText, sameIstDay, stepOf, timeOf, whenText } from "@/components/reports/period";
+import { deadlineOf, durationText, fig, isOverdue, longDay, periodOf, rangeText, sameIstDay, timeOf, whenText } from "@/components/reports/period";
 import { fieldLabel, formTitle, useFormFilters } from "../forms/common";
-import { DatePicker, officeName, shortOffice, showValue } from "../forms/Responses";
+import { allRange, DatePicker, officeName, shortOffice, showValue, startedForms } from "../forms/Responses";
 import { periodName, useResponses } from "./shared";
 
-const SENT = ["submitted", "accepted", "returned"];
+const SENT = ["submitted", "returned"];
 const isSent = (r: ResponseRow) => SENT.includes(r.status);
 const norm = (s: string) => s.toLocaleLowerCase().trim();
 
 const FILTERS = ["all", "waiting", "done"] as const;
 type Filter = (typeof FILTERS)[number];
-
-/** Every period of a form so far, capped at the latest 62 (the most the API serves at once). */
-function allRange(form: FormDef, today: string) {
-  const last = form.end_date && form.end_date < today ? form.end_date : today;
-  const end = periodOf(form, last);
-  return { start: [form.start_date, addDays(end, -61 * stepOf(form))].sort().at(-1)!, end };
-}
-
-/** Forms that have started, newest first. */
-function startedForms(forms: FormDef[], today: string) {
-  return forms.filter((x) => (x.status === "published" || x.status === "closed") && x.start_date <= today)
-    .sort((a, b) => b.start_date.localeCompare(a.start_date));
-}
 
 /** Zone officer's home: every form, each a dropdown showing how each district in the zone stands across its dates. Read-only. */
 export default function ZoneBoardPage() {
@@ -180,7 +167,7 @@ function FormRow({ form, today, match, open, onToggle }: {
               </>
             )}
             <RButton asChild size="sm" variant="ghost" className="ml-auto">
-              <a href={`/api/forms/${form.id}/export?start=${start}&end=${end}`} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
+              <a href={backendUrl(`/api/forms/${form.id}/export?start=${start}&end=${end}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
             </RButton>
           </div>
           {error ? <RError error={error} /> : !data ? <div className="h-40 animate-pulse rounded-xl bg-r-sunk" /> : !rows.length ? (
@@ -282,12 +269,11 @@ function StatusCell({ form, r, now }: { form: FormDef; r: ResponseRow; now: numb
   const { t, tf, lang } = useT();
   const over = isOverdue(r.status, deadlineOf(form, r.period_start), now);
   const at = r.submitted_at ? (r.submitted_at.slice(0, 10) <= r.period_end ? timeOf(r.submitted_at, lang) : whenText(r.submitted_at, lang)) : "";
-  const word = r.status === "accepted" ? t("sub_accepted")
-    : r.status === "submitted" ? (at ? tf("zb_sent_at", { time: at }) : t("sub_submitted"))
+  const word = r.status === "submitted" ? (at ? tf("zb_sent_at", { time: at }) : t("sub_submitted"))
     : r.status === "returned" ? t("zb_returned")
     : over ? t("overdue")
     : r.status === "draft" ? t("draft_not_sent") : t("sub_none");
-  const tone = r.status === "accepted" || r.status === "submitted" ? "text-r-ink" : r.status === "returned" || over ? "font-semibold text-r-overdue-ink" : "text-r-muted";
+  const tone = r.status === "submitted" ? "text-r-ink" : r.status === "returned" || over ? "font-semibold text-r-overdue-ink" : "text-r-muted";
   const full = `${word}${r.late && isSent(r) ? ` · ${t("late")}` : ""}`;
   return (
     <span className={cn("inline-flex max-w-full items-center gap-1.5", tone)} title={r.status === "returned" && r.review_note ? `${full}: ${r.review_note}` : full}>

@@ -124,6 +124,14 @@ def zone_nashik(web, admin_client):
     return make_user(admin_client, web, "frm_zone_nashik", "zone", division="nashik")
 
 
+@pytest.fixture
+def entry_open(monkeypatch):
+    """Keep past days open to offices, for tests about editing rather than the 11:59 PM cutoff."""
+    from datetime import datetime
+    from app.forms import service as svc
+    monkeypatch.setattr(svc, "entry_closes", lambda form, ps: datetime.max)
+
+
 def url(form, office, day, action=""):
     return f"/api/forms/{form['id']}/submissions/{office}/{day.isoformat()}" + (f"/{action}" if action else "")
 
@@ -146,7 +154,7 @@ def test_only_state_defines_forms(solapur, zone_pune, test_form):
     assert solapur.post(f"/api/forms/{test_form['id']}/close").status_code == 403
 
 
-def test_district_writes_only_its_own_office(test_form, solapur, pune, zone_pune):
+def test_district_writes_only_its_own_office(test_form, solapur, pune, zone_pune, entry_open):
     assert solapur.put(url(test_form, "solapur", D), json={"values": {"meetings": 4}}).status_code == 200
     assert solapur.put(url(test_form, "satara", D), json={"values": {"meetings": 4}}).status_code == 403
     assert pune.put(url(test_form, "pune", D), json={"values": {"meetings": 4}}).status_code == 404
@@ -158,7 +166,7 @@ def test_district_writes_only_its_own_office(test_form, solapur, pune, zone_pune
     assert len(p["periods"]) == 7 and p["periods"][-1]["period_start"] == TODAY.isoformat()
 
 
-def test_validation(test_form, solapur):
+def test_validation(test_form, solapur, entry_open):
     day = D - timedelta(days=1)
     put = lambda values, **kw: solapur.put(url(test_form, "solapur", day), json={"values": values, **kw})  # noqa: E731
     assert "at most 50" in put({"meetings": 51}).json()["detail"]
@@ -180,14 +188,11 @@ def test_validation(test_form, solapur):
     assert solapur.put(url(test_form, "solapur", tomorrow), json={"values": {"meetings": 1}}).status_code == 400
 
 
-def test_submit_return_resubmit(test_form, solapur, admin_client, web):
+def test_submit_return_resubmit(test_form, solapur, admin_client, web, entry_open):
     day = D - timedelta(days=2)
     r = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 7, "done": "yes"}, "submit": True})
     assert r.status_code == 200 and r.json()["status"] == "submitted"
     assert r.json()["late"] is True  # submitted after 18:00 the next day
-    # submitted → locked for the office
-    r = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 8}})
-    assert r.status_code == 400 and "submitted" in r.json()["detail"]
     assert admin_client.post(url(test_form, "solapur", day, "return"), json={"note": ""}).status_code == 400
     r = admin_client.post(url(test_form, "solapur", day, "return"), json={"note": "बैठका तपासा"})
     assert r.json()["status"] == "returned"
@@ -196,19 +201,40 @@ def test_submit_return_resubmit(test_form, solapur, admin_client, web):
     assert any(x["returned"] for x in solapur.get("/api/forms/mine").json() if x["id"] == test_form["id"])
     r = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 8}, "submit": True})
     assert r.json()["status"] == "submitted" and r.json()["values"]["meetings"] == 8
-    assert admin_client.post(url(test_form, "solapur", day, "accept")).json()["status"] == "accepted"
+    assert admin_client.post(url(test_form, "solapur", day, "accept")).status_code in (404, 405)
     with web.SessionF() as s:
         acts = [a.action for a in s.scalars(select(AuditLog).where(
             AuditLog.entity_id == f"{test_form['id']}:solapur:{day}")).all()]
     assert acts == ["form_submission.save", "form_submission.submit", "form_submission.return",
-                    "form_submission.save", "form_submission.submit", "form_submission.accept"]
+                    "form_submission.save", "form_submission.submit"]
 
 
-def test_admin_correction_is_kept_and_highlighted(test_form, solapur, admin_client, web):
+def test_office_changes_sent_period_and_keeps_history(test_form, solapur, admin_client, entry_open):
+    day = D - timedelta(days=5)
+    sent = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 3, "done": "yes"}, "submit": True}).json()
+    assert sent["read_only_reason"] is None and sent["edits"] == []
+    # the office changes its own figure: still sent, first send time kept, the change is in the history
+    got = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 4, "done": "yes"}}).json()
+    assert got["status"] == "submitted" and got["values"]["meetings"] == 4 and got["corrections"] == {}
+    assert [(e["key"], e["before"], e["after"], e["by"], e["source"]) for e in got["edits"]] == [("meetings", 3, 4, "frm_solapur", "office")]
+    got = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 6}, "submit": True}).json()
+    assert got["submitted_at"] == sent["submitted_at"] and got["late"] == sent["late"]
+    # the state office's correction sits in the same history
+    got = admin_client.post(url(test_form, "solapur", day, "correct"), json={"key": "meetings", "value": 7}).json()
+    assert [(e["before"], e["after"], e["source"]) for e in got["edits"]] == [(3, 4, "office"), (4, 6, "office"), (6, 7, "state")]
+    # a sent period can't lose a required field
+    r = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": None}})
+    assert r.status_code == 400 and "required" in r.json()["detail"]
+    assert solapur.get(url(test_form, "solapur", day)).json()["values"]["meetings"] == 7
+    # drafts keep no history
+    draft = solapur.put(url(test_form, "solapur", day - timedelta(days=1)), json={"values": {"meetings": 1}}).json()
+    assert solapur.put(url(test_form, "solapur", day - timedelta(days=1)), json={"values": {"meetings": 2}}).json()["edits"] == []
+    assert draft["status"] == "draft"
+
+
+def test_admin_correction_is_kept_and_highlighted(test_form, solapur, admin_client, web, entry_open):
     day = D - timedelta(days=3)
     solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 12}, "submit": True})
-    assert admin_client.post(url(test_form, "solapur", day, "correct"),
-                             json={"key": "meetings", "value": 21, "note": ""}).status_code == 400
     r = admin_client.post(url(test_form, "solapur", day, "correct"),
                           json={"key": "meetings", "value": 21, "note": "आकडे उलटे झाले"})
     assert r.status_code == 200, r.text
@@ -231,6 +257,55 @@ def test_admin_correction_is_kept_and_highlighted(test_form, solapur, admin_clie
                                                   ({"meetings": 21}, {"meetings": 12})]
 
 
+def test_edit_history_and_undo(test_form, solapur, admin_client, entry_open):
+    day = D - timedelta(days=4)
+    solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 5}, "submit": True})
+    edit = lambda v, note="": admin_client.post(url(test_form, "solapur", day, "correct"),  # noqa: E731
+                                                json={"key": "meetings", "value": v, "note": note})
+    assert edit(5).status_code == 400  # unchanged
+    assert edit(6).status_code == 200  # a reason is optional
+    got = edit(9, "फोनवर खात्री केली").json()
+    assert got["values"]["meetings"] == 9 and got["corrections"]["meetings"]["original"] == 5
+    first, second = got["edits"]
+    assert (first["before"], first["after"], first["note"]) == (5, 6, "")
+    assert (second["before"], second["after"], second["by"]) == (6, 9, "admin")
+    # undo the latest edit: back to 6, logged as a new edit that points at it
+    got = admin_client.post(url(test_form, "solapur", day, "revert"), json={"edit_id": second["id"]}).json()
+    assert got["values"]["meetings"] == 6 and got["edits"][-1]["reverts"] == second["id"]
+    # restoring to before the first edit returns the office's value and clears the highlight; history stays
+    got = admin_client.post(url(test_form, "solapur", day, "revert"), json={"edit_id": first["id"]}).json()
+    assert got["values"]["meetings"] == 5 and got["corrections"] == {} and len(got["edits"]) == 4
+    assert admin_client.post(url(test_form, "solapur", day, "revert"), json={"edit_id": 999999}).status_code == 404
+    assert solapur.post(url(test_form, "solapur", day, "revert"), json={"edit_id": first["id"]}).status_code == 403
+
+
+def test_offices_edit_until_1159pm_then_only_the_state_office(test_form, solapur, admin_client):
+    day = TODAY - timedelta(days=9)
+    # today is open to the office; an earlier day closed at 11:59 PM that night
+    assert solapur.put(url(test_form, "solapur", TODAY), json={"values": {"meetings": 2}}).status_code == 200
+    r = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 2}})
+    assert r.status_code == 400 and "11:59 PM" in r.json()["detail"]
+    assert "11:59 PM" in solapur.get(url(test_form, "solapur", day)).json()["read_only_reason"]
+    # the state office still fills and edits it
+    r = admin_client.put(url(test_form, "solapur", day), json={"values": {"meetings": 3, "done": "yes"}, "submit": True})
+    assert r.status_code == 200 and r.json()["status"] == "submitted"
+    assert admin_client.post(url(test_form, "solapur", day, "correct"), json={"key": "meetings", "value": 4}).status_code == 200
+    assert solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 5}}).status_code == 400
+    # returning the day reopens it to the office for that fix
+    admin_client.post(url(test_form, "solapur", day, "return"), json={"note": "तपासा"})
+    r = solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 5}, "submit": True})
+    assert r.status_code == 200 and r.json()["values"]["meetings"] == 5
+    assert solapur.put(url(test_form, "solapur", day), json={"values": {"meetings": 6}}).status_code == 400
+
+
+def test_entry_closes_at_midnight_ist():
+    from datetime import datetime
+    f = _f("daily", date(2026, 10, 1))
+    assert P.entry_closes(f, date(2026, 10, 5)) == datetime(2026, 10, 5, 18, 30)  # 00:00 IST on the 6th, in UTC
+    w = _f("weekly", date(2026, 10, 1))
+    assert P.entry_closes(w, date(2026, 10, 1)) == datetime(2026, 10, 7, 18, 30)  # end of the week's last day
+
+
 def test_compliance_and_closed_form(test_form, solapur, admin_client, zone_pune):
     c = zone_pune.get(f"/api/forms/{test_form['id']}/compliance?start={D - timedelta(days=3)}&end={D}").json()
     assert [r["code"] for r in c["rows"]] == ["solapur", "satara"] and len(c["periods"]) == 4
@@ -244,7 +319,7 @@ def test_compliance_and_closed_form(test_form, solapur, admin_client, zone_pune)
 
 
 def test_zone_cannot_review(test_form, zone_pune):
-    assert zone_pune.post(url(test_form, "solapur", D, "accept")).status_code == 403
+    assert zone_pune.post(url(test_form, "solapur", D, "correct"), json={"key": "meetings", "value": 1}).status_code == 403
     r = zone_pune.get(f"/api/forms/{test_form['id']}/responses").json()
     assert r["can_review"] is False
 

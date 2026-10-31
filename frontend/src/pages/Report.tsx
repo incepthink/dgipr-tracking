@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ChevronDown, ClipboardPen, Download, Eye } from "lucide-react";
-import { api, type Cell, type Issue, type ReportResponse } from "@/lib/api";
+import { api, backendUrl, type Cell, type Issue, type ReportResponse } from "@/lib/api";
 import { usePeriod } from "@/lib/hooks";
 import { cn, qs } from "@/lib/utils";
 import { labelOf } from "@/lib/status";
@@ -66,8 +66,8 @@ export default function ReportPage() {
 
   const blockers = data?.data.issues.filter((i) => i.severity === "blocker") ?? [];
   const warnings = data?.data.issues.filter((i) => i.severity === "warning") ?? [];
-  const previewUrl = `/report/preview.pdf${qs({ campaign_id: cid, start: period.start, end: period.end })}`;
-  const downloadUrl = `/report/preview.pdf${qs({ campaign_id: cid, start: period.start, end: period.end, download: 1 })}`;
+  const previewUrl = backendUrl(`/report/preview.pdf${qs({ campaign_id: cid, start: period.start, end: period.end })}`);
+  const downloadUrl = backendUrl(`/report/preview.pdf${qs({ campaign_id: cid, start: period.start, end: period.end, download: 1 })}`);
   const reviewBase = { campaign_id: cid, start: period.start, end: period.end };
 
   return (

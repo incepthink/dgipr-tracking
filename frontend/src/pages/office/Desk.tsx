@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { FileSpreadsheet, Megaphone, Search, X } from "lucide-react";
-import type { CampaignBrief, FormDef, FormField, ResponseRow } from "@/lib/api";
+import { backendUrl, type CampaignBrief, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT } from "@/lib/i18n";
 import { cn, qs } from "@/lib/utils";
@@ -18,7 +18,7 @@ export function anomalyOf(row: ResponseRow, history: ResponseRow[], cols: FormFi
   for (const c of cols) {
     const v = row.values[c.key];
     if (typeof v !== "number") continue;
-    const past = history.filter((h) => h.office === row.office && h.period_start < row.period_start && ["submitted", "accepted", "returned"].includes(h.status))
+    const past = history.filter((h) => h.office === row.office && h.period_start < row.period_start && ["submitted", "returned"].includes(h.status))
       .sort((a, b) => a.period_start.localeCompare(b.period_start))
       .map((h) => h.values[c.key]).filter((x): x is number => typeof x === "number").slice(-14);
     if (past.length < 3) continue;
@@ -39,9 +39,9 @@ export function zerosOf(row: ResponseRow, cols: FormField[]) {
   return cols.filter((c) => row.values[c.key] === 0).length;
 }
 
-const isSent = (s: string) => s === "submitted" || s === "accepted" || s === "returned";
+const isSent = (s: string) => s === "submitted" || s === "returned";
 
-type Filter = "all" | "none" | "submitted" | "returned" | "accepted";
+type Filter = "all" | "none" | "submitted" | "returned";
 
 // --------------------------------------------------------------------------- search
 type Hit = { kind: "form"; form: FormDef } | { kind: "campaign"; c: CampaignBrief };
@@ -177,9 +177,8 @@ export default function DeskPage() {
   const chips: { k: Filter; label: string; mark?: React.ReactNode }[] = [
     { k: "all", label: t("all_districts") },
     { k: "none", label: t("not_received"), mark: <StatusMark mark="pend" /> },
-    { k: "submitted", label: t("to_review"), mark: <StatusMark mark="sub" /> },
+    { k: "submitted", label: t("sub_submitted"), mark: <StatusMark mark="sub" /> },
     { k: "returned", label: t("sub_returned"), mark: <StatusMark mark="ret" /> },
-    { k: "accepted", label: t("sub_accepted"), mark: <StatusMark mark="acc" /> },
   ];
 
   return (
@@ -202,7 +201,7 @@ export default function DeskPage() {
             <div className="flex flex-wrap gap-2">
               {count("none") > 0 && chase && <CopyButton text={chase} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />}
               <RButton asChild size="sm" variant="ghost">
-                <a href={`/api/forms/${f.formId}/export${qs({ start: form.start_date, end: f.lastDay })}`} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
+                <a href={backendUrl(`/api/forms/${f.formId}/export${qs({ start: form.start_date, end: f.lastDay })}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
               </RButton>
             </div>
           </div>
@@ -213,7 +212,6 @@ export default function DeskPage() {
               {late > 0 && <span className="text-sm font-bold text-r-late">{late} {t("late")}</span>}
             </div>
             <div className="flex h-2.5 overflow-hidden rounded-full bg-r-sunk" aria-hidden>
-              <div className="bg-r-accepted" style={{ width: `${(100 * count("accepted")) / Math.max(1, today.length)}%` }} />
               <div className="bg-r-action" style={{ width: `${(100 * count("submitted")) / Math.max(1, today.length)}%` }} />
               <div className="bg-r-overdue" style={{ width: `${(100 * count("returned")) / Math.max(1, today.length)}%` }} />
             </div>

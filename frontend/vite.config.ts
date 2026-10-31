@@ -8,7 +8,8 @@ const backend = process.env.DGIPR_BACKEND ?? "http://127.0.0.1:8000";
 const proxied = ["/api", "/reports", "/report/preview.pdf", "/fonts"];
 
 export default defineConfig({
-  base: "/app/",
+  // FastAPI serves the SPA at /app/; the Vercel build for dgipr.hashcase.tech sets VITE_BASE=/tracking/.
+  base: process.env.VITE_BASE ?? "/app/",
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
   server: { port: 5173, proxy: Object.fromEntries(proxied.map((p) => [p, { target: backend, changeOrigin: false }])) },

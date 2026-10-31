@@ -139,12 +139,12 @@ def test_ask_runs_intents_in_scope(session, settings, drought_form, recent):
     assert r["kind"] == "table" and r["summary"] == {"sent": 1, "offices": 43} and len(r["rows"]) == 42
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="top",
                 params={"field": "facebook", "level": "office", "range": "last7"})
-    assert r["rows"][0]["name_en"] == "Pune" and r["rows"][0]["per_day"] == 3
+    assert r["rows"][0]["name_en"] == "District Information Office, Pune" and r["rows"][0]["per_day"] == 3
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="trend", params={"office": "pune", "field": "news"})
     assert r["kind"] == "series" and r["points"][-1]["value"] == 2
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="compare",
                 params={"offices": ["pune", "satara"], "field": "facebook", "range": "last14"})
-    assert [x["name_en"] for x in r["rows"]] == ["Pune", "Satara"]
+    assert [x["name_en"] for x in r["rows"]] == ["District Information Office, Pune", "District Information Office, Satara"]
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="totals", params={"range": "whole"})
     assert next(x for x in r["rows"] if x["name_en"] == "Facebook")["total"] == 35
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="improved",

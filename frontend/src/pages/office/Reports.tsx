@@ -4,14 +4,17 @@ import { ChevronDown, Download } from "lucide-react";
 import type { SheetTable } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
-import { RAlert, RButton, RError, RFilterBar, RInput, RPage, RSegmented, RTitle } from "@/components/reports/kit";
-import { stepOf } from "@/components/reports/period";
-import { formTitle, scopeQs, useFormFilters } from "../forms/common";
-import { CampaignSearch, DivisionPicker, FormStateChip, Stepper, formRange, formState } from "./shared";
+import { RAlert, RButton, RCard, RCardTitle, RError, RFilterBar, RInput, RLabel, RPage, RSegmented, RSelect, RStat, RTitle } from "@/components/reports/kit";
+import { fig, stepOf } from "@/components/reports/period";
+import { fieldLabel, formTitle, scopeQs, sumColumns, useFormFilters } from "../forms/common";
+import { CampaignSearch, DivisionPicker, FormStateChip, OfficePicker, Stepper, formRange, formState } from "./shared";
 import { ReportExportSheet, cellOut, groupStarts, isKind, isSubOffice, sheetTableQuery, type Kind } from "./ReportExport";
 
 type Report = "daily" | "cumulative" | "datewise";
 type Level = "division" | "district";
+/** Row order: official (config/organisation.yaml), or by the chosen column, highest or lowest first. */
+type Order = "official" | "desc" | "asc";
+type View = "table" | "chart";
 
 const kindOf = (report: Report, level: Level): Kind =>
   report === "datewise" ? "datewise" : `${report}_${level === "district" ? "office" : "division"}`;
@@ -32,7 +35,17 @@ export default function ReportsPage() {
   const report: Report = kind === "datewise" ? "datewise" : kind.startsWith("daily_") ? "daily" : "cumulative";
   const level: Level = kind === "datewise" ? (f.params.get("level") === "district" ? "district" : "division")
     : kind.endsWith("_office") ? "district" : "division";
-  const setView = (r: Report, l: Level) => f.set({ table: kindOf(r, l), level: r === "datewise" ? l : null });
+  // a division-level table sums whole divisions, so a single-office filter only applies to district / date-wise
+  const setView = (r: Report, l: Level) => f.set({ table: kindOf(r, l), level: r === "datewise" ? l : null,
+    ...(r !== "datewise" && l === "division" ? { office: null } : {}) });
+  const officeOk = report === "datewise" || level === "district";
+
+  // the column the chart, the statistics and the sort use; the order; table or chart
+  const cols = sumColumns(form);
+  const col = cols.find((c) => c.key === f.params.get("col")) ?? cols[0];
+  const order: Order = (["desc", "asc"] as const).find((o) => o === f.params.get("order")) ?? "official";
+  const view: View = f.params.get("view") === "chart" ? "chart" : "table";
+  const sortQs = { sort: order !== "official" ? col?.key : undefined, order: order !== "official" ? order : undefined };
 
   // one as-of date; default the last closed day, always inside the form's range
   const lo = form?.start_date ?? "";
@@ -43,10 +56,10 @@ export default function ReportsPage() {
   const setAsOf = (d: string) => f.set({ end: clamp(d), start: null });
 
   // daily: the period holding as-of (the backend snaps); cumulative / date-wise: campaign start → as-of
-  const scope = { ...f, start: report === "daily" ? asOf : lo, end: asOf };
+  const scope = { ...f, office: officeOk ? f.office : "", start: report === "daily" ? asOf : lo, end: asOf };
   const ready = f.ready && !!asOf;
   const { data, error, isLoading, isFetching, isPlaceholderData } = useQuery({
-    ...sheetTableQuery(f.formId, scopeQs(scope, { kind })), enabled: ready, placeholderData: (p) => p,
+    ...sheetTableQuery(f.formId, scopeQs(scope, { kind, ...sortQs })), enabled: ready, placeholderData: (p) => p,
   });
   // phase 2: a cumulative table's total must equal the date-wise total for the same range
   const dw = useQuery({
@@ -104,6 +117,26 @@ export default function ReportsPage() {
           </div>
         )}
         <DivisionPicker f={f} />
+        {officeOk && <OfficePicker f={f} />}
+      </RFilterBar>
+
+      {/* one column drives the sort, the chart and the statistics */}
+      <RFilterBar>
+        {cols.length > 0 && (
+          <RLabel small label={t("rep_measure")}>
+            <RSelect value={col?.key} className="max-w-64" onChange={(e) => f.set({ col: e.target.value })}>
+              {cols.map((c) => <option key={c.key} value={c.key}>{fieldLabel(c, lang)}</option>)}
+            </RSelect>
+          </RLabel>
+        )}
+        <Ctl label={t("rep_order")}>
+          <RSegmented label={t("rep_order")} value={order} onChange={(o) => f.set({ order: o === "official" ? null : o })}
+            options={[{ value: "official", label: t("ord_official") }, { value: "desc", label: t("ord_desc") }, { value: "asc", label: t("ord_asc") }]} />
+        </Ctl>
+        <Ctl label={t("rep_view")}>
+          <RSegmented label={t("rep_view")} value={view} onChange={(v) => f.set({ view: v === "table" ? null : v })}
+            options={[{ value: "table", label: t("view_table") }, { value: "chart", label: t("view_chart") }]} />
+        </Ctl>
       </RFilterBar>
 
       {error ? <RError error={error} /> : (
@@ -114,7 +147,12 @@ export default function ReportsPage() {
           </div>
           {isLoading || !data ? <div className="h-96 animate-pulse rounded-xl bg-r-sunk" />
             : !data.rows.length ? <RAlert tone="info">{t("no_data_range")}</RAlert>
-            : <Sheet data={data} dim={isFetching} />}
+            : <>
+              {col && <Stats data={data} colIndex={data.text_cols + cols.indexOf(col)} label={fieldLabel(col, lang)} />}
+              {view === "chart" && col
+                ? <BarsChart data={data} colIndex={data.text_cols + cols.indexOf(col)} label={fieldLabel(col, lang)} dim={isFetching} />
+                : <Sheet data={data} dim={isFetching} />}
+            </>}
           {data && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-r-muted">
               <span>{tf("rows_n", { n: data.rows.length })}</span>
@@ -126,7 +164,8 @@ export default function ReportsPage() {
       )}
 
       <CampaignSearch f={f} open={picking} onClose={() => setPicking(false)} />
-      <ReportExportSheet f={f} open={exporting} onClose={() => setExporting(false)} kind={kind} asOf={asOf} />
+      <ReportExportSheet f={{ ...f, office: officeOk ? f.office : "" }} open={exporting} onClose={() => setExporting(false)}
+        kind={kind} asOf={asOf} sort={sortQs} />
     </RPage>
   );
 }
@@ -205,4 +244,59 @@ function Reconcile({ a, b }: { a: SheetTable; b: SheetTable }) {
   return diff.length
     ? <span className="font-bold text-r-overdue-ink" role="status">{tf("reconcile_bad", { cols: diff.join(", ") })}</span>
     : <span className="font-bold text-r-accepted" role="status">{t("reconcile_ok")}</span>;
+}
+
+/** What a row is called: the office for district tables, else the division or the date. */
+const rowName = (data: SheetTable, r: (string | number)[]) => String(data.text_cols === 2 ? r[1] : r[0]);
+
+function rowsOf(data: SheetTable, colIndex: number) {
+  const j = colIndex - data.text_cols;
+  return data.rows.map((r, i) => ({ name: rowName(data, r), v: Number(r[colIndex]) || 0, blank: !!data.blank?.[i]?.[j] }));
+}
+
+/** Statistics for one column over the rows shown: total, average, highest, lowest, rows with figures. */
+function Stats({ data, colIndex, label }: { data: SheetTable; colIndex: number; label: string }) {
+  const { t, tf } = useT();
+  const rows = rowsOf(data, colIndex);
+  const reported = rows.filter((r) => !r.blank);
+  if (!reported.length) return null;
+  const total = Number(data.total[colIndex]) || 0;
+  const hi = reported.reduce((a, b) => (b.v > a.v ? b : a));
+  const lo = reported.reduce((a, b) => (b.v < a.v ? b : a));
+  return (
+    <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-5" role="group" aria-label={tf("stats_of", { col: label })}>
+      <RStat label={tf("stat_total", { col: label })} value={fig(total)} />
+      <RStat label={t("stat_average")} value={fig(Math.round((total / reported.length) * 10) / 10)} sub={t("stat_average_sub")} />
+      <RStat label={t("stat_highest")} value={fig(hi.v)} sub={<span className="wrap-break-word">{hi.name}</span>} />
+      <RStat label={t("stat_lowest")} value={fig(lo.v)} sub={<span className="wrap-break-word">{lo.name}</span>} />
+      <RStat label={t("stat_reported")} value={reported.length} of={rows.length} progress={(100 * reported.length) / rows.length} />
+    </div>
+  );
+}
+
+/** One horizontal bar per table row, in the table's order, for the chosen column. Nothing entered is a dashed
+ * outline, never a zero bar (as in TrendBars); the figure sits at the end of each bar. */
+function BarsChart({ data, colIndex, label, dim }: { data: SheetTable; colIndex: number; label: string; dim: boolean }) {
+  const { t } = useT();
+  const rows = rowsOf(data, colIndex);
+  const max = Math.max(1, ...rows.map((r) => r.v));
+  return (
+    <RCard className={cn("transition-opacity", dim && "opacity-60")}>
+      <RCardTitle>{label}</RCardTitle>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label={label}>
+        {rows.map((r, i) => (
+          <li key={i} tabIndex={0} title={`${r.name}: ${r.blank ? t("map_not_reported") : fig(r.v)}`}
+            className="group grid grid-cols-[minmax(6rem,14rem)_1fr] items-center gap-3 rounded-md px-1 py-0.5 outline-none hover:bg-r-ground focus-visible:bg-r-ground">
+            <span className={cn("truncate text-sm", isSubOffice(r.name) && "text-r-muted")}>{r.name}</span>
+            <span className="flex min-w-0 items-center gap-2">
+              {r.blank
+                ? <span className="h-4 w-6 shrink-0 rounded-r border-[1.5px] border-l-0 border-dashed border-r-faint" aria-hidden />
+                : <span className="h-4 shrink-0 rounded-r bg-r-action group-hover:opacity-85" style={{ width: `${r.v ? Math.max(0.5, (r.v / max) * 80) : 0}%` }} aria-hidden />}
+              <span className="num text-sm font-bold">{r.blank ? <span className="font-normal text-r-faint">{t("map_not_reported")}</span> : fig(r.v)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </RCard>
+  );
 }

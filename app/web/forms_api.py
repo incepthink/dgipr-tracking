@@ -1,5 +1,5 @@
 """JSON API for report forms (अहवाल फॉर्म): the admin defines and publishes forms, offices fill and submit them,
-the admin reviews (accept / return / correct) and everyone with access sees roll-ups and exports.
+the admin edits submitted values (with undo) or returns a period, and everyone with access sees roll-ups and exports.
 
 Every logged-in user reaches /api/forms (app.auth.OFFICE_PREFIXES); each endpoint scopes data with
 app.forms.service (recipients ∩ visible offices) and admin endpoints require the state role."""
@@ -312,7 +312,11 @@ class ReturnIn(BaseModel):
 class CorrectIn(BaseModel):
     key: str
     value: Any = None
-    note: str
+    note: str = ""
+
+
+class RevertIn(BaseModel):
+    edit_id: int
 
 
 def _review(form_id: int, office: str, period: date, admin: User, s: Session, fn) -> dict[str, Any]:
@@ -333,17 +337,18 @@ def api_submission_return(form_id: int, office: str, period: date, body: ReturnI
                    lambda form: service.return_(s, admin, form, office, period, body.note))
 
 
-@app.post("/api/forms/{form_id}/submissions/{office}/{period}/accept")
-def api_submission_accept(form_id: int, office: str, period: date, admin: User = Depends(state_only),
-                          s: Session = Depends(get_session)):
-    return _review(form_id, office, period, admin, s, lambda form: service.accept(s, admin, form, office, period))
-
-
 @app.post("/api/forms/{form_id}/submissions/{office}/{period}/correct")
 def api_submission_correct(form_id: int, office: str, period: date, body: CorrectIn,
                            admin: User = Depends(state_only), s: Session = Depends(get_session)):
     return _review(form_id, office, period, admin, s,
                    lambda form: service.correct(s, admin, form, office, period, body.key, body.value, body.note))
+
+
+@app.post("/api/forms/{form_id}/submissions/{office}/{period}/revert")
+def api_submission_revert(form_id: int, office: str, period: date, body: RevertIn,
+                          admin: User = Depends(state_only), s: Session = Depends(get_session)):
+    return _review(form_id, office, period, admin, s,
+                   lambda form: service.revert(s, admin, form, office, period, body.edit_id))
 
 
 # --------------------------------------------------------------------------- analytics + export
@@ -393,10 +398,10 @@ def api_an_rankings(column: str, level: str = "office", qs=Depends(_q)):
 
 
 @app.get("/api/forms/{form_id}/analytics/table")
-def api_an_table(kind: str, qs=Depends(_q)):
+def api_an_table(kind: str, sort: str = "", order: str = "desc", qs=Depends(_q)):
     q, s = qs
     try:
-        return analytics.table(s, q.form, q.offices, q.start, q.end, kind)
+        return analytics.table(s, q.form, q.offices, q.start, q.end, kind, sort, order)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
 
@@ -498,10 +503,10 @@ def api_an_ask_suggestions(qs=Depends(_q)):
 
 
 @app.get("/api/forms/{form_id}/analytics/export")
-def api_an_export(kind: str, format: str = "xlsx", qs=Depends(_q)):
+def api_an_export(kind: str, format: str = "xlsx", sort: str = "", order: str = "desc", qs=Depends(_q)):
     q, s = qs
     try:
-        t = analytics.table(s, q.form, q.offices, q.start, q.end, kind)
+        t = analytics.table(s, q.form, q.offices, q.start, q.end, kind, sort, order)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     name = f"{kind}_{t['start']}" + (f"_{t['end']}" if t["end"] != t["start"] else "")
@@ -515,11 +520,11 @@ def api_an_export(kind: str, format: str = "xlsx", qs=Depends(_q)):
 
 @app.get("/api/forms/{form_id}/export")
 def api_form_export(request: Request, form_id: int, start: Optional[str] = None, end: Optional[str] = None,
-                    division: str = "", s: Session = Depends(get_session)):
+                    division: str = "", office: str = "", s: Session = Depends(get_session)):
     """The whole workbook (सूचना, डेटा एंट्री, five roll-ups) for [start, end]; default: the whole form."""
     user = current_user(request)
     form = _form(s, user, form_id)
     d0, d1 = _range(form, start, end, default_periods=0)
-    data = analytics.workbook(s, form, _scope(s, user, form, division), d0, d1)
+    data = analytics.workbook(s, form, _scope(s, user, form, division, office), d0, d1)
     return Response(data, media_type=XLSX, headers=_attachment(f"{form.title_mr}_{d0}_{d1}.xlsx"))
 

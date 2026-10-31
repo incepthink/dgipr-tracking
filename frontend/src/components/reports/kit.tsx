@@ -293,7 +293,6 @@ const MARK_LABEL: Record<Mark, TKey> = {
 
 /** Maps a submission status to its mark. Nothing sent (or only a draft) after the deadline is overdue. */
 export function markOf(status: SubStatus, pastDeadline = false): Mark {
-  if (status === "accepted") return "acc";
   if (status === "submitted") return "sub";
   if (status === "returned") return "ret";
   if (pastDeadline) return "over";

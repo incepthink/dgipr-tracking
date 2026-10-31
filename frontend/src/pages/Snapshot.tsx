@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Download, FileJson, FileSpreadsheet, ShieldAlert, ShieldCheck, XCircle } from "lucide-react";
-import { api, type SnapshotDetail } from "@/lib/api";
+import { api, backendUrl, type SnapshotDetail } from "@/lib/api";
 import { periodLabel } from "@/lib/utils";
 import { labelOf } from "@/lib/status";
 import { Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, StatusBadge } from "@/components/ui/primitives";
@@ -22,10 +22,10 @@ export default function SnapshotPage() {
         description={<><span className="font-medium text-foreground">{d.presentation.summary_title}</span><br />
           {periodLabel(s.period_start, s.period_end)} (IST) · created by {s.created_by} on {s.created_at} · {d.campaign.rules_version != null ? `rules v${d.campaign.rules_version}` : "no search term"}{s.note && <> · “{s.note}”</>}</>}
         actions={<>
-          <Button asChild><a href={`/reports/${s.id}/pdf`}><Download /> Download PDF</a></Button>
-          <Button variant="outline" asChild><a href={`/reports/${s.id}/evidence.csv`}><FileSpreadsheet /> Evidence CSV</a></Button>
-          <Button variant="outline" asChild><a href={`/reports/${s.id}/matrix.csv`}><FileSpreadsheet /> Values CSV</a></Button>
-          <Button variant="ghost" asChild><a href={`/reports/${s.id}/snapshot.json`} target="_blank" rel="noopener"><FileJson /> JSON</a></Button>
+          <Button asChild><a href={backendUrl(`/reports/${s.id}/pdf`)}><Download /> Download PDF</a></Button>
+          <Button variant="outline" asChild><a href={backendUrl(`/reports/${s.id}/evidence.csv`)}><FileSpreadsheet /> Evidence CSV</a></Button>
+          <Button variant="outline" asChild><a href={backendUrl(`/reports/${s.id}/matrix.csv`)}><FileSpreadsheet /> Values CSV</a></Button>
+          <Button variant="ghost" asChild><a href={backendUrl(`/reports/${s.id}/snapshot.json`)} target="_blank" rel="noopener"><FileJson /> JSON</a></Button>
         </>}
       />
 

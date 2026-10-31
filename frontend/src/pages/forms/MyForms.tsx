@@ -9,7 +9,7 @@ import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn, qs } from "@/lib/utils";
 import { RButton, RCard, RError, RPage, RSearch, RSheet, RTitle, StatusMark } from "@/components/reports/kit";
 import {
-  dayMonth, durationText, isOverdue, longDay, periodOf, rangeText, sameIstDay, stepOf, timeOf, whenText,
+  dayMonth, isOverdue, longDay, periodOf, rangeText, stepOf, whenText,
 } from "@/components/reports/period";
 import { formTitle, useToday } from "./common";
 
@@ -155,15 +155,15 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
   const me = useUser();
   const { t, tf, name, lang } = useT();
   const { data: meta } = useMeta();
-  const { inbox: { error, isLoading }, office, today, forms, recent, now, due } = useOfficeForms();
+  const { inbox: { error, isLoading }, office, today, forms, recent } = useOfficeForms();
   const division = meta?.divisions.find((d) => d.offices.some((o) => o.code === office));
-  const hero = due[0];
 
-  // search + All / Accepted / Rejected over the form list
+  // search + All / Edited by state / Returned over the form list
   const [q, setQ] = React.useState("");
   const [filter, setFilter] = React.useState<MineFilter>("all");
-  const has = (i: number, st: string) => (recent[i]?.data?.periods ?? []).some((p) => p.status === st) || (st === "returned" && forms[i].returned > 0);
-  const inFilter = (i: number, k: MineFilter) => k === "all" || has(i, k === "accepted" ? "accepted" : "returned");
+  const ps = (i: number) => recent[i]?.data?.periods ?? [];
+  const inFilter = (i: number, k: MineFilter) => k === "all"
+    || (k === "edited" ? ps(i).some((p) => Object.keys(p.corrections).length > 0) : ps(i).some((p) => p.status === "returned") || forms[i].returned > 0);
   const counts = Object.fromEntries(FILTERS.map((k) => [k, forms.filter((_, i) => inFilter(i, k)).length])) as Record<MineFilter, number>;
   const needle = q.trim().toLocaleLowerCase();
   const shown = forms.map((f, i) => ({ f, i })).filter(({ f, i }) => inFilter(i, filter)
@@ -185,8 +185,6 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
         </RCard>
       ) : (
         <>
-          {!listOnly && (hero ? <DueHero form={hero.form} p={hero.p} office={office} now={now} /> : <CaughtUp />)}
-
           <section className="flex flex-col gap-2" aria-labelledby="mine">
             <h2 id="mine" className={cn("mx-1 mt-1 mb-0 text-[15px] font-bold text-r-muted", listOnly && "sr-only")}>{t("nav_my_forms")}</h2>
             <RSearch value={q} onChange={setQ} placeholder={t("mine_search")} />
@@ -211,60 +209,24 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
   );
 }
 
-const FILTERS = ["all", "accepted", "rejected"] as const;
+const FILTERS = ["all", "edited", "rejected"] as const;
 type MineFilter = (typeof FILTERS)[number];
 
 function periodLabel(form: Pick<InboxForm, "frequency">, ps: string, lang: string) {
   return form.frequency === "weekly" ? rangeText(ps, addDays(ps, 6), lang) : dayMonth(ps, lang);
 }
 
-function DueHero({ form, p, office, now }: { form: InboxForm; p: Submission; office: string; now: number }) {
-  const { t, tf, lang } = useT();
-  const dl = p.deadline ? new Date(p.deadline) : null;
-  const dueLine = !dl ? null : sameIstDay(dl, new Date(now)) ? tf("due_today_by", { time: timeOf(dl, lang) }) : tf("due_by", { when: whenText(dl, lang) });
-  const label = periodLabel(form, p.period_start, lang);
-  return (
-    <section className="flex flex-col gap-3.5 rounded-[18px] bg-r-hero p-5 text-white">
-      {dueLine && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm font-bold text-r-focus">{dueLine}</span>
-          {dl && <span className="num text-sm text-r-nav-text">{tf("time_left", { d: durationText(dl.getTime() - now, lang) })}</span>}
-        </div>
-      )}
-      <div className="flex flex-col gap-0.5">
-        <span className="disp text-2xl leading-[1.15] font-bold">{formTitle(form, lang)}</span>
-        <span className="text-r-nav-text">
-          {tf("figures_for", { day: form.frequency === "weekly" ? rangeText(p.period_start, p.period_end, lang) : longDay(p.period_start, lang) })}
-          {p.status === "draft" && <> · {t("sub_draft")}</>}
-        </span>
-      </div>
-      <RButton asChild size="lg" className="border-white bg-white text-[#15202b] hover:bg-white/90">
-        <Link to={fillTo(form.id, office, p.period_start)}>{tf("fill_in", { day: label })} <ArrowRight className="size-5" aria-hidden /></Link>
-      </RButton>
-    </section>
-  );
-}
-
-function CaughtUp() {
-  const { t } = useT();
-  return (
-    <section className="flex items-start gap-3.5 rounded-[18px] bg-r-hero p-5 text-white">
-      <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-r-focus" aria-hidden />
-      <div className="flex flex-col gap-1">
-        <span className="disp text-2xl leading-[1.15] font-bold">{t("caught_up")}</span>
-        <span className="text-r-nav-text">{t("caught_up_sub")}</span>
-      </div>
-    </section>
-  );
-}
-
 function FormCard({ form, periods, office }: { form: InboxForm; periods?: Submission[]; office: string }) {
   const { t, tf, lang } = useT();
   const ps = periods ?? [];
-  const sent = ps.filter((p) => ["submitted", "accepted", "returned"].includes(p.status)).length;
+  const sent = ps.filter((p) => ["submitted", "returned"].includes(p.status)).length;
   const target = ps.find((p) => p.status === "returned") ?? ps.find((p) => p.status === "none" || p.status === "draft") ?? ps.at(-1);
   const to = fillTo(form.id, office, target?.period_start ?? form.first_pending ?? form.latest_period ?? "");
   const freq = t(`freq_${form.frequency}` as TKey);
+  // input needed: a returned period, or an open period not yet sent (falls back to the inbox count while periods load)
+  const needsInput = periods
+    ? form.status === "published" && ps.some((p) => !p.read_only_reason && ["none", "draft", "returned"].includes(p.status))
+    : form.pending > 0;
 
   const p = ps.at(-1);
   const sub = form.status === "closed" ? t("status_closed")
@@ -277,6 +239,10 @@ function FormCard({ form, periods, office }: { form: InboxForm; periods?: Submis
         <b>{formTitle(form, lang)}</b>
         <span className="text-sm text-r-muted">{sub}</span>
       </div>
+      <span className={cn("shrink-0 rounded-full px-3 py-1 text-[13px] font-bold",
+        needsInput ? "bg-r-accepted text-r-card" : "bg-r-accepted-soft text-r-accepted")}>
+        {t(needsInput ? "chip_fill" : "chip_completed")}
+      </span>
       <ChevronRight className="size-5 shrink-0 text-r-faint" aria-hidden />
     </Link>
   );

@@ -5,7 +5,10 @@
   once    a single period from start_date to end_date (or just start_date)
 
 A period is due once its first day has arrived in IST; periods never run past end_date. The deadline is
-deadline_hours after the period's last day ends (00:00 IST the next day), e.g. 18 = 18:00 the next day."""
+deadline_hours after the period's last day ends (00:00 IST the next day), e.g. 18 = 18:00 the next day.
+
+Entry closes for offices when the period's last day ends (11:59 PM IST); after that only the state office (admin)
+changes the figures — see entry_closes and app.forms.service.editable."""
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
@@ -82,6 +85,11 @@ def deadline(form, ps: date) -> Optional[datetime]:
         return None
     end_of_period = datetime.combine(period_end(form, ps) + timedelta(days=1), time(0), tzinfo=IST)
     return to_utc_naive(end_of_period + timedelta(hours=form.deadline_hours))
+
+
+def entry_closes(form, ps: date) -> datetime:
+    """Naive-UTC instant offices stop editing the period: the end of its last day (23:59 IST, i.e. 00:00 IST next)."""
+    return to_utc_naive(datetime.combine(period_end(form, ps) + timedelta(days=1), time(0), tzinfo=IST))
 
 
 def label(form, ps: date) -> str:

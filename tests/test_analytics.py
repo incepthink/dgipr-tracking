@@ -73,12 +73,29 @@ def test_rankings_series_and_tables(session, drought_form, filled):
     assert [x["values"]["articles"] for x in s] == [17, 170]
     t = analytics.table(session, drought_form, offices, D1, D2, "cumulative_office")
     assert t["total"][2:] == [analytics.totals(session, drought_form, offices, D1, D2)[k] for k in COLUMN_KEYS]
-    assert "जिल्ह्याचे नाव" in analytics.to_csv(t) and t["text_cols"] == 2
+    assert "कार्यालयाचे नाव" in analytics.to_csv(t) and t["text_cols"] == 2
     from openpyxl import load_workbook
     ws = load_workbook(io.BytesIO(analytics.to_xlsx(t))).active
-    assert ws.cell(3, 2).value == "जिल्ह्याचे नाव" and ws.cell(ws.max_row, 3).value == 187
+    assert ws.cell(3, 2).value == "कार्यालयाचे नाव" and ws.cell(ws.max_row, 3).value == 187
     daily = analytics.table(session, drought_form, offices, D2, D2, "daily_division")
     assert daily["total"][0] == "राज्य एकूण" and daily["start"] == daily["end"]
+
+
+def test_tables_official_order_and_sorting(session, drought_form, filled):
+    offices = all_offices(session)
+    t = analytics.table(session, drought_form, offices, D1, D1, "cumulative_office")
+    names = [r[1] for r in t["rows"]]
+    # मुंबई मुख्यालय first; each division's senior office, then its own city's जिमाका, then the other districts
+    assert names[:4] == ["मुंबई, मुख्यालय मंत्रालय", "संचालक, नागपूर", "जिमाका, नागपूर", "जिमाका, भंडारा"]
+    assert names[names.index("विमाका, पुणे") + 1] == "जिमाका, पुणे"
+    col = 2 + COLUMN_KEYS.index("news")
+    desc = analytics.table(session, drought_form, offices, D1, D1, "cumulative_office", "news", "desc")
+    asc = analytics.table(session, drought_form, offices, D1, D1, "cumulative_office", "news", "asc")
+    assert [r[col] for r in desc["rows"]] == sorted((r[col] for r in t["rows"]), reverse=True)
+    assert [r[col] for r in asc["rows"]] == sorted(r[col] for r in t["rows"])
+    assert desc["total"] == t["total"] and len(desc["blank"]) == len(t["blank"])
+    with pytest.raises(ValueError):
+        analytics.table(session, drought_form, offices, D1, D1, "cumulative_office", "bogus")
 
 
 def test_export_endpoints(admin_client):

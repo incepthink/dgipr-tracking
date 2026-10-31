@@ -178,12 +178,18 @@ SHEETS = (("daily_division", "दररोजचा अहवाल"), ("cumulat
           ("cumulative_office", "जिल्हानिहाय एकत्रित"))
 
 
-def table(s: Session, form: Form, offices: list[str], start: date, end: date, kind: str) -> dict[str, Any]:
+def table(s: Session, form: Form, offices: list[str], start: date, end: date, kind: str,
+          sort: str = "", order: str = "desc") -> dict[str, Any]:
     """{title, subtitle, header, rows, total, text_cols, blank} for one of TABLES, laid out like the sheet. The
     daily tables show the single period containing `start`. blank[i][j] is true when nothing at all was entered
-    behind value cell (i, j) — the sheet shows 0 there, the screen shows it as not reported."""
+    behind value cell (i, j) — the sheet shows 0 there, the screen shows it as not reported.
+
+    Rows are in official order (config/organisation.yaml) unless `sort` names a column: then by that column,
+    order "desc" (highest first) or "asc", ties kept in official order."""
     if kind not in TABLES:
         raise ValueError(f"unknown table {kind}")
+    if order not in ("asc", "desc"):
+        raise ValueError("order must be asc or desc")
     if kind.startswith("daily_"):
         start = period_containing(form, start) or start
         end = start
@@ -209,15 +215,21 @@ def table(s: Session, form: Form, offices: list[str], start: date, end: date, ki
                     for r in b["rows"]]
             total = ["राज्य एकूण", *[b["total"][k] for k in keys]]
         else:
-            header = ["विभागाचे नाव", "जिल्ह्याचे नाव", *labels]
-            rows = [[*office_names(r["code"], r["division_mr"], r["name_mr"]), *[r["values"][k] for k in keys]]
-                    for r in b["rows"]]
+            header = ["विभागाचे नाव", "कार्यालयाचे नाव", *labels]
+            rows = [[office_names(r["code"], r["division_mr"], r["name_mr"])[0], r["name_mr"],
+                     *[r["values"][k] for k in keys]] for r in b["rows"]]
             total = ["", "एकत्रित एकूण", *[b["total"][k] for k in keys]]
+    if sort:
+        if sort not in keys:
+            raise ValueError(f"unknown column {sort}")
+        j = len(header) - len(keys) + keys.index(sort)
+        idx = sorted(range(len(rows)), key=lambda i: rows[i][j] or 0, reverse=order == "desc")
+        rows, blank = [rows[i] for i in idx], [blank[i] for i in idx]
     shown_end = period_end(form, start) if kind.startswith("daily_") else end
     title = f"{form.title_mr} — {TABLES[kind]}".strip(" —")
     return {"kind": kind, "title": title, "subtitle": f"दि. {period_label(start, shown_end)}",
             "start": start.isoformat(), "end": end.isoformat(), "header": header, "rows": rows, "total": total,
-            "text_cols": len(header) - len(keys), "blank": blank}
+            "text_cols": len(header) - len(keys), "blank": blank, "sort": sort, "order": order if sort else ""}
 
 
 def to_csv(t: dict[str, Any]) -> str:
@@ -323,7 +335,7 @@ def workbook(s: Session, form: Form, offices: list[str], start: date, end: date)
     ps_list = periods(form, start, end)
     subs = _subs(s, form, offices, ps_list)
     meta = _office_meta(s, offices)
-    header = ["दिनांक", "विभागाचे नाव", "जिल्ह्याचे नाव", *[f.label_mr for f in fields], "स्थिती"]
+    header = ["दिनांक", "विभागाचे नाव", "कार्यालयाचे नाव", *[f.label_mr for f in fields], "स्थिती"]
     width = len(header)
     de.cell(1, 1, f"{form.title_mr} — एकत्रित डेटा एंट्री")
     de.merge_cells(start_row=1, start_column=1, end_row=1, end_column=width)
@@ -340,9 +352,8 @@ def workbook(s: Session, form: Form, offices: list[str], start: date, end: date)
             sub = subs.get((o.code, ps))
             counted = sub is not None and sub.status in COUNTED
             de.cell(row, 1, ps).number_format = "yyyy-mm-dd"
-            div_name, office_name = office_names(o.code, d.summary_label_mr, o.name_mr)
-            de.cell(row, 2, div_name)
-            de.cell(row, 3, office_name)
+            de.cell(row, 2, office_names(o.code, d.summary_label_mr, o.name_mr)[0])
+            de.cell(row, 3, o.name_mr)  # the registry's official name (जिमाका, पुणे …), not the old sheet spelling
             vals = {v.field_id: v for v in sub.values} if counted else {}
             for i, f in enumerate(fields, start=4):
                 v = vals.get(f.id)

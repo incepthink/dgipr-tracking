@@ -89,7 +89,10 @@ def _resolve(code: Optional[str], allowed: dict[str, str], what: str) -> Optiona
         return code
     norm = str(code).strip().lower()
     for k, label in allowed.items():
-        if norm in [p.strip().lower() for p in label.split("/")]:
+        names = [p.strip().lower() for p in label.split("/")]
+        # a bare district name ("Satara", "सातारा") means its जिमाका / District Information Office
+        names += [n.split(",", 1)[1].strip() for n in names if n.startswith(("जिमाका,", "district information office,"))]
+        if norm in names:
             return k
     raise AskError(f"{what} {code!r} is not one you can see")
 

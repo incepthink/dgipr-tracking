@@ -189,8 +189,8 @@ class FormRecipient(Base):
 
 
 class FormSubmission(Base):
-    """One office's answers for one period. status draft|submitted|returned|accepted: submitting locks the period
-    for the office until the admin returns it; the admin may also correct values directly."""
+    """One office's answers for one period. status draft|submitted|returned. The office may keep changing a sent
+    period and the admin edits submitted values directly; every change after sending is a FormValueEdit."""
     __tablename__ = "form_submissions"
     __table_args__ = (UniqueConstraint("form_id", "office_code", "period_start", name="uq_form_submission"),
                       Index("ix_form_submission_form_period", "form_id", "period_start"))
@@ -208,6 +208,7 @@ class FormSubmission(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     values: Mapped[list["FormValue"]] = relationship(back_populates="submission", cascade="all, delete-orphan")
+    edits: Mapped[list["FormValueEdit"]] = relationship(cascade="all, delete-orphan", order_by="FormValueEdit.id")
 
 
 class FormValue(Base):
@@ -229,6 +230,26 @@ class FormValue(Base):
     corrected_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     correction_note: Mapped[str] = mapped_column(Text, default="")
     submission: Mapped[FormSubmission] = relationship(back_populates="values")
+    field: Mapped[FormField] = relationship()
+
+
+class FormValueEdit(Base):
+    """One change to a value after its period was sent, never changed or deleted: the value before and after, who,
+    when and why. source is "state" (an admin correction) or "office" (the office changing its own figure). An undo
+    is a new edit back to an earlier value, pointing at the edit it reverts."""
+    __tablename__ = "form_value_edits"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey("form_submissions.id"), index=True)
+    field_id: Mapped[int] = mapped_column(ForeignKey("form_fields.id"))
+    before_num: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    before_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    after_num: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    after_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    by: Mapped[str] = mapped_column(String(200))
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    note: Mapped[str] = mapped_column(Text, default="")
+    reverts_id: Mapped[Optional[int]] = mapped_column(ForeignKey("form_value_edits.id"), nullable=True)
+    source: Mapped[str] = mapped_column(String(10), default="state")
     field: Mapped[FormField] = relationship()
 
 

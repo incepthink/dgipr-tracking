@@ -1,13 +1,15 @@
 """Filling, submitting and reviewing forms.
 
-  office (district)  fills its own office's periods for the forms it receives: save draft → submit. A submitted
-                     period is locked until the admin returns it.
+  office (district)  fills its own office's periods for the forms it receives: save draft → submit. It may keep
+                     changing a sent period until 11:59 PM IST on the period's last day (each change is kept as a
+                     FormValueEdit); after that the period is read-only for it unless the state office returns it.
   zone               reads its division's submissions; never writes.
-  state              may fill any recipient office, and reviews: accept, return with a note, or correct a value.
+  state              may fill any recipient office, edits submitted values, and may return a period with a note.
 
 Blank fields stay missing (no row); a typed 0 is stored only when the office confirms zeros, so an untouched
-field can never pass for a confirmed zero. A correction keeps the office's original value, who corrected it,
-when and why; the UI and the Excel export highlight it. Every change writes an audit entry."""
+field can never pass for a confirmed zero. An edit keeps the office's original value and adds a FormValueEdit
+(before, after, who, when, why), so every edit can be undone; the UI and the Excel export highlight edited
+values. Every change writes an audit entry."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -19,14 +21,14 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.auth import can_edit, visible_office_codes
-from app.forms.periods import deadline, is_period_start, label, period_end, periods
+from app.forms.periods import deadline, entry_closes, is_period_start, label, period_end, periods
 from app.forms.schema import FormError, active_fields, recipient_codes
-from app.models import Division, Form, FormField, FormRecipient, FormSubmission, FormValue, Office, User
+from app.models import Division, Form, FormField, FormRecipient, FormSubmission, FormValue, FormValueEdit, Office, User
 from app.timeutil import today_ist, utcnow
 
-COUNTED = ("submitted", "accepted", "returned")  # what roll-ups and reports sum; drafts are work in progress
-LOCKED_FOR_OFFICE = ("submitted", "accepted")
+COUNTED = ("submitted", "returned")  # what roll-ups and reports sum; drafts are work in progress
 MAX_TEXT = 2000
+ENTRY_CLOSED = "entry closed at 11:59 PM; only the state office can change these figures now"
 
 Value = Any  # float | str | None
 
@@ -143,7 +145,7 @@ def _late(form: Form, ps: date, sub: Optional[FormSubmission], now: datetime) ->
     dl = deadline(form, ps)
     if dl is None:
         return False
-    if sub is not None and sub.submitted_at is not None and sub.status in ("submitted", "accepted"):
+    if sub is not None and sub.submitted_at is not None and sub.status == "submitted":
         return sub.submitted_at > dl
     return now > dl
 
@@ -172,6 +174,7 @@ def submission_json(form: Form, office: str, ps: date, sub: Optional[FormSubmiss
             "reviewed_at": sub.reviewed_at.isoformat() + "Z" if sub and sub.reviewed_at else None,
             "reviewed_by": sub.reviewed_by if sub else "", "review_note": sub.review_note if sub else "",
             "note": sub.note if sub else "", "values": values, "corrections": corrections,
+            "edits": [edit_json(e) for e in sub.edits] if sub else [],
             "entered_by": latest.entered_by if latest else None,
             "entered_at": latest.entered_at.isoformat() + "Z" if latest else None}
 
@@ -197,15 +200,18 @@ def editable(user: User, form: Form, office: str, ps: date, sub: Optional[FormSu
         return "not a reporting period of this form"
     if ps > today_ist():
         return "this period has not started yet"
-    if sub is not None and sub.status in LOCKED_FOR_OFFICE:
-        return ("already submitted — use Correct to change a value" if user.role == "state"
-                else "already submitted; ask the state office to return it if something is wrong")
     if user.role == "state":
+        if sub is not None and sub.status == "submitted":
+            return "already submitted — edit the values on the responses page"
         return None
     if form.status != "published":
         return "this form is closed"
     if not form.entry_open:
         return "data entry is paused for this form"
+    # offices fill a day until 11:59 PM IST that day; afterwards only the state office changes it, unless it
+    # returned the period to the office for a fix
+    if utcnow() >= entry_closes(form, ps) and not (sub is not None and sub.status == "returned"):
+        return ENTRY_CLOSED
     return None
 
 
@@ -249,18 +255,23 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
     before = {r.field.key: value_of(r.field, r) for r in rows.values()}
     now = utcnow()
     who = actor or (user.username if user else "system")
+    sent = sub.status in COUNTED  # changes to a sent period are kept as its history
     for k, (n, t) in cleaned.items():
         f = by_key[k]
         row = rows.get(f.id)
+        old = (row.value_num, row.value_text) if row is not None else (None, None)
+        if old == (n, t):
+            continue
+        if sent:
+            sub.edits.append(FormValueEdit(field_id=f.id, before_num=old[0], before_text=old[1], after_num=n,
+                                           after_text=t, by=who, at=now,
+                                           source="state" if user and user.role == "state" else "office"))
         if n is None and t is None:
-            if row is not None:
-                sub.values.remove(row)
+            sub.values.remove(row)
             continue
         if row is None:
             row = FormValue(field_id=f.id)
             sub.values.append(row)
-        elif row.value_num == n and row.value_text == t:
-            continue
         # the office's own new value replaces an earlier correction (which stays in the audit log)
         row.original_value_num = row.original_value_text = row.corrected_by = row.corrected_at = None
         row.correction_note = ""
@@ -274,6 +285,8 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
     s.flush()
     s.expire(sub, ["values"])
     after = {r.field.key: value_of(r.field, r) for r in sub.values}
+    if check and sub.status == "submitted" and not submit and (missing := missing_required(form, sub)):
+        raise FormError("a sent period can't lose a required field: " + ", ".join(f.label_mr for f in missing))
     if before != after:
         audit.record(s, who, "form_submission.save", "form_submission", _eid(form, office, ps),
                      before=before or None, after=after or None, note=note or "")
@@ -304,6 +317,8 @@ def submit_(s: Session, user: Optional[User], form: Form, sub: FormSubmission, *
         if not any(_has(v) for v in sub.values):
             raise FormError("nothing filled in yet")
     before = sub.status
+    if before == "submitted":  # sending changes to a sent period keeps when it was first sent
+        return sub
     sub.status = "submitted"
     sub.submitted_at = utcnow()
     sub.submitted_by = who
@@ -332,25 +347,19 @@ def return_(s: Session, admin: User, form: Form, office: str, ps: date, note: st
     return sub
 
 
-def accept(s: Session, admin: User, form: Form, office: str, ps: date) -> FormSubmission:
-    sub = _review_target(s, form, office, ps)
-    if sub.status == "returned":
-        raise FormError("the office has not resubmitted yet")
-    before = sub.status
-    sub.status = "accepted"
-    sub.reviewed_at, sub.reviewed_by = utcnow(), admin.username
-    audit.record(s, admin.username, "form_submission.accept", "form_submission", _eid(form, office, ps),
-                 before={"status": before}, after={"status": "accepted"})
-    return sub
+def edit_json(e: FormValueEdit) -> dict[str, Any]:
+    f = e.field
+    num = f.type == "number"
+    return {"id": e.id, "key": f.key, "by": e.by, "at": e.at.isoformat() + "Z", "note": e.note, "source": e.source,
+            "before": _num_out(f, e.before_num) if num else e.before_text,
+            "after": _num_out(f, e.after_num) if num else e.after_text, "reverts": e.reverts_id}
 
 
 def correct(s: Session, admin: User, form: Form, office: str, ps: date, key: str, value: Any,
-            note: str) -> FormValue:
-    """Admin correction of one submitted value. The office's value is kept as the original; correcting back
-    to the original removes the highlight."""
+            note: str = "", reverts: Optional[FormValueEdit] = None) -> FormValueEdit:
+    """Admin edit of one submitted value. The office's value is kept as the original; editing back to the
+    original removes the highlight. Every edit is kept as a FormValueEdit."""
     note = (note or "").strip()
-    if not note:
-        raise FormError("give a reason for the correction")
     f = next((x for x in form.fields if x.key == key), None)
     if f is None:
         raise FormError(f"unknown field {key}")
@@ -360,9 +369,12 @@ def correct(s: Session, admin: User, form: Form, office: str, ps: date, key: str
     if row is None:
         row = FormValue(field_id=f.id, entered_by="", entered_at=utcnow())
         sub.values.append(row)
-    before = value_of(f, row) if _has(row) else None
     if (row.value_num, row.value_text) == (n, t):
         raise FormError("the value is unchanged")
+    before = value_of(f, row) if _has(row) else None
+    edit = FormValueEdit(field_id=f.id, before_num=row.value_num, before_text=row.value_text, after_num=n,
+                         after_text=t, by=admin.username, note=note[:1000], reverts_id=reverts.id if reverts else None)
+    sub.edits.append(edit)
     if row.corrected_at is None:
         row.original_value_num, row.original_value_text = row.value_num, row.value_text
     row.value_num, row.value_text = n, t
@@ -371,10 +383,22 @@ def correct(s: Session, admin: User, form: Form, office: str, ps: date, key: str
         row.correction_note = ""
     else:
         row.corrected_by, row.corrected_at, row.correction_note = admin.username, utcnow(), note[:1000]
+    sub.updated_at = utcnow()
     s.flush()
-    audit.record(s, admin.username, "form_value.correct", "form_submission", _eid(form, office, ps),
-                 before={key: before}, after={key: value_of(f, row)}, note=note)
-    return row
+    audit.record(s, admin.username, "form_value.revert" if reverts else "form_value.correct", "form_submission",
+                 _eid(form, office, ps), before={key: before}, after={key: value_of(f, row)}, note=note)
+    return edit
+
+
+def revert(s: Session, admin: User, form: Form, office: str, ps: date, edit_id: int) -> FormValueEdit:
+    """Undo one edit: set the value back to what it was before that edit, as a new edit pointing at it."""
+    sub = _review_target(s, form, office, ps)
+    target = next((e for e in sub.edits if e.id == edit_id), None)
+    if target is None:
+        raise FormError("edit not found", 404)
+    f = target.field
+    before = (_num_out(f, target.before_num) if f.type == "number" else target.before_text)
+    return correct(s, admin, form, office, ps, f.key, before, "", reverts=target)
 
 
 # --------------------------------------------------------------------------- review views
@@ -425,7 +449,7 @@ def compliance(s: Session, form: Form, offices: list[str], start: date, end: dat
             filled = sum(1 for v in sub.values if v.field_id in active_ids and _has(v)) if sub else 0
             cells.append({"status": st, "late": late, "filled": filled})
             per_period[ps][st] += 1
-            if st in ("submitted", "accepted"):
+            if st == "submitted":
                 sent += 1
             else:
                 missing[ps].append(o.code)

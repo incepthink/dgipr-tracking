@@ -35,6 +35,24 @@ def init_db(engine: Engine) -> None:
     from app import models  # noqa: F401  (register tables)
     Base.metadata.create_all(engine)
     _allow_reports_without_campaign(engine)
+    _drop_accepted_status(engine)
+    _add_edit_source(engine)
+
+
+def _add_edit_source(engine: Engine) -> None:
+    """form_value_edits.source (who made a change after sending); earlier edits were all the state office's."""
+    from sqlalchemy import inspect, text
+    if "source" in {c["name"] for c in inspect(engine).get_columns("form_value_edits")}:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE form_value_edits ADD COLUMN source VARCHAR(10) NOT NULL DEFAULT 'state'"))
+
+
+def _drop_accepted_status(engine: Engine) -> None:
+    """Submissions are no longer accepted by the state office; an earlier 'accepted' one is just submitted."""
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE form_submissions SET status = 'submitted' WHERE status = 'accepted'"))
 
 
 def _allow_reports_without_campaign(engine: Engine) -> None:

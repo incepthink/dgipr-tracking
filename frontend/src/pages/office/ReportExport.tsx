@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, Printer } from "lucide-react";
-import { api, type SheetTable } from "@/lib/api";
+import { api, backendUrl, type SheetTable } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
@@ -46,8 +46,10 @@ type Fmt = "xlsx" | "csv" | "print";
 const FMT_LABEL: Record<Fmt, TKey> = { xlsx: "fmt_excel", csv: "fmt_csv", print: "fmt_print" };
 
 /** Pick a table (or the whole workbook), its dates, division and format; pre-filled from the screen. */
-export function ReportExportSheet({ f, open, onClose, kind, asOf }: {
+export function ReportExportSheet({ f, open, onClose, kind, asOf, sort }: {
   f: FormFilters; open: boolean; onClose: () => void; kind: Kind; asOf: string;
+  /** The screen's row order (column + asc/desc); tables export in that order. */
+  sort?: { sort?: string; order?: string };
 }) {
   const { t, tf, lang } = useT();
   const me = useUser();
@@ -95,11 +97,13 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf }: {
     : preset === "last7" ? { start: addDays(asOf, -6) < lo ? lo : addDays(asOf, -6), end: asOf }
     : { start: from, end: to };
   const badRange = !range.start || !range.end || range.start > range.end;
-  const scope = { ...f, start: range.start, end: range.end, division };
+  // the screen's office filter holds while the division is unchanged and the table is per office or date-wise
+  const office = division === f.division && (what === "workbook" || what === "datewise" || what.endsWith("_office")) ? f.office : "";
+  const scope = { ...f, start: range.start, end: range.end, division, office };
   const fmtOk = (x: Fmt) => what !== "workbook" || x === "xlsx";
   const href = what === "workbook"
     ? `/api/forms/${f.formId}/export${scopeQs(scope)}`
-    : `/api/forms/${f.formId}/analytics/export${scopeQs(scope, { kind: what, format: fmt })}`;
+    : `/api/forms/${f.formId}/analytics/export${scopeQs(scope, { kind: what, format: fmt, ...sort })}`;
   // a daily table covers the whole period holding the date (a week, for weekly forms)
   const shown = daily && form ? { start: periodOf(form, day), end: periodEnd(form, periodOf(form, day)) } : range;
   const whatLabel = what === "workbook" ? t("exp_workbook") : t(`t_${what}` as TKey);
@@ -114,7 +118,7 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf }: {
     if (what === "workbook") return;
     setBusy(true);
     try {
-      const data = await qc.fetchQuery(sheetTableQuery(f.formId, scopeQs(scope, { kind: what })));
+      const data = await qc.fetchQuery(sheetTableQuery(f.formId, scopeQs(scope, { kind: what, ...sort })));
       onClose();
       setPrinting(data);
     } catch (e) {
@@ -132,7 +136,7 @@ export function ReportExportSheet({ f, open, onClose, kind, asOf }: {
       ) : fmt === "print" ? (
         <RButton variant="pri" size="lg" loading={busy} onClick={print}><Printer aria-hidden />{t("print")}</RButton>
       ) : (
-        <RButton asChild variant="pri" size="lg"><a href={href} download><Download aria-hidden />{t("download")}</a></RButton>
+        <RButton asChild variant="pri" size="lg"><a href={backendUrl(href)} download><Download aria-hidden />{t("download")}</a></RButton>
       )}
     </>
   );

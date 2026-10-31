@@ -6,7 +6,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23ea580c'/><path d='M9 22V10h5.5a6 6 0 0 1 0 12z' fill='white'/></svg>" />
     <title>DGIPR Tracking</title>
     <script>
-      try { const t = localStorage.getItem("theme"); if (t === "dark" || (!t && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark"); } catch {}
+      try { if (localStorage.getItem("theme") === "dark") document.documentElement.classList.add("dark"); } catch {}
     </script>
   </head>
   <body>

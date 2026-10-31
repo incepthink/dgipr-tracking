@@ -48,7 +48,7 @@ export function useLogout() {
     try { await api.post("/api/auth/logout"); } finally {
       qc.clear();
       qc.setQueryData(["me"], null);
-      window.location.assign("/app/");
+      window.location.assign(import.meta.env.BASE_URL);
     }
   };
 }

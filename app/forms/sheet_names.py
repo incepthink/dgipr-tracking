@@ -1,8 +1,13 @@
 """How the admin's workbook spells divisions and offices (the names in its डेटा एंट्री and roll-up sheets).
 
 Exports write these spellings so the workbook looks exactly like the one built by hand; scripts/import_sheet.py
-reads with them. Offices not listed fall back to the registry names."""
+reads with them. Office names in exports are the registry's official ones (जिमाका, पुणे …); code_for reads either
+spelling, so a workbook exported from here imports back."""
 from __future__ import annotations
+
+from functools import lru_cache
+from pathlib import Path
+from typing import Optional
 
 # (sheet division, sheet office) -> office code. Spelled exactly as in the workbook.
 OFFICE_MAP: dict[tuple[str, str], str] = {
@@ -61,3 +66,16 @@ def division_name(division_code: str, office_codes: list[str], fallback: str) ->
 
 def office_names(office_code: str, division_fallback: str, office_fallback: str) -> tuple[str, str]:
     return BY_CODE.get(office_code, (division_fallback, office_fallback))
+
+
+@lru_cache(maxsize=1)
+def _official() -> dict[str, str]:
+    """Registry name_mr -> office code, from config/organisation.yaml."""
+    import yaml
+    data = yaml.safe_load((Path(__file__).resolve().parents[2] / "config" / "organisation.yaml").read_text("utf-8"))
+    return {o["name_mr"]: o["code"] for d in data["divisions"] for o in d["offices"]}
+
+
+def code_for(division: str, office: str) -> Optional[str]:
+    """Office code for a workbook row: the old sheet spelling, else the registry's official name."""
+    return OFFICE_MAP.get((division, office)) or _official().get(office)

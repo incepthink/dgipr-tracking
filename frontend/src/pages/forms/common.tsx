@@ -49,6 +49,7 @@ export function useFormFilters(defaultDays = 7) {
   const end = params.get("end") || lastDay;
   const start = params.get("start") || (end ? maxDate(addDays(end, -(defaultDays - 1)), form?.start_date ?? "") : "");
   const division = params.get("division") || "";
+  const office = params.get("office") || "";
   const set = React.useCallback((patch: Record<string, string | number | null | undefined>) => {
     setParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -59,7 +60,7 @@ export function useFormFilters(defaultDays = 7) {
       return next;
     }, { replace: true });
   }, [setParams]);
-  return { forms, form, formId, start, end, lastDay, division, today, ready: !!form && !!today, set, params };
+  return { forms, form, formId, start, end, lastDay, division, office, today, ready: !!form && !!today, set, params };
 }
 
 export type FormFilters = ReturnType<typeof useFormFilters>;
@@ -71,6 +72,7 @@ function maxDate(a: string, b: string) {
 export function scopeQs(f: FormFilters, extra: Record<string, string | number | undefined> = {}) {
   const p = new URLSearchParams({ start: f.start, end: f.end });
   if (f.division) p.set("division", f.division);
+  if (f.office) p.set("office", f.office);
   for (const [k, v] of Object.entries(extra)) if (v !== undefined && v !== "") p.set(k, String(v));
   return "?" + p.toString();
 }
@@ -160,13 +162,12 @@ export function periodText(p: { period_start: string; period_end: string }, lang
 }
 
 export const SUB_TONE: Record<SubStatus, "neutral" | "warning" | "info" | "danger" | "success"> = {
-  none: "neutral", draft: "warning", submitted: "info", returned: "danger", accepted: "success",
+  none: "neutral", draft: "warning", submitted: "info", returned: "danger",
 };
 
 /** Cell colours for the compliance matrix (tokens shared with the analytics heatmap). */
 export const SUB_FILL: Record<SubStatus, string> = {
   none: "var(--seq-empty)", draft: "var(--seq-partial)", submitted: "var(--seq-full)", returned: "var(--danger)",
-  accepted: "var(--success)",
 };
 
 export function SubBadge({ status, late }: { status: SubStatus; late?: boolean }) {

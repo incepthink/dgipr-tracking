@@ -1,6 +1,6 @@
 """Import the admin's data-entry workbook ("दुष्काळ_प्रसिद्धी_अहवाल_….xlsx", sheet "डेटा एंट्री") into a form.
 
-Header on row 3, data from row 4: दिनांक, विभागाचे नाव, जिल्ह्याचे नाव, then the 12 report columns in COLUMNS
+Header on row 3, data from row 4: दिनांक, विभागाचे नाव, जिल्ह्याचे / कार्यालयाचे नाव, then the 12 report columns in COLUMNS
 order (the form's fields with those keys). Only filled cells are loaded: a blank cell stays missing, a typed 0
 is a confirmed zero. Each office-day becomes a submitted period; existing values for the same office-day-field
 are overwritten (the import is re-runnable). One audit entry records the batch, with actor "import:xlsx".
@@ -23,7 +23,7 @@ ACTOR = "import:xlsx"
 SHEET = "डेटा एंट्री"
 HEADER_ROW, FIRST_ROW = 3, 4
 
-from app.forms.sheet_names import OFFICE_MAP  # noqa: E402  (sheet spellings -> office code)
+from app.forms.sheet_names import OFFICE_MAP, code_for  # noqa: E402,F401  (sheet spellings -> office code)
 
 
 def read_sheet(path: Path) -> tuple[list[tuple[date, str, list[int | None]]], list[str]]:
@@ -43,7 +43,7 @@ def read_sheet(path: Path) -> tuple[list[tuple[date, str, list[int | None]]], li
             continue
         day = row[0].date() if isinstance(row[0], datetime) else row[0]
         division, office = (str(row[1] or "").strip(), str(row[2] or "").strip())
-        code = OFFICE_MAP.get((division, office))
+        code = code_for(division, office)
         if not isinstance(day, date):
             problems.append(f"row {n}: date {row[0]!r} is not a date")
             continue

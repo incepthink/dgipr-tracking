@@ -1,16 +1,16 @@
 import * as React from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSpreadsheet, X } from "lucide-react";
-import { api, ApiError, type AnswerValue, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSpreadsheet, RotateCcw, Undo2 } from "lucide-react";
+import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
-import { RButton, RError, RInput, RLabel, RPage, RSearch, RSheet, RTitle } from "@/components/reports/kit";
-import { fig, periodOf, timeOf, whenText } from "@/components/reports/period";
+import { RButton, RError, RInput, RLabel, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
+import { fig, periodOf, rangeText, stepOf, timeOf, whenText } from "@/components/reports/period";
 import { fieldLabel, formTitle, useFormFilters } from "./common";
 import { periodName, useResponses } from "../office/shared";
 
-const SENT = ["submitted", "accepted", "returned"];
+const SENT = ["submitted", "returned"];
 
 export function showValue(f: FormField, v: AnswerValue, t: (k: TKey) => string) {
   if (v === null || v === undefined || v === "") return "—";
@@ -20,31 +20,40 @@ export function showValue(f: FormField, v: AnswerValue, t: (k: TKey) => string) 
 
 export const officeName = (r: ResponseRow, lang: string) => (lang === "en" && r.office_name_en ? r.office_name_en : r.office_name_mr);
 
-/** Table spelling: "Divisional Information Office, Pune" → "Div. Pune", "Chhatrapati" → "Chh." (as the Marathi "विमाका, छ."). */
+/** Table spelling: "Divisional Information Office, Pune" → "Div. Pune", "District Information Office, Pune" →
+ * "Dist. Pune", "Chhatrapati" → "Chh." (as the Marathi "विमाका, छ."). */
 export const shortOffice = (r: ResponseRow, lang: string) => officeName(r, lang)
   .replace(/^Divisional Information Office,?\s*/i, "Div. ")
+  .replace(/^District Information Office,?\s*/i, "Dist. ")
   .replace(/^Headquarters,?\s*/i, "HQ ")
   .replace(/\bChhatrapati\s+/g, "Chh. ")
-  .replace(/^(विमाका|मुख्यालय),?\s*/, "$1 ");
+  .replace(/^(विमाका|जिमाका|संचालक|मुख्यालय),?\s*/, "$1 ");
 const norm = (s: string) => s.toLocaleLowerCase().trim();
 
-/** Forms that have a period on `day`, newest first. */
-export function formsOn(forms: FormDef[], day: string) {
-  return forms
-    .filter((x) => (x.status === "published" || x.status === "closed") && x.start_date <= day && (!x.end_date || day <= x.end_date))
+/** Every period of a form so far, capped at the latest 62 (the most the API serves at once). */
+export function allRange(form: FormDef, today: string) {
+  const last = form.end_date && form.end_date < today ? form.end_date : today;
+  const end = periodOf(form, last);
+  return { start: [form.start_date, addDays(end, -61 * stepOf(form))].sort().at(-1)!, end };
+}
+
+/** Forms that have started, newest first. */
+export function startedForms(forms: FormDef[], today: string) {
+  return forms.filter((x) => (x.status === "published" || x.status === "closed") && x.start_date <= today)
     .sort((a, b) => b.start_date.localeCompare(a.start_date));
 }
 
 export default function ResponsesPage() {
   const { t, tf } = useT();
   const f = useFormFilters();
-  const day = f.params.get("day") || f.today;
+  const today = f.today;
   const q = f.params.get("q") || "";
-  const forms = React.useMemo(() => (f.forms && day ? formsOn(f.forms, day) : []), [f.forms, day]);
+  const forms = React.useMemo(() => (f.forms && today ? startedForms(f.forms, today) : []), [f.forms, today]);
 
   // sections opened by hand; while searching, matching sections open unless closed by hand.
-  // A link that names a form (?form=, e.g. Review on the desk) opens that section.
+  // A link that names a form (?form=, e.g. Review on the desk) opens that section, at ?day= if given.
   const target = Number(f.params.get("form")) || 0;
+  const targetDay = f.params.get("day");
   const [opened, setOpened] = React.useState<Set<number>>(() => new Set(target ? [target] : []));
   const [closed, setClosed] = React.useState<Set<number>>(new Set());
   React.useEffect(() => setClosed(new Set()), [q]);
@@ -63,15 +72,14 @@ export default function ResponsesPage() {
     <RPage>
       <RTitle title={t("nav_responses")} />
 
-      <RSearch value={q} placeholder={t("resp_search")} onChange={(v) => f.set({ q: v || null })}>
-        <DatePicker value={day} max={f.today} onChange={(d) => f.set({ day: d === f.today ? null : d })} />
-      </RSearch>
+      <RSearch value={q} placeholder={t("resp_search")} onChange={(v) => f.set({ q: v || null })} />
 
       <div className="mt-5 flex flex-col gap-3">
         {!f.forms ? <div className="h-40 animate-pulse rounded-2xl bg-r-sunk" />
           : !forms.length ? <p className="m-0 rounded-2xl bg-r-card p-5 text-r-muted">{t("no_forms")}</p>
           : forms.map((x) => (
-            <FormSection key={x.id} form={x} day={day} division="" q={q} open={isOpen(x.id)} focus={x.id === target} onToggle={() => toggle(x.id)} onHits={onHits} />
+            <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} division="" q={q}
+              open={isOpen(x.id)} focus={x.id === target} onToggle={() => toggle(x.id)} onHits={onHits} />
           ))}
         {noMatch && <p className="m-0 rounded-2xl bg-r-card p-5 text-r-muted">{tf("resp_no_match", { q: q.trim() })}</p>}
       </div>
@@ -80,18 +88,25 @@ export default function ResponsesPage() {
 }
 
 // --------------------------------------------------------------------------- one form, as a dropdown
-function FormSection({ form, day, division, q, open, focus, onToggle, onHits }: {
-  form: FormDef; day: string; division: string; q: string; open: boolean; focus: boolean; onToggle: () => void; onHits: (id: number, n: number) => void;
+/** All dates by default; the calendar inside narrows the dropdown to one date. */
+function FormSection({ form, today, day, division, q, open, focus, onToggle, onHits }: {
+  form: FormDef; today: string; day: string | null; division: string; q: string; open: boolean; focus: boolean;
+  onToggle: () => void; onHits: (id: number, n: number) => void;
 }) {
   const { t, tf, lang } = useT();
   const box = React.useRef<HTMLElement>(null);
   React.useEffect(() => { if (focus) box.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focus]);
   const qc = useQueryClient();
-  const ps = periodOf(form, day);
-  const { data, error, isLoading, isFetching } = useResponses(form.id, ps, ps, division);
+  const [sel, setSel] = React.useState<string | null>(day);
+  const range = allRange(form, today);
+  const once = form.frequency === "once";
+  const byDate = !sel && !once;
+  const ps = periodOf(form, sel ?? range.end);
+  const { start, end } = byDate ? range : { start: ps, end: ps };
+  const { data, error, isLoading, isFetching } = useResponses(form.id, start, end, division);
   const fields = (data?.form.fields ?? []).filter((x) => !x.archived);
-  const review = data?.can_review ?? false;
-  const all = React.useMemo(() => (data?.rows ?? []).filter((r) => r.period_start === ps), [data, ps]);
+  const canEdit = data?.can_review ?? false;
+  const all = React.useMemo(() => (data?.rows ?? []).filter((r) => r.period_start >= start && r.period_start <= end), [data, start, end]);
 
   // a form whose title matches shows all its offices; otherwise only matching offices
   const needle = norm(q);
@@ -101,59 +116,74 @@ function FormSection({ form, day, division, q, open, focus, onToggle, onHits }: 
   }, [all, needle, form]);
   React.useEffect(() => { if (data) onHits(form.id, rows.length); }, [data, rows.length, form.id, onHits]);
 
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const [rejecting, setRejecting] = React.useState<ResponseRow | null>(null);
-  const [note, setNote] = React.useState("");
-  const [showLog, setShowLog] = React.useState(false);
-  const noteRef = React.useRef<HTMLInputElement>(null);
-  React.useEffect(() => { if (rejecting) noteRef.current?.focus(); }, [rejecting]);
+  // newest date first, each date under its own band
+  const groups = React.useMemo(() => {
+    if (!byDate) return [{ ps: "", rows }];
+    const m = new Map<string, ResponseRow[]>();
+    rows.forEach((r) => m.set(r.period_start, [...(m.get(r.period_start) ?? []), r]));
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([p, rs]) => ({ ps: p, rows: rs }));
+  }, [rows, byDate]);
 
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<{ id: string; key: string } | null>(null);
+  const [showLog, setShowLog] = React.useState(false);
+
+  const rowId = (r: ResponseRow) => `${r.office}:${r.period_start}`;
   const base = (r: ResponseRow) => `/api/forms/${form.id}/submissions/${r.office}/${r.period_start}`;
   const refresh = () => { qc.invalidateQueries({ queryKey: ["responses"] }); qc.invalidateQueries({ queryKey: ["compliance"] }); };
   const fail = (e: unknown) => toast.error(e instanceof ApiError ? e.message : String(e));
 
-  const accept = async (r: ResponseRow) => {
-    setBusy(r.office);
-    try { await api.post(`${base(r)}/accept`); toast.success(t("sub_accepted")); if (rejecting === r) setRejecting(null); refresh(); }
+  const revert = async (r: ResponseRow, edit: number) => {
+    setBusy(rowId(r));
+    try { await api.post(`${base(r)}/revert`, { edit_id: edit }); toast.success(t("value_restored")); refresh(); }
     catch (e) { fail(e); } finally { setBusy(null); }
   };
-  const reject = async () => {
-    if (!rejecting) return;
-    if (!note.trim()) { noteRef.current?.focus(); toast.error(t("return_needs_note")); return; }
-    setBusy(rejecting.office);
-    try { await api.post(`${base(rejecting)}/return`, { note: note.trim() }); toast.success(t("sub_returned")); setRejecting(null); setNote(""); refresh(); }
-    catch (e) { fail(e); } finally { setBusy(null); }
-  };
-  const queue = rows.filter((r) => r.status === "submitted");
-  const acceptAll = async () => {
-    setBusy("*");
-    const res = await Promise.allSettled(queue.map((r) => api.post(`${base(r)}/accept`)));
-    const ok = res.filter((x) => x.status === "fulfilled").length;
-    if (ok) toast.success(tf("accepted_n", { n: ok }));
-    res.forEach((x) => x.status === "rejected" && fail(x.reason));
-    setBusy(null);
-    refresh();
+  const save = async (r: ResponseRow, key: string, value: string, note: string) => {
+    setBusy(rowId(r));
+    try {
+      const out = await api.post<Submission>(`${base(r)}/correct`, { key, value: value.trim() || null, note });
+      const last = out.edits.at(-1);
+      toast.success(t("value_saved"), last ? { action: { label: t("undo"), onClick: () => void revert(r, last.id) } } : undefined);
+      setEditing(null);
+      refresh();
+    } catch (e) { fail(e); } finally { setBusy(null); }
   };
 
   if (q.trim() && data && !rows.length) return null;
   const sent = all.filter((r) => SENT.includes(r.status)).length;
-  const toReview = all.filter((r) => r.status === "submitted").length;
+  const edited = all.filter((r) => Object.keys(r.corrections).length > 0).length;
   const bodyId = `form-${form.id}`;
+  const editRow = editing && all.find((r) => rowId(r) === editing.id);
+  const editField = editing && fields.find((x) => x.key === editing.key);
+  const when = byDate ? `${t("zb_all_dates")} · ${rangeText(start, end, lang)}` : periodName(form, ps, lang);
 
   return (
-    <section ref={box} className="scroll-mt-4 overflow-hidden rounded-2xl border border-r-line bg-r-card">
+    <section ref={box} className="scroll-mt-4 rounded-2xl border border-r-line bg-r-card">
       <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={onToggle}
-        className="flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-5 py-4 text-left text-r-ink hover:bg-r-ground">
+        className={cn("flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-5 py-4 text-left text-r-ink hover:bg-r-ground", open ? "rounded-t-2xl" : "rounded-2xl")}>
         <ChevronDown className={cn("size-5 shrink-0 text-r-muted transition-transform", !open && "-rotate-90")} aria-hidden />
         <span className="flex min-w-0 flex-1 flex-col">
           <b className="truncate text-[17px]">{formTitle(form, lang)}</b>
-          <span className="text-[13px] text-r-muted">{periodName(form, ps, lang)}</span>
+          <span className="text-[13px] text-r-muted">{when}</span>
         </span>
-        {data && <span className="num shrink-0 text-[13px] text-r-muted">{tf("resp_counts", { a: sent, b: all.length, r: toReview })}</span>}
+        {data && <span className="num shrink-0 text-[13px] text-r-muted">{tf("resp_counts", { a: sent, b: all.length })}{edited > 0 && ` · ${tf("resp_edited", { n: edited })}`}</span>}
       </button>
 
       {open && (
         <div id={bodyId} className="border-t border-r-line">
+          {!once && (
+            <div className="flex flex-wrap items-center gap-2 px-4 pt-3 pb-1">
+              <button type="button" aria-pressed={byDate} onClick={() => setSel(null)}
+                className={cn("inline-flex h-11.75 cursor-pointer items-center rounded-xl border-[1.5px] px-4 text-[15px] font-semibold",
+                  byDate ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
+                {t("zb_all_dates")}
+              </button>
+              <span className={cn("rounded-xl border-[1.5px]", !byDate ? "border-r-ink" : "border-r-line")}>
+                <DatePicker align="left" value={sel ?? range.end} max={today} min={form.start_date} last={form.end_date ?? undefined} onChange={setSel}
+                  className={byDate ? "text-r-muted" : undefined} />
+              </span>
+            </div>
+          )}
           {error ? <div className="p-4"><RError error={error} /></div> : isLoading || !data ? <div className="m-4 h-40 animate-pulse rounded-xl bg-r-sunk" /> : !rows.length ? (
             <p className="m-0 p-5 text-r-muted">{t("resp_no_rows")}</p>
           ) : (
@@ -163,72 +193,68 @@ function FormSection({ form, day, division, q, open, focus, onToggle, onHits }: 
                   <col className="w-[148px]" />
                   <col className="w-[64px]" />
                   {fields.map((x) => <col key={x.key} />)}
-                  {review && <col className="w-[84px]" />}
                 </colgroup>
                 <thead className="sticky top-0 z-20">
                   <tr>
                     <th scope="col" className="sticky left-0 z-30 border-b border-r-line bg-r-card px-3 py-2 text-left align-bottom text-xs font-bold text-r-muted">{t("office")}</th>
                     <th scope="col" className="border-b border-r-line bg-r-card px-1.5 py-2 text-left align-bottom text-xs font-bold text-r-muted first-letter:uppercase">{t("sent")}</th>
                     {fields.map((x) => <th key={x.key} scope="col" title={fieldLabel(x, lang)} className="border-b border-r-line bg-r-card px-1.5 py-2 text-right align-bottom text-[11px] leading-tight font-bold break-words hyphens-auto text-r-muted">{fieldLabel(x, lang)}</th>)}
-                    {review && <th scope="col" className="sticky right-0 z-30 border-b border-r-line bg-r-card px-2 py-2"><span className="sr-only">{t("status")}</span></th>}
                   </tr>
                 </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <Row key={r.office} r={r} fields={fields} review={review} busy={busy === r.office || busy === "*"} rejecting={rejecting === r}
-                      onAccept={() => accept(r)} onReject={() => { setRejecting(rejecting === r ? null : r); setNote(""); }} />
-                  ))}
-                </tbody>
+                {groups.map((g) => (
+                  <tbody key={g.ps || "one"}>
+                    {byDate && (
+                      <tr>
+                        <th scope="colgroup" colSpan={fields.length + 2} className="sticky left-0 border-b border-r-line bg-r-sunk px-3 py-1.5 text-left text-[13px]">
+                          <span className="font-bold">{periodName(form, g.ps, lang)}</span>
+                          <span className="num ml-2 font-normal text-r-muted">{tf("resp_counts", { a: g.rows.filter((r) => SENT.includes(r.status)).length, b: g.rows.length })}</span>
+                        </th>
+                      </tr>
+                    )}
+                    {g.rows.map((r) => (
+                      <Row key={rowId(r)} r={r} fields={fields} canEdit={canEdit} editing={editing?.id === rowId(r) ? editing.key : null}
+                        onEdit={(key) => setEditing({ id: rowId(r), key })} />
+                    ))}
+                  </tbody>
+                ))}
               </table>
             </div>
           )}
 
           {data && rows.length > 0 && (
-            <div className="flex flex-col gap-3 border-t border-r-line px-4 py-3">
-              {review && rejecting && (
-                <div className="flex flex-wrap items-end gap-2.5">
-                  <RLabel small label={tf("note_to", { o: officeName(rejecting, lang) })} className="min-w-60 flex-1">
-                    <RInput ref={noteRef} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("return_note")}
-                      onKeyDown={(e) => { if (e.key === "Enter") void reject(); else if (e.key === "Escape") setRejecting(null); }} />
-                  </RLabel>
-                  <RButton variant="ghost" onClick={() => setRejecting(null)}>{t("discard")}</RButton>
-                  <RButton className="border-r-overdue bg-r-overdue text-white hover:bg-r-overdue-ink dark:text-r-ground" loading={busy === rejecting.office} onClick={reject}>
-                    <X aria-hidden /> {t("reject")}
-                  </RButton>
-                </div>
-              )}
-              <div className="flex flex-wrap items-center justify-between gap-2.5">
-                <RButton asChild size="sm" variant="ghost">
-                  <a href={`/api/forms/${form.id}/export?start=${ps}&end=${ps}${division ? `&division=${division}` : ""}`} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
+            <div className="flex flex-wrap items-center justify-between gap-2.5 border-t border-r-line px-4 py-3">
+              <RButton asChild size="sm" variant="ghost">
+                <a href={backendUrl(`/api/forms/${form.id}/export?start=${start}&end=${end}${division ? `&division=${division}` : ""}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
+              </RButton>
+              <span className="flex items-center gap-3">
+                {canEdit && <span className="hidden text-[13px] text-r-muted md:inline">{t("click_to_edit")}</span>}
+                <RButton variant="ghost" size="sm" onClick={() => setShowLog(true)}>
+                  <Clock aria-hidden /> {t("history_log")}
                 </RButton>
-                <span className="flex items-center gap-2">
-                <RButton variant="ghost" className="px-2.5" aria-label={t("history_log")} title={t("history_log")} onClick={() => setShowLog(true)}>
-                  <Clock aria-hidden />
-                </RButton>
-                {review && (
-                  <RButton className="border-r-accepted bg-r-accepted text-white hover:bg-r-accepted/90 dark:text-r-ground" disabled={!queue.length} loading={busy === "*"} onClick={acceptAll}>
-                    <Check aria-hidden /> {tf("accept_all", { n: queue.length })}
-                  </RButton>
-                )}
-                </span>
-              </div>
+              </span>
             </div>
           )}
         </div>
       )}
 
-      {showLog && data && <HistoryModal form={data.form} period={ps} rows={all} fields={fields} onClose={() => setShowLog(false)} />}
+      {editRow && editField && (
+        <EditSheet key={`${rowId(editRow)}:${editField.key}`} form={form} row={editRow} field={editField} busy={busy === rowId(editRow)}
+          onSave={(v, note) => save(editRow, editField.key, v, note)} onRevert={(id) => revert(editRow, id)} onClose={() => setEditing(null)} />
+      )}
+      {showLog && data && (
+        <HistoryModal form={data.form} when={when} byDate={byDate} rows={all} fields={fields} canEdit={canEdit} busy={busy}
+          onRevert={revert} onOpen={(r, key) => { setShowLog(false); setEditing({ id: rowId(r), key }); }} onClose={() => setShowLog(false)} />
+      )}
     </section>
   );
 }
 
-function Row({ r, fields, review, busy, rejecting, onAccept, onReject }: {
-  r: ResponseRow; fields: FormField[]; review: boolean; busy: boolean; rejecting: boolean; onAccept: () => void; onReject: () => void;
+function Row({ r, fields, canEdit, editing, onEdit }: {
+  r: ResponseRow; fields: FormField[]; canEdit: boolean; editing: string | null; onEdit: (key: string) => void;
 }) {
   const { t, lang } = useT();
   const sent = SENT.includes(r.status);
-  const bg = rejecting || r.status === "returned" ? "bg-r-overdue-soft" : sent ? "bg-r-accepted-soft" : "bg-r-card";
-  const iconBtn = "flex size-8 cursor-pointer items-center justify-center rounded-full border-[1.5px] disabled:cursor-not-allowed disabled:opacity-40";
+  const bg = r.status === "returned" ? "bg-r-overdue-soft" : sent ? "bg-r-accepted-soft" : "bg-r-card";
   return (
     <tr className={bg}>
       <th scope="row" className={cn("sticky left-0 z-10 border-b border-r-line-soft px-3 py-1.5 text-left font-medium whitespace-nowrap", bg)}>
@@ -240,61 +266,164 @@ function Row({ r, fields, review, busy, rejecting, onAccept, onReject }: {
       {fields.map((x) => {
         const v = r.values[x.key];
         const c = r.corrections[x.key];
+        const shown = c ? <span className="corr">{showValue(x, v, t)}</span> : !sent && r.status !== "draft" ? "—" : showValue(x, v, t);
+        const tip = c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : undefined;
         return (
-          <td key={x.key} title={c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : undefined}
-            className={cn("num truncate border-b border-r-line-soft px-1.5 py-1.5 text-right", !sent && "text-r-faint")}>
-            {c ? <span className="corr">{showValue(x, v, t)}</span> : !sent && r.status !== "draft" ? "—" : showValue(x, v, t)}
+          <td key={x.key} className={cn("num truncate border-b border-r-line-soft text-right", !sent && "text-r-faint", canEdit && sent ? "p-0.5" : "px-1.5 py-1.5")}>
+            {canEdit && sent ? (
+              <button type="button" onClick={() => onEdit(x.key)} title={tip ?? t("edit_value")} aria-label={`${t("edit_value")}: ${fieldLabel(x, lang)}, ${officeName(r, lang)}`}
+                className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-right text-sm text-r-ink hover:bg-r-card hover:ring-1 hover:ring-r-line",
+                  editing === x.key && "bg-r-card ring-2 ring-r-action")}>
+                {shown}
+              </button>
+            ) : <span title={tip}>{shown}</span>}
           </td>
         );
       })}
-      {review && <td className={cn("sticky right-0 z-10 border-b border-r-line-soft px-2 py-1", bg)}>
-        <span className="flex items-center justify-end gap-1.5">
-          {sent && (
-            <>
-              <button type="button" onClick={onAccept} disabled={busy || r.status === "accepted"} aria-label={t("accept")} title={t("accept")} aria-pressed={r.status === "accepted"}
-                className={cn(iconBtn, r.status === "accepted" ? "border-r-accepted bg-r-accepted text-white disabled:opacity-100" : "border-r-accepted bg-r-card text-r-accepted hover:bg-r-accepted hover:text-white")}>
-                <Check className="size-4" aria-hidden />
-              </button>
-              <button type="button" onClick={onReject} disabled={busy || r.status === "returned"} aria-label={t("reject")} title={t("reject")} aria-pressed={r.status === "returned" || rejecting}
-                className={cn(iconBtn, r.status === "returned" || rejecting ? "border-r-overdue bg-r-overdue text-white disabled:opacity-100" : "border-r-overdue bg-r-card text-r-overdue hover:bg-r-overdue hover:text-white")}>
-                <X className="size-4" aria-hidden />
-              </button>
-            </>
-          )}
-        </span>
-      </td>}
     </tr>
   );
 }
 
-// --------------------------------------------------------------------------- history log
-function HistoryModal({ form, period, rows, fields, onClose }: { form: FormDef; period: string; rows: ResponseRow[]; fields: FormField[]; onClose: () => void }) {
+// --------------------------------------------------------------------------- editing one value
+/** One field's edits, newest first. */
+const editsOf = (r: ResponseRow, key: string) => r.edits.filter((e) => e.key === key).reverse();
+const same = (a: AnswerValue | undefined, b: AnswerValue | undefined) => (a ?? "") === (b ?? "");
+const asText = (v: AnswerValue | undefined) => (v === null || v === undefined ? "" : String(v));
+
+function EditSheet({ form, row, field, busy, onSave, onRevert, onClose }: {
+  form: FormDef; row: ResponseRow; field: FormField; busy: boolean;
+  onSave: (value: string, note: string) => void; onRevert: (edit: number) => void; onClose: () => void;
+}) {
   const { t, tf, lang } = useT();
-  const label = (k: string) => { const x = fields.find((y) => y.key === k); return x ? fieldLabel(x, lang) : k; };
-  type Entry = { at: string; who: string; what: string; office: string; tone: "sub" | "acc" | "ret" | "corr" | "save"; note?: string };
+  const cur = row.values[field.key];
+  const [value, setValue] = React.useState(asText(cur));
+  const [note, setNote] = React.useState("");
+  const changed = value.trim() !== asText(cur);
+  const c = row.corrections[field.key];
+  const edits = editsOf(row, field.key);
+  const show = (v: AnswerValue) => showValue(field, v, t);
+  const submit = (e?: React.FormEvent) => { e?.preventDefault(); if (changed && !busy) onSave(value, note.trim()); };
+
+  const input = field.type === "yesno" || field.type === "choice" ? (
+    <RSelect value={value} onChange={(e) => setValue(e.target.value)} className="min-h-[54px] w-full rounded-xl text-base">
+      <option value="">—</option>
+      {(field.type === "yesno" ? ["yes", "no"] : field.options).map((o) => <option key={o} value={o}>{field.type === "yesno" ? t(o as TKey) : o}</option>)}
+    </RSelect>
+  ) : field.type === "text" ? <RTextarea value={value} onChange={(e) => setValue(e.target.value)} className="text-base" />
+    : <RInput big autoFocus type={field.type === "date" ? "date" : "text"} inputMode={field.type === "number" ? "decimal" : undefined} value={value} onChange={(e) => setValue(e.target.value)} />;
+
+  return (
+    <RSheet open onClose={onClose} closeLabel={t("discard")} title={fieldLabel(field, lang)} description={`${officeName(row, lang)} · ${periodName(form, row.period_start, lang)}`}
+      footer={
+        <div className="flex justify-end gap-2.5">
+          <RButton variant="ghost" onClick={onClose}>{t("discard")}</RButton>
+          <RButton variant="pri" disabled={!changed} loading={busy} onClick={() => submit()}>{t("save")}</RButton>
+        </div>
+      }>
+      <form onSubmit={submit} className="flex flex-col gap-3">
+        <RLabel label={t("edit_value")}>{input}</RLabel>
+        <RLabel small label={t("note")}>
+          <RInput value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("edit_note_ph")} />
+        </RLabel>
+        <button type="submit" hidden />
+      </form>
+
+      <section className="flex flex-col gap-1" aria-labelledby="edit-history">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 id="edit-history" className="m-0 text-[15px] font-bold">{t("edit_history")}</h3>
+          {c && (
+            <RButton size="sm" variant="ghost" disabled={busy} onClick={() => onSave(asText(c.original), "")}>
+              <RotateCcw aria-hidden /> {tf("restore_district", { v: show(c.original) })}
+            </RButton>
+          )}
+        </div>
+        <ol className="m-0 flex list-none flex-col p-0">
+          {edits.map((e, i) => (
+            <EditEntry key={e.id} e={e} first={i === 0} latest={i === 0} show={show} current={i === 0 && same(e.after, cur)}
+              canGoBack={!same(e.before, cur)} busy={busy} onRevert={() => onRevert(e.id)} />
+          ))}
+          <li className={cn("flex gap-3 py-3", edits.length > 0 && "border-t border-r-sunk")}>
+            <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-r-action" aria-hidden />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+              <span>{tf("district_sent", { o: officeName(row, lang), v: show(edits.length ? edits[edits.length - 1].before : cur) })}</span>
+              <span className="text-r-muted">{row.submitted_at ? whenText(row.submitted_at, lang) : ""}{row.submitted_by ? ` · ${row.submitted_by}` : ""}</span>
+            </div>
+            {!edits.length && <span className="self-center rounded-full bg-r-sunk px-2.5 py-0.5 text-xs font-bold text-r-muted">{t("current_value")}</span>}
+          </li>
+        </ol>
+      </section>
+    </RSheet>
+  );
+}
+
+function EditEntry({ e, first, latest, show, current, canGoBack, busy, onRevert }: {
+  e: ValueEdit; first: boolean; latest: boolean; show: (v: AnswerValue) => string; current: boolean; canGoBack: boolean; busy: boolean; onRevert: () => void;
+}) {
+  const { t, tf, lang } = useT();
+  return (
+    <li className={cn("flex gap-3 py-3", !first && "border-t border-r-sunk")}>
+      <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", e.reverts || e.source === "office" ? "bg-r-field" : "bg-r-corrected")} aria-hidden />
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+        <span className="num"><span className="text-r-muted line-through">{show(e.before)}</span> → <b>{show(e.after)}</b>{e.reverts ? <span className="text-r-muted"> · {t("undone_tag")}</span> : null}</span>
+        <span className="text-r-muted">{whenText(e.at, lang)} · {e.source === "office" ? t("src_office") : t("state_office")} · {e.by}</span>
+        {e.note && <span className="rounded-lg bg-r-sunk px-2.5 py-1.5">{e.note}</span>}
+      </div>
+      <span className="flex shrink-0 flex-col items-end gap-1 self-center">
+        {current && <span className="rounded-full bg-r-sunk px-2.5 py-0.5 text-xs font-bold text-r-muted">{t("current_value")}</span>}
+        {canGoBack && (
+          <RButton size="sm" variant="ghost" disabled={busy} onClick={onRevert}>
+            <Undo2 aria-hidden /> {latest ? t("undo") : tf("go_back_to", { v: show(e.before) })}
+          </RButton>
+        )}
+      </span>
+    </li>
+  );
+}
+
+// --------------------------------------------------------------------------- history log
+function HistoryModal({ form, when, byDate, rows, fields, canEdit, busy, onRevert, onOpen, onClose }: {
+  form: FormDef; when: string; byDate: boolean; rows: ResponseRow[]; fields: FormField[]; canEdit: boolean; busy: string | null;
+  onRevert: (r: ResponseRow, edit: number) => void; onOpen: (r: ResponseRow, key: string) => void; onClose: () => void;
+}) {
+  const { t, tf, lang } = useT();
+  const byKey = (k: string) => fields.find((y) => y.key === k);
+  const label = (k: string) => { const x = byKey(k); return x ? fieldLabel(x, lang) : k; };
+  const val = (k: string, v: AnswerValue) => { const x = byKey(k); return x ? showValue(x, v, t) : String(v ?? "—"); };
+  type Entry = { at: string; who: string; what: string; office: string; tone: "sub" | "ret" | "corr" | "undo" | "save"; note?: string;
+    row?: ResponseRow; edit?: ValueEdit; latest?: boolean };
   const log = rows.flatMap((row) => {
-    const office = officeName(row, lang);
+    const office = byDate ? `${officeName(row, lang)} · ${periodName(form, row.period_start, lang)}` : officeName(row, lang);
+    const latest = new Map(row.edits.map((e) => [e.key, e.id]));
     return [
       row.entered_at && row.entered_at !== row.submitted_at && { at: row.entered_at, who: row.entered_by ?? "", what: t("last_saved"), office, tone: "save" },
       row.submitted_at && { at: row.submitted_at, who: row.submitted_by, what: t("sub_submitted") + (row.late ? ` · ${t("late")}` : ""), office, tone: "sub", note: row.note },
-      row.reviewed_at && { at: row.reviewed_at, who: row.reviewed_by, what: row.status === "returned" ? t("sub_returned") : t("sub_accepted"), office, tone: row.status === "returned" ? "ret" : "acc", note: row.status === "returned" ? row.review_note : "" },
-      ...Object.entries(row.corrections).map(([k, c]) => ({ at: c.at, who: c.by, what: tf("corrected_log", { f: label(k), a: c.original ?? "—", b: row.values[k] ?? "—" }), office, tone: "corr", note: c.note })),
+      row.reviewed_at && row.status === "returned" && { at: row.reviewed_at, who: row.reviewed_by, what: t("sub_returned"), office, tone: "ret", note: row.review_note },
+      ...row.edits.map((e) => ({ at: e.at, who: e.by, office, tone: e.reverts ? "undo" : e.source === "office" ? "save" : "corr", note: e.note, row, edit: e, latest: latest.get(e.key) === e.id,
+        what: tf(e.reverts ? "undone_log" : "edited_log", { f: label(e.key), a: val(e.key, e.before), b: val(e.key, e.after) }) })),
     ].filter(Boolean) as Entry[];
   }).sort((a, b) => b.at.localeCompare(a.at));
-  const dot: Record<Entry["tone"], string> = { sub: "bg-r-action", acc: "bg-r-accepted", ret: "bg-r-overdue", corr: "bg-r-corrected", save: "bg-r-field" };
+  const dot: Record<Entry["tone"], string> = { sub: "bg-r-action", ret: "bg-r-overdue", corr: "bg-r-corrected", undo: "bg-r-field", save: "bg-r-field" };
 
   return (
-    <RSheet open wide onClose={onClose} closeLabel={t("discard")} title={t("history_log")} description={`${formTitle(form, lang)} · ${periodName(form, period, lang)}`}>
+    <RSheet open wide onClose={onClose} closeLabel={t("discard")} title={t("history_log")} description={`${formTitle(form, lang)} · ${when}`}>
       {!log.length ? <p className="m-0 text-r-muted">{t("history_empty")}</p> : (
         <ol className="m-0 flex list-none flex-col p-0">
           {log.map((h, i) => (
             <li key={i} className={cn("flex gap-3 py-3", i > 0 && "border-t border-r-sunk")}>
               <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", dot[h.tone])} aria-hidden />
-              <div className="flex min-w-0 flex-col gap-0.5 text-sm">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
                 <span><b>{h.office}</b> · {h.what}</span>
                 <span className="text-r-muted">{whenText(h.at, lang)}{h.who ? ` · ${h.who}` : ""}</span>
                 {h.note && <span className="rounded-lg bg-r-sunk px-2.5 py-1.5">{h.note}</span>}
               </div>
+              {canEdit && h.row && h.edit && (
+                <span className="flex shrink-0 items-center gap-1 self-center">
+                  {h.latest && !same(h.edit.before, h.row.values[h.edit.key]) && (
+                    <RButton size="sm" variant="ghost" disabled={busy === `${h.row.office}:${h.row.period_start}`} onClick={() => onRevert(h.row!, h.edit!.id)}><Undo2 aria-hidden /> {t("undo")}</RButton>
+                  )}
+                  <RButton size="sm" variant="ghost" onClick={() => onOpen(h.row!, h.edit!.key)}>{t("open_value")}</RButton>
+                </span>
+              )}
             </li>
           ))}
         </ol>

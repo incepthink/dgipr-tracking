@@ -31,9 +31,29 @@ export function DivisionPicker({ f }: { f: FormFilters }) {
   if (me.role !== "state") return null;
   return (
     <RLabel small label={t("division")}>
-      <RSelect value={f.division} onChange={(e) => f.set({ division: e.target.value })}>
+      <RSelect value={f.division} onChange={(e) => f.set({ division: e.target.value, office: null })}>
         <option value="">{t("all_divisions")}</option>
         {meta?.divisions.map((d) => <option key={d.code} value={d.code}>{d.label_mr}</option>)}
+      </RSelect>
+    </RLabel>
+  );
+}
+
+/** One office (district) within the chosen division, in official order; hidden when the user sees only one. */
+export function OfficePicker({ f }: { f: FormFilters }) {
+  const { data: meta } = useMeta();
+  const { t, name } = useT();
+  const divs = meta?.divisions.filter((d) => !f.division || d.code === f.division) ?? [];
+  if (divs.flatMap((d) => d.offices).length < 2) return null;
+  return (
+    <RLabel small label={t("office_filter")}>
+      <RSelect value={f.office} className="max-w-64" onChange={(e) => f.set({ office: e.target.value })}>
+        <option value="">{t("all_offices")}</option>
+        {divs.map((d) => (
+          <optgroup key={d.code} label={d.label_mr}>
+            {d.offices.map((o) => <option key={o.code} value={o.code}>{name(o)}</option>)}
+          </optgroup>
+        ))}
       </RSelect>
     </RLabel>
   );
@@ -232,7 +252,7 @@ export type CellInfo = { mark: Mark; late: boolean; overdue: boolean; sent: bool
 /** Every compliance cell as drawn, with overdue worked out from the form's deadline. */
 export function cellInfo(form: FormDef, ps: string, c: ComplianceRow["cells"][number], now = Date.now()): CellInfo {
   const overdue = isOverdue(c.status, deadlineOf(form, ps), now);
-  const sent = c.status === "submitted" || c.status === "accepted" || c.status === "returned";
+  const sent = c.status === "submitted" || c.status === "returned";
   return { mark: markOf(c.status, overdue), late: c.late, overdue, sent };
 }
 
@@ -257,7 +277,7 @@ export function notSentBy(data: Compliance, j: number) {
   const out: { division: string; division_mr: string; rows: ComplianceRow[] }[] = [];
   data.rows.forEach((r) => {
     const c = r.cells[j];
-    if (!c || c.status === "submitted" || c.status === "accepted" || c.status === "returned") return;
+    if (!c || c.status === "submitted" || c.status === "returned") return;
     const last = out.at(-1);
     if (last && last.division === r.division) last.rows.push(r);
     else out.push({ division: r.division, division_mr: r.division_mr, rows: [r] });

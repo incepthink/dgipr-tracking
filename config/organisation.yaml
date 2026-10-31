@@ -1,6 +1,5 @@
 # Organisational registry: divisions and the offices/districts that report under them.
-# Order here is the order used in the report. Names are taken verbatim from the
-# reference report (13.10.2026 for print.pdf). Codes are stable identifiers used by
+# Order here is the order used in every report, list and export. Codes are stable identifiers used by
 # accounts, manual inputs and snapshots — do not rename a code once data exists.
 #
 # summary_label_mr : label used on page 1 (division-wise summary)
@@ -8,24 +7,33 @@
 # show_subtotal    : whether the district pages show an "एकूण" row for the division
 # detail_page      : which district page (1-based, after the summary page) the division is printed on
 #
-# Each division's विमाका (divisional information office) is listed first, matching the office data-entry
-# sheet; its zone officer enters that row. The six added on 2026-10-17 (pune_rio … latur_rio) print as rows
-# like nagpur_rio / konkan_rio already did — two extra rows per district page still fit on A4.
+# Order and names as DGIPR asked for them (feedback of 29.10.2026): मुंबई मुख्यालय मंत्रालय first; then each
+# division with its senior office first (संचालक, नागपूर / विमाका, पुणे …), then the district office of the same
+# city (जिमाका, नागपूर / जिमाका, पुणे …), then the division's other districts. Names use the official short
+# forms: विमाका = विभागीय माहिती कार्यालय, जिमाका = जिल्हा माहिती कार्यालय.
 
 divisions:
+  - code: mumbai_hq
+    summary_label_mr: "मुंबई, मुख्यालय मंत्रालय"
+    section_title_mr: "मुंबई"
+    show_subtotal: false
+    detail_page: 1
+    offices:
+      - {code: mumbai_hq, name_mr: "मुंबई, मुख्यालय मंत्रालय", name_en: "Mumbai, Headquarters (Mantralaya)", kind: headquarters}
+
   - code: nagpur
     summary_label_mr: "नागपूर विभाग"
     section_title_mr: "नागपूर विभाग"
     show_subtotal: true
     detail_page: 1
     offices:
-      - {code: nagpur_rio, name_mr: "विमाका, नागपूर", name_en: "Divisional Information Office, Nagpur", kind: divisional_office}
-      - {code: bhandara, name_mr: "भंडारा", name_en: "Bhandara", kind: district}
-      - {code: gondia, name_mr: "गोंदिया", name_en: "Gondia", kind: district}
-      - {code: wardha, name_mr: "वर्धा", name_en: "Wardha", kind: district}
-      - {code: nagpur, name_mr: "नागपूर", name_en: "Nagpur", kind: district}
-      - {code: chandrapur, name_mr: "चंद्रपूर", name_en: "Chandrapur", kind: district}
-      - {code: gadchiroli, name_mr: "गडचिरोली", name_en: "Gadchiroli", kind: district}
+      - {code: nagpur_rio, name_mr: "संचालक, नागपूर", name_en: "Director, Nagpur", kind: divisional_office}
+      - {code: nagpur, name_mr: "जिमाका, नागपूर", name_en: "District Information Office, Nagpur", kind: district}
+      - {code: bhandara, name_mr: "जिमाका, भंडारा", name_en: "District Information Office, Bhandara", kind: district}
+      - {code: gondia, name_mr: "जिमाका, गोंदिया", name_en: "District Information Office, Gondia", kind: district}
+      - {code: wardha, name_mr: "जिमाका, वर्धा", name_en: "District Information Office, Wardha", kind: district}
+      - {code: chandrapur, name_mr: "जिमाका, चंद्रपूर", name_en: "District Information Office, Chandrapur", kind: district}
+      - {code: gadchiroli, name_mr: "जिमाका, गडचिरोली", name_en: "District Information Office, Gadchiroli", kind: district}
 
   - code: pune
     summary_label_mr: "पुणे विभाग"
@@ -34,9 +42,9 @@ divisions:
     detail_page: 1
     offices:
       - {code: pune_rio, name_mr: "विमाका, पुणे", name_en: "Divisional Information Office, Pune", kind: divisional_office}
-      - {code: pune, name_mr: "पुणे", name_en: "Pune", kind: district}
-      - {code: solapur, name_mr: "सोलापूर", name_en: "Solapur", kind: district}
-      - {code: satara, name_mr: "सातारा", name_en: "Satara", kind: district}
+      - {code: pune, name_mr: "जिमाका, पुणे", name_en: "District Information Office, Pune", kind: district}
+      - {code: solapur, name_mr: "जिमाका, सोलापूर", name_en: "District Information Office, Solapur", kind: district}
+      - {code: satara, name_mr: "जिमाका, सातारा", name_en: "District Information Office, Satara", kind: district}
 
   - code: chh_sambhajinagar
     summary_label_mr: "छत्रपती संभाजीनगर विभाग"
@@ -45,10 +53,10 @@ divisions:
     detail_page: 1
     offices:
       - {code: chh_sambhajinagar_rio, name_mr: "विमाका, छ. संभाजीनगर", name_en: "Divisional Information Office, Chhatrapati Sambhajinagar", kind: divisional_office}
-      - {code: chh_sambhajinagar, name_mr: "छ. संभाजीनगर", name_en: "Chhatrapati Sambhajinagar", kind: district}
-      - {code: jalna, name_mr: "जालना", name_en: "Jalna", kind: district}
-      - {code: parbhani, name_mr: "परभणी", name_en: "Parbhani", kind: district}
-      - {code: beed, name_mr: "बीड", name_en: "Beed", kind: district}
+      - {code: chh_sambhajinagar, name_mr: "जिमाका, छ. संभाजीनगर", name_en: "District Information Office, Chhatrapati Sambhajinagar", kind: district}
+      - {code: jalna, name_mr: "जिमाका, जालना", name_en: "District Information Office, Jalna", kind: district}
+      - {code: parbhani, name_mr: "जिमाका, परभणी", name_en: "District Information Office, Parbhani", kind: district}
+      - {code: beed, name_mr: "जिमाका, बीड", name_en: "District Information Office, Beed", kind: district}
 
   - code: konkan
     summary_label_mr: "कोकण विभाग"
@@ -56,11 +64,12 @@ divisions:
     show_subtotal: true
     detail_page: 2
     offices:
-      - {code: konkan_rio, name_mr: "विमाका कोकण", name_en: "Divisional Information Office, Konkan", kind: divisional_office}
-      - {code: raigad, name_mr: "रायगड", name_en: "Raigad", kind: district}
-      - {code: thane, name_mr: "ठाणे", name_en: "Thane", kind: district}
-      - {code: ratnagiri, name_mr: "रत्नागिरी", name_en: "Ratnagiri", kind: district}
-      - {code: palghar, name_mr: "पालघर", name_en: "Palghar", kind: district}
+      # the Konkan divisional office sits in Navi Mumbai (Thane district), so जिमाका, ठाणे comes next
+      - {code: konkan_rio, name_mr: "विमाका, कोकण", name_en: "Divisional Information Office, Konkan", kind: divisional_office}
+      - {code: thane, name_mr: "जिमाका, ठाणे", name_en: "District Information Office, Thane", kind: district}
+      - {code: raigad, name_mr: "जिमाका, रायगड", name_en: "District Information Office, Raigad", kind: district}
+      - {code: ratnagiri, name_mr: "जिमाका, रत्नागिरी", name_en: "District Information Office, Ratnagiri", kind: district}
+      - {code: palghar, name_mr: "जिमाका, पालघर", name_en: "District Information Office, Palghar", kind: district}
 
   - code: kolhapur
     summary_label_mr: "कोल्हापूर विभाग"
@@ -69,9 +78,9 @@ divisions:
     detail_page: 2
     offices:
       - {code: kolhapur_rio, name_mr: "विमाका, कोल्हापूर", name_en: "Divisional Information Office, Kolhapur", kind: divisional_office}
-      - {code: kolhapur, name_mr: "कोल्हापूर", name_en: "Kolhapur", kind: district}
-      - {code: sangli, name_mr: "सांगली", name_en: "Sangli", kind: district}
-      - {code: sindhudurg, name_mr: "सिंधुदुर्ग", name_en: "Sindhudurg", kind: district}
+      - {code: kolhapur, name_mr: "जिमाका, कोल्हापूर", name_en: "District Information Office, Kolhapur", kind: district}
+      - {code: sangli, name_mr: "जिमाका, सांगली", name_en: "District Information Office, Sangli", kind: district}
+      - {code: sindhudurg, name_mr: "जिमाका, सिंधुदुर्ग", name_en: "District Information Office, Sindhudurg", kind: district}
 
   - code: nashik
     summary_label_mr: "नाशिक विभाग"
@@ -80,11 +89,11 @@ divisions:
     detail_page: 2
     offices:
       - {code: nashik_rio, name_mr: "विमाका, नाशिक", name_en: "Divisional Information Office, Nashik", kind: divisional_office}
-      - {code: nashik, name_mr: "नाशिक", name_en: "Nashik", kind: district}
-      - {code: ahilyanagar, name_mr: "अहिल्यानगर", name_en: "Ahilyanagar", kind: district}
-      - {code: jalgaon, name_mr: "जळगाव", name_en: "Jalgaon", kind: district}
-      - {code: dhule, name_mr: "धुळे", name_en: "Dhule", kind: district}
-      - {code: nandurbar, name_mr: "नंदूरबार", name_en: "Nandurbar", kind: district}
+      - {code: nashik, name_mr: "जिमाका, नाशिक", name_en: "District Information Office, Nashik", kind: district}
+      - {code: ahilyanagar, name_mr: "जिमाका, अहिल्यानगर", name_en: "District Information Office, Ahilyanagar", kind: district}
+      - {code: jalgaon, name_mr: "जिमाका, जळगाव", name_en: "District Information Office, Jalgaon", kind: district}
+      - {code: dhule, name_mr: "जिमाका, धुळे", name_en: "District Information Office, Dhule", kind: district}
+      - {code: nandurbar, name_mr: "जिमाका, नंदूरबार", name_en: "District Information Office, Nandurbar", kind: district}
 
   - code: amravati
     summary_label_mr: "अमरावती विभाग"
@@ -93,11 +102,11 @@ divisions:
     detail_page: 3
     offices:
       - {code: amravati_rio, name_mr: "विमाका, अमरावती", name_en: "Divisional Information Office, Amravati", kind: divisional_office}
-      - {code: amravati, name_mr: "अमरावती", name_en: "Amravati", kind: district}
-      - {code: akola, name_mr: "अकोला", name_en: "Akola", kind: district}
-      - {code: washim, name_mr: "वाशिम", name_en: "Washim", kind: district}
-      - {code: buldhana, name_mr: "बुलढाणा", name_en: "Buldhana", kind: district}
-      - {code: yavatmal, name_mr: "यवतमाळ", name_en: "Yavatmal", kind: district}
+      - {code: amravati, name_mr: "जिमाका, अमरावती", name_en: "District Information Office, Amravati", kind: district}
+      - {code: akola, name_mr: "जिमाका, अकोला", name_en: "District Information Office, Akola", kind: district}
+      - {code: washim, name_mr: "जिमाका, वाशिम", name_en: "District Information Office, Washim", kind: district}
+      - {code: buldhana, name_mr: "जिमाका, बुलढाणा", name_en: "District Information Office, Buldhana", kind: district}
+      - {code: yavatmal, name_mr: "जिमाका, यवतमाळ", name_en: "District Information Office, Yavatmal", kind: district}
 
   - code: latur
     summary_label_mr: "लातूर विभाग"
@@ -106,15 +115,7 @@ divisions:
     detail_page: 3
     offices:
       - {code: latur_rio, name_mr: "विमाका, लातूर", name_en: "Divisional Information Office, Latur", kind: divisional_office}
-      - {code: latur, name_mr: "लातूर", name_en: "Latur", kind: district}
-      - {code: dharashiv, name_mr: "धाराशिव", name_en: "Dharashiv", kind: district}
-      - {code: nanded, name_mr: "नांदेड", name_en: "Nanded", kind: district}
-      - {code: hingoli, name_mr: "हिंगोली", name_en: "Hingoli", kind: district}
-
-  - code: mumbai_hq
-    summary_label_mr: "मुख्यालय, मुंबई"
-    section_title_mr: "मुंबई"
-    show_subtotal: false
-    detail_page: 3
-    offices:
-      - {code: mumbai_hq, name_mr: "मुख्यालय, मुंबई", name_en: "Headquarters, Mumbai", kind: headquarters}
+      - {code: latur, name_mr: "जिमाका, लातूर", name_en: "District Information Office, Latur", kind: district}
+      - {code: dharashiv, name_mr: "जिमाका, धाराशिव", name_en: "District Information Office, Dharashiv", kind: district}
+      - {code: nanded, name_mr: "जिमाका, नांदेड", name_en: "District Information Office, Nanded", kind: district}
+      - {code: hingoli, name_mr: "जिमाका, हिंगोली", name_en: "District Information Office, Hingoli", kind: district}

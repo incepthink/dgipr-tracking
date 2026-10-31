@@ -2,14 +2,14 @@ import * as React from "react";
 import { Link, useBlocker, useParams, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertCircle, Check, ChevronLeft, ChevronRight, ClipboardPaste, Lock } from "lucide-react";
+import { AlertCircle, Check, ChevronLeft, ClipboardPaste, History, Lock } from "lucide-react";
 import { api, ApiError, type AnswerValue, type FormDef, type FormField, type PeriodsResponse, type Submission } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
 import { RAlert, RButton, RCheck, RError, RLabel, RPage, RSelect, RSheet, RTextarea, StatusMark, markOf, type Mark } from "@/components/reports/kit";
-import { dayMonth, isOverdue, longDay, periodOf, rangeText, shortDay, stepOf, whenText } from "@/components/reports/period";
+import { dayMonth, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, useToday } from "./common";
 
@@ -72,10 +72,10 @@ export default function FillFormPage() {
   const requested = params.get("period") || today;
 
   const { data: formDef, error: formError } = useQuery({ queryKey: ["form", formId], enabled: !!formId, queryFn: () => api.get<FormDef>(`/api/forms/${formId}`) });
-  // the 7 periods ending at the requested one
-  const endPs = formDef ? periodOf(formDef, requested) : "";
-  const startPs = !formDef ? "" : formDef.frequency === "once" ? formDef.start_date
-    : [addDays(endPs, -6 * stepOf(formDef)), formDef.start_date].sort().at(-1)!;
+  const lastDay = formDef?.end_date && formDef.end_date < today ? formDef.end_date : today;
+  // every period of the form so far, all on one page
+  const startPs = formDef?.start_date ?? "";
+  const endPs = formDef ? periodOf(formDef, lastDay) : "";
   const { data, isLoading, error: periodsError } = useQuery({
     queryKey: ["form-periods", formId, office, startPs, endPs],
     enabled: !!formDef && !!office,
@@ -189,12 +189,8 @@ export default function FillFormPage() {
   }, [office, choices.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const officeRef = officesAll.find((o) => o.code === office);
-  const lastDay = form?.end_date && form.end_date < today ? form.end_date : today;
   const back = me.role === "state" ? "/forms" : me.role === "zone" ? "/office/board" : "/forms/mine";
   const instructions = form ? (lang === "en" && form.instructions_en ? form.instructions_en : form.instructions_mr) : "";
-  const canGoEarlier = !!form && form.frequency !== "once" && startPs > form.start_date;
-  const canGoLater = !!form && form.frequency !== "once" && addDays(endPs, stepOf(form)) <= lastDay;
-  const shift = (n: number) => form && go({ period: addDays(endPs, n * 7 * stepOf(form)) }, true);
 
   // Ctrl/Cmd+S saves drafts
   React.useEffect(() => {
@@ -242,21 +238,11 @@ export default function FillFormPage() {
               </span>
             </div>
           </div>
-          <div className="flex flex-wrap items-end gap-3">
-            {officePicker}
-            {sheetMode && (
-              <div className="flex items-center gap-2">
-                <RButton size="icon" aria-label={t("earlier")} disabled={!canGoEarlier} onClick={() => shift(-1)}><ChevronLeft aria-hidden /></RButton>
-                <span className="num px-1.5 font-semibold">{startPs && endPs ? rangeText(startPs, endPs, lang) : ""}</span>
-                <RButton size="icon" aria-label={t("later")} disabled={!canGoLater} onClick={() => shift(1)}><ChevronRight aria-hidden /></RButton>
-              </div>
-            )}
-          </div>
+          {officePicker && <div className="flex flex-wrap items-end gap-3">{officePicker}</div>}
         </div>
 
         {!sheetMode && form && form.frequency !== "once" && periods.length > 0 && (
           <div className="flex items-stretch gap-1.5">
-            <RButton variant="ghost" size="icon" className="h-auto self-stretch" aria-label={t("earlier")} disabled={!canGoEarlier} onClick={() => shift(-1)}><ChevronLeft aria-hidden /></RButton>
             <div ref={stripRef} role="tablist" aria-label={t("period")} className="flex flex-1 gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
               {periods.map((p) => {
                 const on = p.period_start === selected?.period_start;
@@ -272,7 +258,6 @@ export default function FillFormPage() {
                 );
               })}
             </div>
-            <RButton variant="ghost" size="icon" className="h-auto self-stretch" aria-label={t("later")} disabled={!canGoLater} onClick={() => shift(1)}><ChevronRight aria-hidden /></RButton>
           </div>
         )}
       </header>
@@ -292,7 +277,7 @@ export default function FillFormPage() {
       ) : selected && (
         <DayView form={form} p={selected} fields={fields} cur={cur} setCell={setCell} original={original[selected.period_start] ?? {}}
           zeroState={(f) => zeroState(selected.period_start, f)} confirmZero={(k, on) => confirmZeros(selected.period_start, [k], on)}
-          check={check(selected.period_start)} instructions={instructions} busy={busy} dirty={dirty} canSave={savable.length > 0}
+          check={check(selected.period_start)} instructions={instructions} busy={busy} dirty={dirty} changed={dirtyOf(selected.period_start)} canSave={savable.length > 0}
           onSave={saveDrafts} onReview={() => setReviewing(selected.period_start)} />
       )}
 
@@ -302,16 +287,16 @@ export default function FillFormPage() {
           busy={busy} onClose={() => setReviewing(null)} onSend={(note) => send([reviewP.period_start], note)} officeName={name(officeRef)} />
       )}
       {sent && form && (
-        <SentSheet form={form} sent={sent} periods={periods} back={back} onClose={() => setSent(null)}
+        <SentSheet form={form} sent={sent} periods={periods} onClose={() => setSent(null)}
           onNext={(ps) => { setSent(null); go({ period: ps }, true); }} />
       )}
     </RPage>
   );
 }
 
-/** After sending: what went, that it's locked now, and what's next. */
-function SentSheet({ form, sent, periods, back, onClose, onNext }: {
-  form: FormDef; sent: string[]; periods: Submission[]; back: string; onClose: () => void; onNext: (ps: string) => void;
+/** After sending: what went, and what's next. */
+function SentSheet({ form, sent, periods, onClose, onNext }: {
+  form: FormDef; sent: string[]; periods: Submission[]; onClose: () => void; onNext: (ps: string) => void;
 }) {
   const { t, tf, lang } = useT();
   const label = (ps: string) => (form.frequency === "weekly" ? rangeText(ps, addDays(ps, 6), lang) : form.frequency === "once" ? formTitle(form, lang) : dayMonth(ps, lang));
@@ -323,9 +308,8 @@ function SentSheet({ form, sent, periods, back, onClose, onNext }: {
           <Check className="size-8" strokeWidth={2.6} />
         </span>
         <p className="m-0 text-r-muted">{t("sent_body")}</p>
-        <RButton asChild size="lg" variant="pri" className="self-stretch"><Link to={back}>{t("back_to_today")}</Link></RButton>
         {next && (
-          <RButton size="md" variant="ghost" onClick={() => onNext(next.period_start)}>
+          <RButton size="lg" variant="pri" className="self-stretch" onClick={() => onNext(next.period_start)}>
             {tf("next_period", { day: label(next.period_start) })}{next.deadline && ` · ${tf("due_by", { when: whenText(next.deadline, lang) })}`}
           </RButton>
         )}
@@ -339,7 +323,6 @@ type Check = { bad: FormField[]; ask: FormField[]; missing: FormField[]; filled:
 
 function statusLine(p: Submission, tr: Tr) {
   if (p.status === "submitted") return tr.t("st_locked_sub");
-  if (p.status === "accepted") return tr.t("st_locked_acc");
   if (p.status === "returned") return tr.t("returned_for_change");
   if (p.status === "draft") return tr.tf("draft_saved", { when: p.entered_at ? whenText(p.entered_at, tr.lang) : "" });
   return tr.t("not_saved_yet");
@@ -349,15 +332,17 @@ function periodTitle(form: FormDef, p: Submission, lang: string) {
   return form.frequency === "daily" ? longDay(p.period_start, lang) : form.frequency === "weekly" ? rangeText(p.period_start, p.period_end, lang) : formTitle(form, lang);
 }
 
-function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZero, check, instructions, busy, dirty, canSave, onSave, onReview }: {
+function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZero, check, instructions, busy, dirty, changed, canSave, onSave, onReview }: {
   form: FormDef; p: Submission; fields: FormField[]; cur: (ps: string, k: string) => string; setCell: (ps: string, k: string, v: string) => void;
   original: Record<string, string>; zeroState: (f: FormField) => "none" | "ask" | "ok"; confirmZero: (k: string, on: boolean) => void;
-  check: Check; instructions: string; busy: boolean; dirty: boolean; canSave: boolean; onSave: () => void; onReview: () => void;
+  check: Check; instructions: string; busy: boolean; dirty: boolean; changed: boolean; canSave: boolean; onSave: () => void; onReview: () => void;
 }) {
   const tr = useT();
   const { t, tf, lang } = tr;
+  const me = useUser();
   const ps = p.period_start;
   const writable = !p.read_only_reason;
+  const closed = !!p.read_only_reason?.startsWith("entry closed");  // past 11:59 PM: only the state office edits
   const overdue = isOverdue(p.status, p.deadline);
   const mark: Mark = dirty && writable ? "draft" : markOf(p.status, overdue);
   const corrections = Object.entries(p.corrections);
@@ -371,6 +356,7 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
         <span className="flex flex-wrap items-center gap-x-1.5 text-sm text-r-muted">
           <StatusMark mark={mark} late={p.late} size={12} /> {statusLine(p, tr)}
           {p.deadline && (p.status === "none" || p.status === "draft") && <span>· {overdue ? t("overdue") : tf("due_by", { when: whenText(p.deadline, lang) })}</span>}
+          {writable && me.role === "district" && <span>· {tf("open_till", { day: dayMonth(p.period_end, lang) })}</span>}
         </span>
       </div>
 
@@ -381,7 +367,8 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
           {p.reviewed_at && <span className="text-sm text-r-returned-ink">{p.reviewed_by || t("state_office")} · {whenText(p.reviewed_at, lang)}</span>}
         </section>
       )}
-      {p.read_only_reason && p.status !== "submitted" && p.status !== "accepted" && <RAlert tone="info">{p.read_only_reason}</RAlert>}
+      {closed ? <RAlert tone="info">{t("entry_locked")}</RAlert>
+        : p.read_only_reason && p.status !== "submitted" && <RAlert tone="info">{p.read_only_reason}</RAlert>}
 
       {instructions.trim() && (
         <details className="rounded-xl bg-r-card px-3.5 py-3" open={p.status === "none" && !dirty ? undefined : undefined}>
@@ -421,6 +408,13 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
         </fieldset>
       ))}
 
+      {(p.status === "submitted" || p.edits.length > 0) && (
+        <details className="rounded-xl bg-r-card px-3.5 py-3">
+          <summary className="min-h-7 cursor-pointer font-bold">{tf("history_n", { n: p.edits.length })}</summary>
+          <ChangeHistory p={p} fields={fields} />
+        </details>
+      )}
+
       {writable && (
         <footer className="sticky bottom-0 z-20 -mx-4 mt-auto flex flex-col gap-2.5 border-t border-r-line bg-r-card px-4 pt-3 pb-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:rounded-t-2xl lg:border-x">
           <div className="flex flex-wrap justify-between gap-2 text-sm">
@@ -429,13 +423,48 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
           </div>
           <div className="flex gap-2.5">
             <RButton size="lg" className="flex-1" loading={busy} disabled={!canSave} onClick={onSave}>{t("save_draft")}</RButton>
-            <RButton size="lg" variant="pri" className="flex-[1.4]" disabled={busy || check.filled === 0} onClick={onReview}>
-              {p.status === "returned" ? t("review_resend") : t("review_submit")}
+            <RButton size="lg" variant="pri" className="flex-[1.4]" disabled={busy || check.filled === 0 || (p.status === "submitted" && !changed)} onClick={onReview}>
+              {p.status === "returned" ? t("review_resend") : p.status === "submitted" ? t("review_send_changes") : t("review_submit")}
             </RButton>
           </div>
         </footer>
       )}
     </>
+  );
+}
+
+/** What changed after the period was sent, newest first, ending with the send itself. */
+function ChangeHistory({ p, fields }: { p: Submission; fields: FormField[] }) {
+  const { t, tf, lang } = useT();
+  const field = (k: string) => fields.find((f) => f.key === k);
+  const show = (k: string, v: AnswerValue) => { const f = field(k); return f ? showValue(f, toText(v), t) : toText(v) || "—"; };
+  const edits = [...p.edits].reverse();
+  return (
+    <ol className="m-0 flex list-none flex-col p-0">
+      {edits.map((e, i) => {
+        const f = field(e.key);
+        return (
+          <li key={e.id} className={cn("flex gap-3 py-3", i > 0 && "border-t border-r-sunk")}>
+            <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", e.source === "state" ? "bg-r-corrected" : "bg-r-field")} aria-hidden />
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+              <span>{tf(e.reverts ? "undone_log" : "edited_log", { f: f ? fieldLabel(f, lang) : e.key, a: show(e.key, e.before), b: show(e.key, e.after) })}</span>
+              <span className="text-r-muted">{whenText(e.at, lang)} · {e.source === "state" ? t("state_office") : t("src_office")} · {e.by}</span>
+              {e.note && <span className="rounded-lg bg-r-sunk px-2.5 py-1.5">{e.note}</span>}
+            </div>
+          </li>
+        );
+      })}
+      {p.submitted_at && (
+        <li className={cn("flex gap-3 py-3", edits.length > 0 && "border-t border-r-sunk")}>
+          <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-r-action" aria-hidden />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+            <span>{t("first_sent")}{p.late ? ` · ${t("late")}` : ""}</span>
+            <span className="text-r-muted">{whenText(p.submitted_at, lang)}{p.submitted_by ? ` · ${p.submitted_by}` : ""}</span>
+            {!edits.length && <span className="text-r-muted">{t("no_changes_yet")}</span>}
+          </div>
+        </li>
+      )}
+    </ol>
   );
 }
 
@@ -658,8 +687,10 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
     setPasted({ snap, rows: lines.length, cols: Math.min(cols, fields.length - fi), from: label(periods[pi].period_start), zeros });
   };
 
-  // The send panel: every writable period with something in it that isn't already locked.
-  const candidates = periods.filter((p) => !p.read_only_reason && ["none", "draft", "returned"].includes(p.status) && fields.some((f) => cur(p.period_start, f.key) !== ""));
+  // The send panel: every writable period with something in it not sent yet, and sent ones with changes.
+  const candidates = periods.filter((p) => !p.read_only_reason && (p.status === "submitted" ? dirtyOf(p.period_start)
+    : ["none", "draft", "returned"].includes(p.status) && fields.some((f) => cur(p.period_start, f.key) !== "")));
+  const [historyOf, setHistoryOf] = React.useState<Submission | null>(null);
   const readyOf = (ps: string) => { const c = check(ps); return !c.bad.length && !c.ask.length && !c.missing.length; };
   const [unticked, setUnticked] = React.useState<Set<string>>(new Set());
   const toSend = candidates.filter((p) => readyOf(p.period_start) && !unticked.has(p.period_start)).map((p) => p.period_start);
@@ -694,15 +725,21 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
                   const ps = p.period_start;
                   const w = !p.read_only_reason;
                   const mark: Mark = dirtyOf(ps) && w ? "draft" : markOf(p.status, isOverdue(p.status, p.deadline));
-                  const tint = p.status === "accepted" ? "bg-r-accepted-soft" : p.status === "returned" ? "bg-r-returned-soft" : !w ? "bg-r-ground" : "bg-r-card";
+                  const tint = p.status === "returned" ? "bg-r-returned-soft" : !w ? "bg-r-ground" : "bg-r-card";
                   return (
                     <tr key={ps} className={tint}>
                       <th scope="row" className={cn("sticky left-0 z-10 border-r border-b border-r-line px-3 py-1.5 text-left font-normal", tint)}>
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center justify-between gap-2.5">
                           <span className="flex flex-col leading-tight">
                             <b className="num text-sm">{label(ps, p)}</b>
                             <span className="text-xs text-r-muted">{w ? statusWord(p, mark, t) : <span className="inline-flex items-center gap-1"><Lock className="size-3" aria-hidden />{statusWord(p, mark, t)}</span>}</span>
                           </span>
+                          {(p.status === "submitted" || p.edits.length > 0) && (
+                            <button type="button" onClick={() => setHistoryOf(p)} title={tf("history_n", { n: p.edits.length })} aria-label={`${label(ps, p)} · ${tf("history_n", { n: p.edits.length })}`}
+                              className="inline-flex min-h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 text-xs text-r-muted hover:bg-r-sunk hover:text-r-ink">
+                              <History className="size-3.5" aria-hidden />
+                            </button>
+                          )}
                         </div>
                         {p.status === "returned" && p.review_note && <div className="mt-0.5 max-w-52 truncate text-xs text-r-returned-ink" title={p.review_note}>“{p.review_note}”</div>}
                       </th>
@@ -767,7 +804,7 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
             const c = check(ps);
             const ready = !c.bad.length && !c.ask.length && !c.missing.length;
             const over = isOverdue(p.status, p.deadline);
-            const head = `${label(ps, p)} · ${p.status === "returned" ? t("sub_returned") : over ? t("overdue") : p.status === "draft" ? t("sub_draft") : t("sub_none")}`;
+            const head = `${label(ps, p)} · ${p.status === "submitted" ? t("sent_changed") : p.status === "returned" ? t("sub_returned") : over ? t("overdue") : p.status === "draft" ? t("sub_draft") : t("sub_none")}`;
             const tone = c.bad.length || c.missing.length ? "border-r-overdue" : c.ask.length ? "border-r-returned bg-r-returned-soft" : "border-r-line";
             return (
               <div key={ps} className={cn("flex items-start gap-2.5 rounded-[10px] border-[1.5px] p-3", tone)}>
@@ -809,6 +846,12 @@ function SheetView({ form, periods, fields, cur, setCell, original, zeroState, c
           )}
         </aside>
       </div>
+
+      {historyOf && (
+        <RSheet open onClose={() => setHistoryOf(null)} closeLabel={t("close")} title={`${t("edit_history")} · ${label(historyOf.period_start, historyOf)}`} description={formTitle(form, lang)}>
+          <ChangeHistory p={historyOf} fields={fields} />
+        </RSheet>
+      )}
     </>
   );
 }

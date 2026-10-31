@@ -96,8 +96,8 @@ def test_blank_vs_zero_in_tables(session, drought_form, history):
     offices = state_offices(session)
     t = analytics.table(session, drought_form, offices, D, D, "daily_office")
     names = [r[1] for r in t["rows"]]
-    latur = names.index("लातूर")
-    nashik = names.index("नाशिक")
+    latur = names.index("जिमाका, लातूर")
+    nashik = names.index("जिमाका, नाशिक")
     art = COLUMN_KEYS.index("articles")
     assert t["rows"][latur][2 + art] == 0 and t["blank"][latur][art] is False   # confirmed zero
     assert t["rows"][nashik][2 + art] == 0 and t["blank"][nashik][art] is True  # nothing sent
