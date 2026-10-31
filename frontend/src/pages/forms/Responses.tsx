@@ -178,9 +178,11 @@ function PlaceFilters({ division, office, onChange }: {
   );
 }
 
+/** On a phone the selects take a row of their own under the date controls, half the width each (the whole row when alone). */
 function PlaceSelect({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: React.ReactNode }) {
   return (
-    <span className={cn("relative min-w-0 flex-1 rounded-xl border-[1.5px] sm:max-w-56 sm:flex-none", value ? "border-r-ink" : "border-r-line")}>
+    <span className={cn("relative order-last min-w-0 grow basis-[calc(50%-0.25rem)] rounded-xl border-[1.5px] sm:order-none sm:max-w-56 sm:flex-none",
+      value ? "border-r-ink" : "border-r-line")}>
       <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}
         className={cn("h-11 w-full min-w-0 cursor-pointer appearance-none truncate rounded-xl border-0 bg-r-card py-0 pr-9 pl-3 text-[15px] font-semibold outline-none hover:bg-r-sunk focus-visible:ring-2 focus-visible:ring-r-action",
           value ? "text-r-ink" : "text-r-muted")}>

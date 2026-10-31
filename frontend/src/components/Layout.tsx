@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, NavLink, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   Activity, BarChart3, CircleUserRound, ClipboardCheck, ClipboardList, Clock3,
   Inbox, KeyRound, LayoutDashboard, LayoutGrid, MapPinned, Menu, Newspaper, Sheet, UserCog, X,
@@ -27,35 +27,38 @@ const OFFICE: NavItem[] = [
   { to: "/office/reports", label: "nav_reports", icon: Sheet, roles: ["district", "zone", "state"] },
 ];
 
-/** The district office's phone tabs (the design's bottom bar). */
-const DISTRICT_TABS: { to: string; label: TKey; icon: React.ElementType; match: (p: string, q: URLSearchParams) => boolean }[] = [
-  { to: "/forms/mine", label: "nav_today", icon: Clock3, match: (p, q) => p === "/forms/mine" && q.get("view") !== "forms" },
-  { to: "/forms/mine?view=forms", label: "nav_my_forms", icon: ClipboardList, match: (p, q) => p === "/forms/mine" && q.get("view") === "forms" },
+/** The district office's phone tabs (the design's bottom bar); Account opens the account menu rather than a page. */
+const DISTRICT_TABS: { to: string; label: TKey; icon: React.ElementType; match: (p: string) => boolean }[] = [
+  { to: "/forms/mine?view=forms", label: "nav_my_forms", icon: ClipboardList, match: (p) => p === "/forms/mine" },
   { to: "/office/analytics", label: "nav_my_numbers", icon: BarChart3, match: (p) => p.startsWith("/office/analytics") },
-  { to: "/account", label: "nav_account", icon: CircleUserRound, match: (p) => p === "/account" },
 ];
+const TAB = "relative flex min-h-[60px] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-bold no-underline";
 
 function DistrictTabBar() {
   const { t } = useT();
   const { pathname } = useLocation();
-  const [params] = useSearchParams();
   const pending = useInboxCount();
   return (
     <nav aria-label={t("nav_office")} className="fixed inset-x-0 bottom-0 z-40 flex border-t border-r-line bg-r-card pb-[env(safe-area-inset-bottom)] font-body lg:hidden">
       {DISTRICT_TABS.map((tab) => {
-        const on = tab.match(pathname, params);
+        const on = tab.match(pathname);
         return (
           <Link key={tab.to} to={tab.to} aria-current={on ? "page" : undefined}
-            className={cn("relative flex min-h-[60px] flex-1 flex-col items-center justify-center gap-0.5 text-xs font-bold no-underline",
-              on ? "text-r-ink shadow-[inset_0_3px_0_var(--r-focus)]" : "text-r-muted")}>
+            className={cn(TAB, on ? "text-r-ink shadow-[inset_0_3px_0_var(--r-focus)]" : "text-r-muted")}>
             <tab.icon className="size-6" strokeWidth={2.2} aria-hidden />
             {t(tab.label)}
-            {tab.to === "/forms/mine" && pending > 0 && (
+            {tab.label === "nav_my_forms" && pending > 0 && (
               <span className="num absolute top-1.5 left-1/2 ml-2 rounded-full bg-r-focus px-1.5 text-[11px] text-[#15202b]">{pending}</span>
             )}
           </Link>
         );
       })}
+      <UserMenu trigger={
+        <button type="button" className={cn(TAB, "cursor-pointer text-r-muted outline-none data-[state=open]:text-r-ink data-[state=open]:shadow-[inset_0_3px_0_var(--r-focus)]")}>
+          <CircleUserRound className="size-6" strokeWidth={2.2} aria-hidden />
+          {t("nav_account")}
+        </button>
+      } />
     </nav>
   );
 }

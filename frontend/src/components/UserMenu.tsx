@@ -36,8 +36,9 @@ function Avatar({ initials, className }: { initials: string; className?: string 
 const ITEM = "flex min-h-9 cursor-pointer select-none items-center gap-2.5 rounded-md px-2.5 text-sm outline-none data-[highlighted]:bg-r-sunk [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-r-muted";
 const LABEL = "px-2.5 pt-1.5 pb-1 text-[11px] font-bold tracking-[0.08em] text-r-faint uppercase";
 
-/** The header's account control: avatar + name, opening a menu with account, password, language, theme and sign out. */
-export function UserMenu() {
+/** The header's account control: avatar + name, opening a menu with account, password, language, theme and sign out.
+ *  `trigger` swaps in another opener (the phone tab bar's Account tab), with the menu opening upward. */
+export function UserMenu({ trigger }: { trigger?: React.ReactElement } = {}) {
   const { me, role, title, where, initials, generic } = useIdentity();
   const { t } = useT();
   const { lang, setLang } = useLang();
@@ -48,7 +49,7 @@ export function UserMenu() {
   return (
     <>
       <Menu.Root>
-        <Menu.Trigger
+        {trigger ? <Menu.Trigger asChild>{trigger}</Menu.Trigger> : <Menu.Trigger
           className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-1 pr-2 pl-1 text-left outline-none hover:bg-r-sunk focus-visible:ring-2 focus-visible:ring-r-focus data-[state=open]:bg-r-sunk"
           aria-label={`${t("nav_account")}: ${title}`}>
           <Avatar initials={initials} />
@@ -59,10 +60,10 @@ export function UserMenu() {
             )}
           </span>
           <ChevronDown className="hidden size-4 shrink-0 text-r-muted sm:block" aria-hidden />
-        </Menu.Trigger>
+        </Menu.Trigger>}
 
         <Menu.Portal>
-          <Menu.Content align="end" sideOffset={8}
+          <Menu.Content align="end" side={trigger ? "top" : "bottom"} sideOffset={8} collisionPadding={8}
             className="z-50 w-72 rounded-xl border border-r-line bg-r-card p-1.5 font-body text-r-ink shadow-lg">
             <div className="flex items-start gap-3 px-2.5 pt-2 pb-3">
               <Avatar initials={initials} className="size-10 text-sm" />
