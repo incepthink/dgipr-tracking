@@ -10,6 +10,7 @@
   "rewrites": [
     { "source": "/tracking/backend/(.*)", "destination": "https://54-169-233-35.sslip.io/$1" },
     { "source": "/tracking/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/tracking/(favicon\\.ico|apple-touch-icon\\.png)", "destination": "/$1" },
     { "source": "/tracking(/.*)?", "destination": "/index.html" }
   ]
 }
