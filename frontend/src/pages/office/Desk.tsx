@@ -48,29 +48,32 @@ type Filter = "all" | "none" | "submitted" | "returned";
 const norm = (s: string) => s.normalize("NFC").toLowerCase();
 
 /** Search by form title, slug or campaign, as in the campaign picker elsewhere. */
-function matchesForm(x: FormDef, campaign: CampaignBrief | undefined, needle: string) {
+/** What the search needs from a form: the state's FormDef and a district's InboxForm both fit. */
+type SearchForm = Pick<FormDef, "id" | "slug" | "title_mr" | "title_en" | "frequency" | "start_date" | "end_date" | "campaign_id">;
+
+function matchesForm(x: SearchForm, campaign: CampaignBrief | undefined, needle: string) {
   return !needle || [x.title_mr, x.title_en, x.slug, campaign?.title_mr, campaign?.title_en].some((s) => s && norm(s).includes(needle));
 }
 
 /** The search box's state for a list of form cards: typing narrows `shown`, picking one shows only that card until the text
- * changes. Used by the Desk and the Report forms list. */
-export function useFormSearch<F extends FormDef>(forms: F[]) {
+ * changes. Used by the Desk, the Report forms list and a district's My forms. */
+export function useFormSearch<F extends SearchForm>(forms: F[]) {
   const { lang } = useT();
   const { data: meta } = useMeta();
   const [q, setQ] = React.useState("");
   const [picked, setPicked] = React.useState<{ id: number; q: string } | null>(null);
-  const campaignOf = React.useCallback((x: FormDef) => meta?.campaigns.find((c) => c.id === x.campaign_id), [meta]);
+  const campaignOf = React.useCallback((x: SearchForm) => meta?.campaigns.find((c) => c.id === x.campaign_id), [meta]);
   const needle = norm(q.trim());
   const shown = picked && picked.q === q ? forms.filter((x) => x.id === picked.id) : forms.filter((x) => matchesForm(x, campaignOf(x), needle));
-  const onPick = (x: FormDef) => { const title = formTitle(x, lang); setQ(title); setPicked({ id: x.id, q: title }); };
+  const onPick = (x: SearchForm) => { const title = formTitle(x, lang); setQ(title); setPicked({ id: x.id, q: title }); };
   return { q, setQ, needle, shown, campaignOf, onPick };
 }
 
 /** A dropdown of the page's forms: focus lists them all, typing narrows the list and the cards below, picking one shows only
  * that card. It never navigates. */
 export function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
-  q: string; setQ: (q: string) => void; forms: FormDef[];
-  campaignOf: (x: FormDef) => CampaignBrief | undefined; onPick: (x: FormDef) => void;
+  q: string; setQ: (q: string) => void; forms: SearchForm[];
+  campaignOf: (x: SearchForm) => CampaignBrief | undefined; onPick: (x: SearchForm) => void;
 }) {
   const { t, tf, lang } = useT();
   const input = React.useRef<HTMLInputElement>(null);
@@ -80,7 +83,7 @@ export function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
   const hits = forms.filter((x) => matchesForm(x, campaignOf(x), needle));
   const cur = Math.min(active, Math.max(0, hits.length - 1));
   const optId = (i: number) => `desk-opt-${i}`;
-  const pick = (x: FormDef) => { onPick(x); setOpen(false); input.current?.blur(); };
+  const pick = (x: SearchForm) => { onPick(x); setOpen(false); input.current?.blur(); };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") { setQ(""); setOpen(false); input.current?.blur(); return; }
     if (!hits.length) return;

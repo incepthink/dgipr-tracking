@@ -7,11 +7,12 @@ import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn, qs } from "@/lib/utils";
-import { RCard, RError, RPage, RSearch, RSheet, RTitle, StatusMark } from "@/components/reports/kit";
+import { RCard, RError, RPage, RSheet, RTitle, StatusMark } from "@/components/reports/kit";
 import {
   dayMonth, isOverdue, longDay, periodOf, rangeText, stepOf, whenText,
 } from "@/components/reports/period";
 import { formTitle, useToday } from "./common";
+import { DeskSearch, useFormSearch } from "../office/Desk";
 
 export function useInbox(enabled = true) {
   return useQuery({ queryKey: ["forms-mine"], enabled, queryFn: () => api.get<InboxForm[]>("/api/forms/mine"), staleTime: 30_000 });
@@ -159,15 +160,13 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
   const division = meta?.divisions.find((d) => d.offices.some((o) => o.code === office));
 
   // search + All / Edited by state / Returned over the form list
-  const [q, setQ] = React.useState("");
   const [filter, setFilter] = React.useState<MineFilter>("all");
   const ps = (i: number) => recent[i]?.data?.periods ?? [];
   const inFilter = (i: number, k: MineFilter) => k === "all"
     || (k === "edited" ? ps(i).some((p) => Object.keys(p.corrections).length > 0) : ps(i).some((p) => p.status === "returned") || forms[i].returned > 0);
   const counts = Object.fromEntries(FILTERS.map((k) => [k, forms.filter((_, i) => inFilter(i, k)).length])) as Record<MineFilter, number>;
-  const needle = q.trim().toLocaleLowerCase();
-  const shown = forms.map((f, i) => ({ f, i })).filter(({ f, i }) => inFilter(i, filter)
-    && (!needle || [f.title_mr, f.title_en].some((s) => s.toLocaleLowerCase().includes(needle))));
+  const { q, setQ, needle, shown: hits, campaignOf, onPick } = useFormSearch(forms);
+  const shown = forms.map((f, i) => ({ f, i })).filter(({ f, i }) => inFilter(i, filter) && hits.includes(f));
 
   return (
     <RPage>
@@ -185,7 +184,7 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
         <>
           <section className="flex flex-col gap-2" aria-labelledby="mine">
             <h2 id="mine" className={cn("mx-1 mt-1 mb-0 text-[15px] font-bold text-r-muted", listOnly && "sr-only")}>{t("nav_my_forms")}</h2>
-            <RSearch value={q} onChange={setQ} placeholder={t("mine_search")} />
+            <DeskSearch q={q} setQ={setQ} forms={forms} campaignOf={campaignOf} onPick={onPick} />
             <div role="group" aria-label={t("nav_my_forms")} className="flex flex-wrap gap-2">
               {FILTERS.map((k) => (
                 <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}

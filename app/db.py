@@ -37,6 +37,7 @@ def init_db(engine: Engine) -> None:
     _allow_reports_without_campaign(engine)
     _drop_accepted_status(engine)
     _add_edit_source(engine)
+    _add_group_names(engine)
     _pause_closed_forms(engine)
 
 
@@ -56,6 +57,15 @@ def _add_edit_source(engine: Engine) -> None:
         return
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE form_value_edits ADD COLUMN source VARCHAR(10) NOT NULL DEFAULT 'state'"))
+
+
+def _add_group_names(engine: Engine) -> None:
+    """forms.group_names (renamed field groups); older forms use the default group names."""
+    from sqlalchemy import inspect, text
+    if "group_names" in {c["name"] for c in inspect(engine).get_columns("forms")}:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE forms ADD COLUMN group_names JSON NOT NULL DEFAULT '{}'"))
 
 
 def _drop_accepted_status(engine: Engine) -> None:

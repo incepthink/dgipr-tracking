@@ -96,7 +96,7 @@ def form_json(s: Session, form: Form, *, fields: bool = True) -> dict[str, Any]:
         "instructions_mr": form.instructions_mr, "instructions_en": form.instructions_en,
         "frequency": form.frequency, "start_date": form.start_date.isoformat(),
         "end_date": form.end_date.isoformat() if form.end_date else None, "deadline_hours": form.deadline_hours,
-        "status": form.status, "campaign_id": form.campaign_id,
+        "status": form.status, "campaign_id": form.campaign_id, "group_names": dict(form.group_names or {}),
         "created_by": form.created_by, "created_at": form.created_at.isoformat() + "Z",
         "updated_at": form.updated_at.isoformat() + "Z", "recipients": recipient_codes(s, form),
         "schedule_locked": has_submissions(s, form),
@@ -180,6 +180,11 @@ def _apply_details(form: Form, data: dict[str, Any], schedule_locked: bool) -> N
         form.deadline_hours = dh
     if "campaign_id" in data:
         form.campaign_id = data["campaign_id"] or None
+    if "group_names" in data:
+        names = data["group_names"] or {}
+        if not isinstance(names, dict):
+            raise FormError("group_names must map group keys to names")
+        form.group_names = {str(k)[:40]: str(v).strip()[:80] for k, v in names.items() if str(v or "").strip()}
 
 
 def _apply_fields(s: Session, form: Form, raw_fields: list[dict[str, Any]]) -> None:

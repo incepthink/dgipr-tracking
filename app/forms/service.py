@@ -514,7 +514,7 @@ def inbox(s: Session, user: User, today: Optional[date] = None) -> list[dict[str
         dl = deadline(form, latest) if latest else None
         out.append({"id": form.id, "slug": form.slug, "title_mr": form.title_mr, "title_en": form.title_en,
                     "instructions_mr": form.instructions_mr, "instructions_en": form.instructions_en,
-                    "frequency": form.frequency, "status": form.status,
+                    "frequency": form.frequency, "status": form.status, "campaign_id": form.campaign_id,
                     "start_date": form.start_date.isoformat(),
                     "end_date": form.end_date.isoformat() if form.end_date else None,
                     "offices": offices, "pending": pending if form.status == "published" else 0,

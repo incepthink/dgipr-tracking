@@ -213,6 +213,8 @@ export interface FormDef {
   frequency: Frequency; start_date: string; end_date: string | null; deadline_hours: number | null;
   status: FormStatus; campaign_id: number | null; created_by: string; created_at: string;
   updated_at: string; recipients: string[]; schedule_locked: boolean; fields?: FormField[];
+  /** Names the admin gave field groups, by group key. */
+  group_names?: Record<string, string>;
 }
 
 /** Admin list card. */
@@ -223,7 +225,7 @@ export interface FormBrief extends FormDef {
 /** Office inbox entry. */
 export interface InboxForm {
   id: number; slug: string; title_mr: string; title_en: string; instructions_mr: string; instructions_en: string;
-  frequency: Frequency; status: FormStatus; start_date: string; end_date: string | null;
+  frequency: Frequency; status: FormStatus; campaign_id: number | null; start_date: string; end_date: string | null;
   offices: string[]; pending: number; to_fill: number; overdue: number; returned: number; first_pending: string | null;
   latest_period: string | null; latest_deadline: string | null;
 }

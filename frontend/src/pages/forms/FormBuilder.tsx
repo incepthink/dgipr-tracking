@@ -2,18 +2,17 @@ import * as React from "react";
 import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronRight, Eye, Lock, Pause, Play, Plus, Trash2 } from "lucide-react";
-import { api, ApiError, type Column, type FieldType, type FormDef, type FormField, type Frequency } from "@/lib/api";
+import { ChevronDown, ChevronRight, Eye, GripVertical, Info, Lock, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { api, ApiError, type Column, type FormDef, type FormField, type Frequency } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { RButton, RCard, RCardTitle, RCheck, RError, RInput, RLabel, RPage, RSegmented, RSelect, RSheet, RTextarea, StatusMark } from "@/components/reports/kit";
+import { RButton, RCard, RCardTitle, RCheck, RError, RInput, RLabel, RPage, RSegmented, RSheet, RTextarea, StatusMark } from "@/components/reports/kit";
 import { DateInput } from "@/components/reports/DateInput";
 import { dayMonth, fig, fullDay } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
-import { fieldLabel, formTitle, useToday } from "./common";
+import { fieldLabel, formTitle, groupName, useToday } from "./common";
 
-const TYPES: FieldType[] = ["number", "text", "yesno", "choice", "date"];
 /** Weekly is no longer offered for new forms; an existing weekly form keeps showing it. */
 const FREQS: Frequency[] = ["daily", "once"];
 
@@ -21,13 +20,19 @@ type EditField = FormField & { uid: string; optionsText: string };
 interface Draft {
   title_mr: string; title_en: string; instructions_mr: string; instructions_en: string; frequency: Frequency;
   start_date: string; end_date: string; deadline_hours: string; campaign_id: number | null;
-  recipients: string[]; fields: EditField[];
+  recipients: string[]; fields: EditField[]; group_names: Record<string, string>;
 }
 
 let uidSeq = 0;
 // Unique across reloads too, so fields restored from a local draft never collide with fresh ones.
 const uid = () => `f${Date.now().toString(36)}_${++uidSeq}`;
 
+/** Groups in the order their first field appears. */
+const groupsOf = (fields: EditField[]) => [...new Set(fields.map((f) => f.group))];
+/** Each group's fields sit together (older forms could interleave them), so the builder can show them under one heading. */
+const byGroup = (fields: EditField[]) => { const gs = groupsOf(fields); return [...fields].sort((a, b) => gs.indexOf(a.group) - gs.indexOf(b.group)); };
+
+/** Every new field is an optional whole number that's totalled in reports; the builder no longer asks. */
 function blankField(): EditField {
   return {
     uid: uid(), id: null, key: "", label_mr: "", label_en: "", help_mr: "", help_en: "", type: "number", required: false,
@@ -44,15 +49,15 @@ function toDraft(f: FormDef | null, allOffices: string[], today: string, columns
   if (!f) {
     return {
       title_mr: "", title_en: "", instructions_mr: "", instructions_en: "", frequency: "daily", start_date: today, end_date: "",
-      deadline_hours: "", campaign_id: null, recipients: allOffices,
-      fields: columns.length ? columns.map(columnField) : [blankField()],
+      deadline_hours: "", campaign_id: null, recipients: allOffices, group_names: {},
+      fields: byGroup(columns.length ? columns.map(columnField) : [blankField()]),
     };
   }
   return {
     title_mr: f.title_mr, title_en: f.title_en, instructions_mr: f.instructions_mr, instructions_en: f.instructions_en,
     frequency: f.frequency, start_date: f.start_date, end_date: f.end_date ?? "", deadline_hours: f.deadline_hours?.toString() ?? "",
-    campaign_id: f.campaign_id, recipients: f.recipients,
-    fields: (f.fields ?? []).map((x) => ({ ...x, uid: uid(), optionsText: x.options.join("\n") })),
+    campaign_id: f.campaign_id, recipients: f.recipients, group_names: f.group_names ?? {},
+    fields: byGroup((f.fields ?? []).map((x) => ({ ...x, uid: uid(), optionsText: x.options.join("\n") }))),
   };
 }
 
@@ -62,6 +67,8 @@ function toPayload(d: Draft) {
     frequency: d.frequency, start_date: d.start_date, end_date: d.frequency === "once" ? null : d.end_date || null,
     deadline_hours: d.deadline_hours === "" ? null : Number(d.deadline_hours), campaign_id: d.campaign_id,
     recipients: d.recipients,
+    // Only names of groups that still have fields, and not blank ones (those fall back to the standard name).
+    group_names: Object.fromEntries(Object.entries(d.group_names ?? {}).filter(([g, n]) => n.trim() && d.fields.some((f) => f.group === g))),
     fields: d.fields.map((f) => ({
       id: f.id, key: f.key || null, label_mr: f.label_mr, label_en: f.label_en, help_mr: f.help_mr, help_en: f.help_en, type: f.type,
       required: f.required, options: f.optionsText.split("\n").map((o) => o.trim()).filter(Boolean),
@@ -83,7 +90,7 @@ function writeLocal(formId: number | null, d: Draft | null) {
 /** Reuse the server draft's uids for saved fields so the "changed" highlight compares like with like. */
 function restore(local: Draft, server: Draft): Draft {
   const byId = new Map(server.fields.filter((f) => f.id !== null).map((f) => [f.id, f.uid]));
-  return { ...server, ...local, fields: local.fields.map((f) => ({ ...f, uid: (f.id !== null && byId.get(f.id)) || f.uid })) };
+  return { ...server, ...local, fields: byGroup(local.fields.map((f) => ({ ...f, uid: (f.id !== null && byId.get(f.id)) || f.uid }))) };
 }
 
 /** Human list of what changed since the last save, for the sticky bar. */
@@ -94,6 +101,7 @@ function changesOf(a: Draft, b: Draft | null, t: (k: TKey) => string, lang: stri
     ["frequency", "frequency"], ["start_date", "start_date"], ["end_date", "end_date"], ["deadline_hours", "deadline_hours"], ["campaign_id", "campaign_link"]];
   keys.forEach(([k, label]) => { if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) out.push(t(label)); });
   if (a.recipients.join() !== b.recipients.join()) out.push(t("recipients_word"));
+  if (JSON.stringify(toPayload(a).group_names) !== JSON.stringify(toPayload(b).group_names)) out.push(t("group_name"));
   const before = new Map(b.fields.map((f) => [f.id ?? f.uid, JSON.stringify(toPayload({ ...b, fields: [f] }).fields[0])]));
   a.fields.forEach((f) => {
     const was = before.get(f.id ?? f.uid);
@@ -119,6 +127,9 @@ export default function FormBuilderPage() {
   const [saving, setSaving] = React.useState(false);
   const [preview, setPreview] = React.useState(false);
   const [open, setOpen] = React.useState<string | null>(null);
+  const [dragging, setDragging] = React.useState<string | null>(null);
+  const [focusGroup, setFocusGroup] = React.useState<string | null>(null);
+  const listRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (draft || !meta || !today || (formId && !form)) return;
@@ -141,18 +152,54 @@ export default function FormBuilderPage() {
     }
   }, [blocker, t, formId]);
 
+  /** Put a field at position `to` among group `g`'s active fields (moving it into that group if it was elsewhere). */
+  const moveTo = (u: string, g: string, to: number) => setDraft((d) => {
+    if (!d) return d;
+    const x = d.fields.find((f) => f.uid === u);
+    if (!x) return d;
+    const rest = d.fields.filter((f) => f.uid !== u);
+    const members = rest.filter((f) => !f.archived && f.group === g);
+    const j = Math.max(0, Math.min(members.length, to));
+    if (x.group === g && d.fields.filter((f) => !f.archived && f.group === g).indexOf(x) === j) return d;
+    const at = members[j] ? rest.indexOf(members[j]) : members.length ? rest.indexOf(members[members.length - 1]) + 1 : rest.length;
+    rest.splice(at, 0, x.group === g ? x : { ...x, group: g });
+    return { ...d, fields: rest };
+  });
+  // Listening on the window keeps the drag going when the row moves under another heading.
+  React.useEffect(() => {
+    if (!dragging) return;
+    const move = (e: PointerEvent) => {
+      const list = listRef.current;
+      const heads = list ? [...list.querySelectorAll<HTMLElement>("[data-group-head]")] : [];
+      if (!list || !heads.length) return;
+      const g = (heads.filter((h) => h.getBoundingClientRect().top < e.clientY).pop() ?? heads[0]).dataset.groupHead ?? "";
+      // Counting the group's other rows whose middle is above the pointer gives a target that doesn't flicker.
+      const rows = [...list.querySelectorAll<HTMLElement>("[data-field-row]")].filter((r) => r.dataset.group === g && r.dataset.fieldRow !== dragging);
+      moveTo(dragging, g, rows.filter((r) => { const b = r.getBoundingClientRect(); return b.top + b.height / 2 < e.clientY; }).length);
+    };
+    const end = () => setDragging(null);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", end); window.removeEventListener("pointercancel", end); };
+  }, [dragging]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (error) return <RPage><RError error={error} /></RPage>;
   if (!draft) return <RPage><div className="h-96 animate-pulse rounded-2xl bg-r-sunk" /></RPage>;
   const up = (patch: Partial<Draft>) => setDraft((d) => d && { ...d, ...patch });
   const upField = (u: string, patch: Partial<EditField>) => setDraft((d) => d && { ...d, fields: d.fields.map((f) => f.uid === u ? { ...f, ...patch } : f) });
-  const move = (u: string, by: number) => setDraft((d) => {
-    if (!d) return d;
-    const fs = [...d.fields];
-    const i = fs.findIndex((f) => f.uid === u);
-    const [x] = fs.splice(i, 1);
-    fs.splice(Math.max(0, Math.min(fs.length, i + by)), 0, x);
-    return { ...d, fields: fs };
-  });
+  /** Drag by the grip: while the pointer moves, the field jumps to the row under it. */
+  const startDrag = (u: string, e: React.PointerEvent<HTMLElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    setDragging(u);
+  };
+  const addField = (g: string) => { const f = { ...blankField(), group: g }; setDraft((d) => d && { ...d, fields: byGroup([...d.fields, f]) }); setOpen(f.uid); };
+  const addGroup = () => {
+    const g = `g_${Date.now().toString(36)}`;
+    setDraft((d) => d && { ...d, fields: [...d.fields, { ...blankField(), group: g }], group_names: { ...d.group_names, [g]: "" } });
+    setFocusGroup(g);
+  };
 
   const apply = (savedForm: FormDef) => {
     const d = toDraft(savedForm, allOffices, today);
@@ -198,10 +245,9 @@ export default function FormBuilderPage() {
   const changes = dirty ? changesOf(draft, saved, t, lang) : [];
   const allChosen = draft.recipients.length === allOffices.length;
   const freqs = FREQS.includes(draft.frequency) ? FREQS : [...FREQS, draft.frequency];
-  const needEnd = draft.frequency === "daily" && !draft.end_date;
   const spanDays = draft.start_date && draft.end_date >= draft.start_date
     ? Math.round((Date.parse(draft.end_date) - Date.parse(draft.start_date)) / 86_400_000) + 1 : 0;
-  const dateProblem = !draft.start_date ? t(draft.frequency === "once" ? "need_day" : "need_dates") : needEnd ? t("need_dates") : null;
+  const dateProblem = !draft.start_date ? t(draft.frequency === "once" ? "need_day" : "need_start") : null;
 
   return (
     <RPage className="pb-0">
@@ -266,19 +312,20 @@ export default function FormBuilderPage() {
                     <DateInput required value={draft.start_date} aria-invalid={!draft.start_date} onChange={(d) => up({ start_date: d })} />
                   )}
                 </RLabel>
-                <RLabel small label={t("end_date")}>
-                  <DateInput required={draft.frequency === "daily"} value={draft.end_date} min={draft.start_date} aria-invalid={needEnd}
-                    onChange={(d) => up({ end_date: d })} />
+                <RLabel small label={t("end_date_optional")}>
+                  <DateInput value={draft.end_date} min={draft.start_date} onChange={(d) => up({ end_date: d })} />
                 </RLabel>
               </div>
             )}
-            {dateProblem ? <span className="text-sm font-bold text-r-overdue-ink">{dateProblem}</span> : draft.frequency === "daily" && spanDays > 0 && (
+            {dateProblem ? <span className="text-sm font-bold text-r-overdue-ink">{dateProblem}</span> : draft.frequency === "daily" && (spanDays > 0 || !draft.end_date) && (
               <div className="flex items-start gap-3 rounded-xl bg-r-ground px-3.5 py-3">
-                <CalendarDays className="mt-0.5 size-5 shrink-0 text-r-action" aria-hidden />
-                <div className="flex flex-col gap-0.5">
-                  <span>{tf("daily_span", { a: fullDay(draft.start_date, lang), b: fullDay(draft.end_date, lang) })}</span>
-                  <span className="num text-sm font-bold text-r-muted">{tf("n_days", { n: fig(spanDays) })}</span>
-                </div>
+                <Info className="mt-0.5 size-5 shrink-0 text-r-action" aria-hidden />
+                {draft.end_date ? (
+                  <div className="flex flex-col gap-0.5">
+                    <span>{tf("daily_span", { a: fullDay(draft.start_date, lang), b: fullDay(draft.end_date, lang) })}</span>
+                    <span className="num text-sm font-bold text-r-muted">{tf("n_days", { n: fig(spanDays) })}</span>
+                  </div>
+                ) : <span>{tf("daily_open", { a: fullDay(draft.start_date, lang) })}</span>}
               </div>
             )}
           </RCard>
@@ -299,19 +346,36 @@ export default function FormBuilderPage() {
           <RCard className="gap-1.5">
             <div className="flex items-center justify-between gap-3 pb-2">
               <RCardTitle>{t("tab_fields")} <span className="num font-medium text-r-muted">{active.length}</span></RCardTitle>
-              <RButton size="sm" onClick={() => { const f = blankField(); up({ fields: [...draft.fields, f] }); setOpen(f.uid); }}><Plus aria-hidden /> {t("add_field")}</RButton>
+              <RButton size="sm" onClick={addGroup}><Plus aria-hidden /> {t("add_group")}</RButton>
             </div>
-            <div className="overflow-x-auto scrollbar-thin">
-              <div className="min-w-[720px]">
-                <div className="grid grid-cols-[52px_28px_minmax(180px,1fr)_120px_88px_76px_76px_40px] items-center gap-2.5 pb-2 text-[13px] font-bold text-r-muted">
-                  <span /><span>#</span><span>{t("field_label_mr")}</span><span>{t("field_type")}</span><span>{t("required")}</span><span>{t("min")}</span><span>{t("max")}</span><span />
-                </div>
-                {active.map((f, i) => (
-                  <FieldRow key={f.uid} f={f} n={i + 1} first={i === 0} last={i === active.length - 1} open={open === f.uid} changed={!saved?.fields.some((s) => s.uid === f.uid && JSON.stringify(s) === JSON.stringify(f))}
-                    onToggle={() => setOpen(open === f.uid ? null : f.uid)} onChange={(p) => upField(f.uid, p)} onMove={(by) => move(f.uid, by)}
-                    onRemove={() => f.locked ? upField(f.uid, { archived: true }) : setDraft((d) => d && { ...d, fields: d.fields.filter((x) => x.uid !== f.uid) })} />
-                ))}
-              </div>
+            {/* One flat list (headings, rows, add buttons as siblings) so a row dragged into another group isn't remounted. */}
+            <div ref={listRef} className={cn("flex flex-col", dragging && "cursor-grabbing select-none")}>
+              {groupsOf(active).flatMap((g, gi) => {
+                const rows = active.filter((f) => f.group === g);
+                const before = active.indexOf(rows[0]);
+                return [
+                  <div key={`h:${g}`} data-group-head={g} className={cn("flex items-center pb-1", gi > 0 && "mt-4")}>
+                    {/* The pencil sits inside the box and, being in the label, focuses it when clicked. */}
+                    <label className="relative flex max-w-[360px] min-w-0 flex-1 items-center">
+                      <RInput value={draft.group_names[g] ?? groupName(g, undefined, t)} placeholder={groupName(g, undefined, t)} aria-label={t("group_name")}
+                        autoFocus={focusGroup === g} onFocus={() => setFocusGroup(null)}
+                        onChange={(e) => up({ group_names: { ...draft.group_names, [g]: e.target.value } })}
+                        className="peer w-full pr-9 text-[15px] font-bold" />
+                      <Pencil aria-hidden className="pointer-events-none absolute right-2.5 size-4 text-r-muted peer-hover:text-r-ink peer-focus:text-r-action" />
+                    </label>
+                  </div>,
+                  ...rows.map((f, i) => (
+                    <FieldRow key={f.uid} f={f} n={before + i + 1} open={open === f.uid} dragging={dragging === f.uid} changed={!saved?.fields.some((s) => s.uid === f.uid && JSON.stringify(s) === JSON.stringify(f))}
+                      onToggle={() => setOpen(open === f.uid ? null : f.uid)} onChange={(p) => upField(f.uid, p)}
+                      onGrab={(e) => startDrag(f.uid, e)} onStep={(by) => moveTo(f.uid, g, i + by)}
+                      onRemove={() => f.locked ? upField(f.uid, { archived: true }) : setDraft((d) => d && { ...d, fields: d.fields.filter((x) => x.uid !== f.uid) })} />
+                  )),
+                  <button key={`a:${g}`} type="button" onClick={() => addField(g)}
+                    className="flex min-h-9 cursor-pointer items-center gap-1.5 self-start rounded-lg border-0 bg-transparent px-2 text-sm font-bold text-r-action hover:bg-r-sunk">
+                    <Plus className="size-4" aria-hidden /> {t("add_field")}
+                  </button>,
+                ];
+              })}
             </div>
             {archivedF.length > 0 && (
               <details className="mt-2.5 rounded-[10px] bg-r-ground px-3.5 py-3">
@@ -353,50 +417,37 @@ function LockedChip({ children }: { children: React.ReactNode }) {
 }
 
 // --------------------------------------------------------------------------- one field row
-function FieldRow({ f, n, first, last, open, changed, onToggle, onChange, onMove, onRemove }: {
-  f: EditField; n: number; first: boolean; last: boolean; open: boolean; changed: boolean;
-  onToggle: () => void; onChange: (p: Partial<EditField>) => void; onMove: (by: number) => void; onRemove: () => void;
+function FieldRow({ f, n, open, dragging, changed, onToggle, onChange, onGrab, onStep, onRemove }: {
+  f: EditField; n: number; open: boolean; dragging: boolean; changed: boolean;
+  onToggle: () => void; onChange: (p: Partial<EditField>) => void; onGrab: (e: React.PointerEvent<HTMLElement>) => void;
+  onStep: (by: number) => void; onRemove: () => void;
 }) {
   const { t } = useT();
-  const num = (v: string) => (v === "" ? null : Number(v.replace(/[^\d.-]/g, "")));
   return (
-    <div className={cn("border-t border-r-sunk", changed && "rounded-lg bg-r-today")}>
-      <div className="grid grid-cols-[52px_28px_minmax(180px,1fr)_120px_88px_76px_76px_40px] items-center gap-2.5 py-2">
-        <span className="flex">
-          <button type="button" aria-label={t("move_up")} disabled={first} onClick={() => onMove(-1)} className="flex size-[26px] cursor-pointer items-center justify-center rounded border-0 bg-transparent text-r-muted hover:bg-r-sunk disabled:opacity-30"><ArrowUp className="size-4" /></button>
-          <button type="button" aria-label={t("move_down")} disabled={last} onClick={() => onMove(1)} className="flex size-[26px] cursor-pointer items-center justify-center rounded border-0 bg-transparent text-r-muted hover:bg-r-sunk disabled:opacity-30"><ArrowDown className="size-4" /></button>
-        </span>
+    <div data-field-row={f.uid} data-group={f.group} className={cn("border-t border-r-sunk", changed && "rounded-lg bg-r-today", dragging && "relative z-10 rounded-lg bg-r-card shadow-lg")}>
+      <div className="grid grid-cols-[32px_24px_minmax(0,1fr)_40px] items-center gap-2.5 py-2">
+        {/* Drag with mouse or finger; arrow keys move it for keyboard users. */}
+        <button type="button" aria-label={t("drag_to_reorder")} title={t("drag_to_reorder")} onPointerDown={onGrab}
+          onKeyDown={(e) => { if (e.key === "ArrowUp" || e.key === "ArrowDown") { e.preventDefault(); onStep(e.key === "ArrowUp" ? -1 : 1); } }}
+          className={cn("flex size-8 touch-none items-center justify-center rounded-lg border-0 bg-transparent text-r-muted hover:bg-r-sunk", dragging ? "cursor-grabbing" : "cursor-grab")}>
+          <GripVertical className="size-[18px]" />
+        </button>
         <span className="num text-[13px] text-r-muted">{n}</span>
-        <RInput value={f.label_mr} aria-label={t("field_label_mr")} onChange={(e) => onChange({ label_mr: e.target.value })} />
-        {f.locked ? <LockedChip>{t(`type_${f.type}` as TKey)}</LockedChip> : (
-          <RSelect value={f.type} aria-label={t("field_type")} onChange={(e) => { const type = e.target.value as FieldType; onChange({ type, aggregate: type === "number" ? "sum" : "none" }); }}>
-            {TYPES.map((x) => <option key={x} value={x}>{t(`type_${x}` as TKey)}</option>)}
-          </RSelect>
-        )}
-        <RCheck plain checked={f.required} aria-label={t("required")} onChange={(required) => onChange({ required })}>{f.required ? t("yes") : t("no")}</RCheck>
-        {f.type === "number" ? (
-          <>
-            <RInput className="num text-right" aria-label={t("min")} placeholder="—" value={f.min_value ?? ""} onChange={(e) => onChange({ min_value: num(e.target.value) })} />
-            <RInput className="num text-right" aria-label={t("max")} placeholder="—" value={f.max_value ?? ""} onChange={(e) => onChange({ max_value: num(e.target.value) })} />
-          </>
-        ) : <><span className="text-center text-r-faint">—</span><span className="text-center text-r-faint">—</span></>}
+        <span className="flex min-w-0 items-center gap-2">
+          <RInput value={f.label_mr} aria-label={t("field_label_mr")} onChange={(e) => onChange({ label_mr: e.target.value })} className="min-w-0 flex-1" />
+          {/* Older forms may still carry non-number fields; show what they are. */}
+          {f.type !== "number" && <span className="shrink-0 rounded-md bg-r-sunk px-2 py-1 text-[13px] font-bold whitespace-nowrap text-r-muted">{t(`type_${f.type}` as TKey)}</span>}
+        </span>
         <button type="button" aria-expanded={open} aria-label={t("more_for_field")} onClick={onToggle}
           className="flex size-9 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-r-ink hover:bg-r-sunk">
           {open ? <ChevronDown className="size-[18px]" /> : <ChevronRight className="size-[18px]" />}
         </button>
       </div>
       {open && (
-        <div className="mb-2 ml-[90px] grid gap-3 rounded-[10px] bg-r-ground p-3 sm:grid-cols-2">
+        <div className="mb-2 grid gap-3 rounded-[10px] bg-r-ground p-3 sm:ml-[66px] sm:grid-cols-2">
           <RLabel small label={t("field_label_en")}><RInput value={f.label_en} onChange={(e) => onChange({ label_en: e.target.value })} /></RLabel>
-          <RLabel small label={t("group")}><RInput value={f.group} placeholder="print / video / social" onChange={(e) => onChange({ group: e.target.value })} /></RLabel>
           <RLabel small label={`${t("help_text")} (मराठी)`}><RInput value={f.help_mr} onChange={(e) => onChange({ help_mr: e.target.value })} /></RLabel>
           <RLabel small label={`${t("help_text")} (English)`}><RInput value={f.help_en} onChange={(e) => onChange({ help_en: e.target.value })} /></RLabel>
-          {f.type === "number" && (
-            <div className="flex flex-wrap gap-4 sm:col-span-2">
-              <RCheck checked={f.integer} onChange={(integer) => onChange({ integer })}>{t("whole_numbers")}</RCheck>
-              <RCheck checked={f.aggregate === "sum"} onChange={(on) => onChange({ aggregate: on ? "sum" : "none" })}>{t("sum_in_reports")}</RCheck>
-            </div>
-          )}
           {f.type === "choice" && (
             <RLabel small label={t("options")} className="sm:col-span-2"><RTextarea rows={3} value={f.optionsText} onChange={(e) => onChange({ optionsText: e.target.value })} /></RLabel>
           )}
@@ -466,19 +517,22 @@ function PreviewSheet({ draft, onClose }: { draft: Draft; onClose: () => void })
           <Instructions text={lang === "en" && draft.instructions_en ? draft.instructions_en : draft.instructions_mr} className="mt-2" />
         </details>
       )}
-      <div className="flex flex-col rounded-[14px] bg-r-card">
-        {fields.map((f, i) => (
-          <div key={f.uid} className={cn("flex items-center justify-between gap-3 px-3.5 py-3", i > 0 && "border-t border-r-sunk")}>
-            <span className="flex flex-col">
-              <span className="font-bold">{fieldLabel(f, lang) || "…"}{f.required && <span className="text-r-overdue"> *</span>}</span>
-              <span className="text-[13px] text-r-muted">{[f.required ? t("required") : "", f.type === "number" && f.max_value !== null ? `${f.min_value ?? 0}–${f.max_value}` : "", lang === "en" ? f.help_en || f.help_mr : f.help_mr].filter(Boolean).join(" · ")}</span>
-            </span>
-            <span className="flex h-[54px] w-28 shrink-0 items-center justify-end rounded-xl border-[1.5px] border-dashed border-r-faint bg-r-ground px-3.5 text-sm text-r-faint">
-              {f.type === "number" ? t("not_entered") : t(`type_${f.type}` as TKey)}
-            </span>
-          </div>
-        ))}
-      </div>
+      {groupsOf(fields).map((g, _, groups) => (
+        <div key={g || "-"} className="flex flex-col rounded-[14px] bg-r-card">
+          {groups.length > 1 && <div className="px-3.5 pt-3 text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{groupName(g, draft.group_names, t)}</div>}
+          {fields.filter((f) => f.group === g).map((f, i) => (
+            <div key={f.uid} className={cn("flex items-center justify-between gap-3 px-3.5 py-3", i > 0 && "border-t border-r-sunk")}>
+              <span className="flex flex-col">
+                <span className="font-bold">{fieldLabel(f, lang) || "…"}{f.required && <span className="text-r-overdue"> *</span>}</span>
+                <span className="text-[13px] text-r-muted">{[f.required ? t("required") : "", f.type === "number" && f.max_value !== null ? `${f.min_value ?? 0}–${f.max_value}` : "", lang === "en" ? f.help_en || f.help_mr : f.help_mr].filter(Boolean).join(" · ")}</span>
+              </span>
+              <span className="flex h-[54px] w-28 shrink-0 items-center justify-end rounded-xl border-[1.5px] border-dashed border-r-faint bg-r-ground px-3.5 text-sm text-r-faint">
+                {f.type === "number" ? t("not_entered") : t(`type_${f.type}` as TKey)}
+              </span>
+            </div>
+          ))}
+        </div>
+      ))}
       <div className="flex items-center gap-2 text-sm text-r-muted"><StatusMark mark="pend" /> {t("preview_note")}</div>
     </RSheet>
   );

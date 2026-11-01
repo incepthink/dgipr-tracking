@@ -87,6 +87,15 @@ def test_publish_needs_fields_and_recipients_and_duplicate(session, drought_form
     assert [f.key for f in copy.fields] == list(COLUMN_KEYS) and len(copy.recipients) == 43
 
 
+def test_group_names_rename_without_changing_keys(session, drought_form):
+    update_form(session, "t", drought_form, {"group_names": {"print": " वृत्तपत्रे ", "video": ""}})
+    assert drought_form.group_names == {"print": "वृत्तपत्रे"}
+    assert {f.group for f in drought_form.fields} >= {"print", "video"}
+    assert duplicate_form(session, "t", drought_form).group_names == {"print": "वृत्तपत्रे"}
+    with pytest.raises(FormError, match="group_names"):
+        update_form(session, "t", drought_form, {"group_names": ["print"]})
+
+
 # --------------------------------------------------------------------------- web: setup
 @pytest.fixture(scope="module")
 def test_form(admin_client):

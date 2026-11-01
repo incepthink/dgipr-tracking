@@ -149,6 +149,8 @@ class Form(Base):
     created_by: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+    # The name the admin gave a field group, by group key; the key (print/video/social…) never changes.
+    group_names: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
     fields: Mapped[list["FormField"]] = relationship(back_populates="form", order_by="FormField.sort_order",
                                                      cascade="all, delete-orphan")
     recipients: Mapped[list["FormRecipient"]] = relationship(cascade="all, delete-orphan")

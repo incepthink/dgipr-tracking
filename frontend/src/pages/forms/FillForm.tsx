@@ -12,7 +12,7 @@ import { RAlert, RButton, RCheck, RError, RLabel, RPage, RSelect, RSheet, RTexta
 import { DateInput } from "@/components/reports/DateInput";
 import { dayMonth, entryClosed, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
-import { fieldLabel, formTitle, useToday } from "./common";
+import { fieldLabel, formTitle, groupName, useToday } from "./common";
 
 // Keys shown together are pressed together (Ctrl + V); each row is a separate shortcut.
 const SHORTCUTS: [string[], TKey][] = [
@@ -431,8 +431,8 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
 
       {groups.map((g) => (
         <fieldset key={g || "-"} className="m-0 flex flex-col rounded-[14px] border-0 bg-r-card p-0">
-          {g && groups.length > 1 && <legend className="sr-only">{groupLabel(g, t)}</legend>}
-          {g && groups.length > 1 && <div aria-hidden className="px-3.5 pt-3 text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{groupLabel(g, t)}</div>}
+          {groups.length > 1 && <legend className="sr-only">{groupName(g, form.group_names, t)}</legend>}
+          {groups.length > 1 && <div aria-hidden className="px-3.5 pt-3 text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{groupName(g, form.group_names, t)}</div>}
           {fields.filter((f) => f.group === g).map((f, i) => (
             <FieldRow key={f.key} f={f} first={i === 0} value={cur(ps, f.key)} disabled={!writable} corrected={!!p.corrections[f.key]}
               changed={cur(ps, f.key) !== (original[f.key] ?? "")} zero={zeroState(f)} problem={problemOf(f, cur(ps, f.key), tr)}
@@ -499,10 +499,6 @@ function ChangeHistory({ p, fields }: { p: Submission; fields: FormField[] }) {
       )}
     </ol>
   );
-}
-
-function groupLabel(g: string, t: Tr["t"]) {
-  return ["print", "video", "social", "other"].includes(g) ? t(`group_${g}` as "group_print") : g;
 }
 
 function FieldRow({ f, first, value, disabled, corrected, changed, zero, problem, onChange, onConfirm }: {

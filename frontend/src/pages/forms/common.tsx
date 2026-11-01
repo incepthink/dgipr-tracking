@@ -34,6 +34,14 @@ export function formTitle(f: { title_mr: string; title_en: string } | undefined,
   return !f ? "" : lang === "en" && f.title_en ? f.title_en : f.title_mr;
 }
 
+/** A field group's heading: the name the admin gave it, else the standard name, else the key itself. */
+export function groupName(g: string, names: Record<string, string> | undefined, t: (k: TKey) => string) {
+  if (names?.[g]) return names[g];
+  if (!g || g === "other") return t("group_other");
+  if (g === "print" || g === "video" || g === "social") return t(`group_${g}`);
+  return g.startsWith("g_") ? t("new_group") : g;
+}
+
 export function fieldLabel(f: { label_mr: string; label_en: string }, lang: string) {
   return lang === "en" && f.label_en ? f.label_en : f.label_mr;
 }

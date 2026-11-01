@@ -7,9 +7,9 @@ import { useAction } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn, qs } from "@/lib/utils";
 import { RButton, RCard, RError, RPage, RTitle } from "@/components/reports/kit";
-import { dayMonth, fig, rangeText, whenText } from "@/components/reports/period";
+import { dayMonth, fig, whenText } from "@/components/reports/period";
 import { formTitle } from "./common";
-import { STATUS_DOT } from "../office/shared";
+import { STATUS_DOT, formRange } from "../office/shared";
 import { DeskSearch, useFormSearch } from "../office/Desk";
 
 
@@ -57,7 +57,7 @@ function FormCard({ f }: { f: FormBrief }) {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Chip><span className={cn("size-2 rounded-full", STATUS_DOT[f.status])} aria-hidden />{t(`status_${f.status}` as TKey)}</Chip>
             <Chip><Repeat aria-hidden />{t(`freq_${f.frequency}` as TKey)}</Chip>
-            <Chip><CalendarDays aria-hidden />{rangeText(f.start_date, f.end_date ?? f.start_date, lang)}</Chip>
+            <Chip><CalendarDays aria-hidden />{f.frequency === "once" ? dayMonth(f.start_date, lang) : formRange(f, lang)}</Chip>
             <Chip><ListChecks aria-hidden /><span className="num">{f.fields_count}</span> {t("fields_n")}</Chip>
             <Chip><Users aria-hidden />{tf("n_offices", { n: f.recipients.length })}</Chip>
           </div>
