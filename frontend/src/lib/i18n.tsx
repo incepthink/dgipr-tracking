@@ -395,7 +395,7 @@ const DICT = {
   offline_body: { mr: "या पानावर भरलेले आकडे तसेच राहतील. सिग्नल परत आल्यावर जतन करा किंवा पाठवा.", en: "Figures typed on this page stay here. Save or send them when the signal is back." },
   signed_out_title: { mr: "काही वेळ काहीही न केल्याने तुम्ही लॉग आउट झालात", en: "You were signed out" },
   signed_out_body: { mr: "पुन्हा लॉग इन करा आणि जिथे थांबलात तिथून पुढे चला.", en: "Sign in again to carry on where you left off." },
-  district_officer: { mr: "जिल्हा अधिकारी", en: "District Officer" },
+  district_officer: { mr: "जिल्हा माहिती अधिकारी", en: "District Officer" },
   mine_all: { mr: "सर्व", en: "All" },
   mine_edited: { mr: "राज्याने बदललेले", en: "Edited by state" },
   mine_rejected: { mr: "परत पाठवलेले", en: "Returned" },

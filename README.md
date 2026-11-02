@@ -264,7 +264,9 @@ test is skipped when no browser is available).
   the app (`Dockerfile`, Playwright Chromium) plus Caddy for HTTPS at https://54-169-233-35.sslip.io (Let's Encrypt).
   SQLite and PDFs live in `/data/dgipr` on the host. Secrets are in `/opt/dgipr/deploy/app.env` (mode 600), including
   `ADMIN_USERNAME` / `ADMIN_PASSWORD` for the first state admin. The site requires login. SSH is allowed only from the admin IP in security group `dgipr-prod`.
-* **Before a deploy that changes the schema**, back up the database: `sudo cp /data/dgipr/dgipr.sqlite3 /data/dgipr/dgipr.backup-$(date +%F).sqlite3`.
+* **Before a deploy that changes the schema**, back up the database with SQLite's backup API, not `cp`: the live
+  database runs in WAL mode, so a plain copy of `dgipr.sqlite3` misses changes still in `dgipr.sqlite3-wal`.
+  `docker exec deploy-app-1 python -c "import sqlite3; sqlite3.connect('/data/dgipr.sqlite3').backup(sqlite3.connect('/data/dgipr.backup-$(date +%F-%H%M).sqlite3'))"`
   New tables are created and new columns added automatically on start.
 * **Redeploy backend** (from the repo root):
   ```bash

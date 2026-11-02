@@ -369,7 +369,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
                 </colgroup>
                 <thead ref={head} className="sticky top-0 z-20">
                   <tr>
-                    <SortHead col={OFFICE} label={t("office")} sort={sort} onSort={sortBy} className="sticky left-0 z-30 pl-1.5 text-xs" />
+                    <SortHead col={OFFICE} label={t("office")} sort={sort} onSort={sortBy} className="sticky left-0 z-30 pl-1.5 text-xs before:absolute before:inset-y-0 before:-left-2 before:w-2 before:bg-inherit" />
                     <SortHead col={SENT_COL} label={t("sent")} sort={sort} onSort={sortBy} className="px-0 text-xs" />
                     {fields.map((x) => <SortHead key={x.key} col={x.key} label={fieldLabel(x, lang)} sort={sort} onSort={sortBy} center
                       className="px-0.5 text-xs leading-snug break-normal" />)}
@@ -474,7 +474,10 @@ function Row({ r, fields, canEdit, editing, onEdit }: {
   const bg = r.status === "returned" ? "bg-r-overdue-soft" : sent ? "bg-r-accepted-soft" : "bg-r-card";
   return (
     <tr className={bg}>
-      <th scope="row" className={cn("sticky left-0 z-10 border-b border-r-line-soft px-3 py-1.5 text-left font-medium whitespace-nowrap", bg)}>
+      {/* the before: strip paints the row colour a few pixels past the left edge, so no sliver of a cell scrolling
+          underneath shows when the pinned column lands on a fractional pixel */}
+      <th scope="row" className={cn("sticky left-0 z-10 border-b border-r-line-soft px-3 py-1.5 text-left font-medium whitespace-nowrap",
+        "before:absolute before:inset-y-0 before:-left-2 before:w-2 before:bg-inherit", bg)}>
         <span title={officeName(r, lang)} className="block truncate">{shortOffice(r, lang)}</span>
       </th>
       <td className={cn("truncate border-b border-r-line-soft px-1.5 py-1.5 text-xs whitespace-nowrap", sent ? "text-r-muted" : "text-r-overdue-ink")}>
