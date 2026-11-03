@@ -151,6 +151,8 @@ class Form(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
     # The name the admin gave a field group, by group key; the key (print/video/social…) never changes.
     group_names: Mapped[dict[str, str]] = mapped_column(JSON, default=dict)
+    # The first day offices must attach proof (set when a field first asks for it); earlier periods are exempt.
+    proof_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     fields: Mapped[list["FormField"]] = relationship(back_populates="form", order_by="FormField.sort_order",
                                                      cascade="all, delete-orphan")
     recipients: Mapped[list["FormRecipient"]] = relationship(cascade="all, delete-orphan")
@@ -179,6 +181,7 @@ class FormField(Base):
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     aggregate: Mapped[str] = mapped_column(String(10), default="sum")  # sum | none
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
+    proof: Mapped[str] = mapped_column(String(10), default="none")  # none | links | files | either
     form: Mapped[Form] = relationship(back_populates="fields")
 
 
@@ -211,6 +214,8 @@ class FormSubmission(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     values: Mapped[list["FormValue"]] = relationship(back_populates="submission", cascade="all, delete-orphan")
     edits: Mapped[list["FormValueEdit"]] = relationship(cascade="all, delete-orphan", order_by="FormValueEdit.id")
+    proofs: Mapped[list["FormProof"]] = relationship(
+        cascade="all, delete-orphan", order_by=lambda: [FormProof.sort_order, FormProof.id])
 
 
 class FormValue(Base):
@@ -252,6 +257,29 @@ class FormValueEdit(Base):
     note: Mapped[str] = mapped_column(Text, default="")
     reverts_id: Mapped[Optional[int]] = mapped_column(ForeignKey("form_value_edits.id"), nullable=True)
     source: Mapped[str] = mapped_column(String(10), default="state")
+    field: Mapped[FormField] = relationship()
+
+
+class FormProof(Base):
+    """One proof item behind a figure: a post link, or a PDF/photo in proof storage. Removal is soft (removed_at),
+    so what an office once attached stays on record; stored files are never deleted."""
+    __tablename__ = "form_proofs"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    submission_id: Mapped[int] = mapped_column(ForeignKey("form_submissions.id"), index=True)
+    field_id: Mapped[int] = mapped_column(ForeignKey("form_fields.id"))
+    kind: Mapped[str] = mapped_column(String(4))  # link | file
+    url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    url_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True, index=True)  # proof.canonical(url)
+    file_key: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    file_name: Mapped[Optional[str]] = mapped_column(String(300), nullable=True)
+    file_type: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    file_size: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    file_sha256: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    added_by: Mapped[str] = mapped_column(String(200), default="")
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    removed_by: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     field: Mapped[FormField] = relationship()
 
 

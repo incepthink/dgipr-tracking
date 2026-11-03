@@ -38,6 +38,8 @@ def init_db(engine: Engine) -> None:
     _drop_accepted_status(engine)
     _add_edit_source(engine)
     _add_group_names(engine)
+    _add_field_proof(engine)
+    _add_proof_from(engine)
     _pause_closed_forms(engine)
 
 
@@ -66,6 +68,24 @@ def _add_group_names(engine: Engine) -> None:
         return
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE forms ADD COLUMN group_names JSON NOT NULL DEFAULT '{}'"))
+
+
+def _add_field_proof(engine: Engine) -> None:
+    """form_fields.proof (what an office attaches behind a figure); older fields ask for none."""
+    from sqlalchemy import inspect, text
+    if "proof" in {c["name"] for c in inspect(engine).get_columns("form_fields")}:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE form_fields ADD COLUMN proof VARCHAR(10) NOT NULL DEFAULT 'none'"))
+
+
+def _add_proof_from(engine: Engine) -> None:
+    """forms.proof_from (the first day proof is required); null until a field asks for proof."""
+    from sqlalchemy import inspect, text
+    if "proof_from" in {c["name"] for c in inspect(engine).get_columns("forms")}:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE forms ADD COLUMN proof_from DATE"))
 
 
 def _drop_accepted_status(engine: Engine) -> None:

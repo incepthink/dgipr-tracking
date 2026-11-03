@@ -1,5 +1,7 @@
 """Form definitions: create / update / publish / duplicate, and the schema lock.
 
+Proof type (app.forms.proof) is not locked: the admin may change what a field asks offices to attach any time.
+
 The lock: once any value is stored for a field, the field can be renamed, reordered, archived or made
 (not) required, but never deleted, retyped or re-keyed, and a choice can't lose an option that was
 answered; once any submission exists the form's frequency and start date are fixed (periods would shift).
@@ -15,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.forms.periods import FREQUENCIES, deadline, periods
+from app.forms.proof import PROOF_TYPES
 from app.models import Division, Form, FormField, FormRecipient, FormSubmission, FormValue, Office
 from app.timeutil import today_ist, utcnow
 
@@ -87,7 +90,8 @@ def field_json(f: FormField, locked: bool = False) -> dict[str, Any]:
     return {"id": f.id, "key": f.key, "label_mr": f.label_mr, "label_en": f.label_en, "help_mr": f.help_mr,
             "help_en": f.help_en, "type": f.type, "required": f.required, "options": list(f.options or []),
             "min_value": f.min_value, "max_value": f.max_value, "integer": f.integer, "group": f.group,
-            "sort_order": f.sort_order, "aggregate": f.aggregate, "archived": f.archived, "locked": locked}
+            "sort_order": f.sort_order, "aggregate": f.aggregate, "archived": f.archived, "proof": f.proof or "none",
+            "locked": locked}
 
 
 def form_json(s: Session, form: Form, *, fields: bool = True) -> dict[str, Any]:
@@ -97,6 +101,7 @@ def form_json(s: Session, form: Form, *, fields: bool = True) -> dict[str, Any]:
         "frequency": form.frequency, "start_date": form.start_date.isoformat(),
         "end_date": form.end_date.isoformat() if form.end_date else None, "deadline_hours": form.deadline_hours,
         "status": form.status, "campaign_id": form.campaign_id, "group_names": dict(form.group_names or {}),
+        "proof_from": form.proof_from.isoformat() if form.proof_from else None,
         "created_by": form.created_by, "created_at": form.created_at.isoformat() + "Z",
         "updated_at": form.updated_at.isoformat() + "Z", "recipients": recipient_codes(s, form),
         "schedule_locked": has_submissions(s, form),
@@ -141,12 +146,18 @@ def _clean_field(raw: dict[str, Any]) -> dict[str, Any]:
     aggregate = raw.get("aggregate") or ("sum" if ftype == "number" else "none")
     if aggregate not in AGGREGATES:
         raise FormError("aggregate must be sum or none")
+    proof = raw.get("proof") or "none"
+    if proof not in PROOF_TYPES:
+        raise FormError(f"proof must be one of {', '.join(PROOF_TYPES)}")
+    if proof != "none" and ftype != "number":
+        raise FormError(f"{label_mr or label_en}: only number fields can ask for proof")
     return {"label_mr": label_mr or label_en, "label_en": label_en, "type": ftype,
             "help_mr": str(raw.get("help_mr") or "").strip(), "help_en": str(raw.get("help_en") or "").strip(),
             "required": bool(raw.get("required")), "options": options if ftype == "choice" else [],
             "min_value": mn if ftype == "number" else None, "max_value": mx if ftype == "number" else None,
             "integer": bool(raw.get("integer", True)), "group": str(raw.get("group") or "").strip()[:40],
-            "aggregate": aggregate if ftype == "number" else "none", "archived": bool(raw.get("archived"))}
+            "aggregate": aggregate if ftype == "number" else "none", "archived": bool(raw.get("archived")),
+            "proof": proof}
 
 
 def _apply_details(form: Form, data: dict[str, Any], schedule_locked: bool) -> None:
@@ -233,6 +244,9 @@ def _apply_fields(s: Session, form: Form, raw_fields: list[dict[str, Any]]) -> N
             if fid in locked:
                 raise FormError(f"{f.label_mr}: offices already answered this field — archive it instead of deleting")
             form.fields.remove(f)
+    # proof is required from the day a field first asks for it; earlier periods stay as they were sent
+    if form.proof_from is None and any(f.proof != "none" for f in form.fields):
+        form.proof_from = today_ist()
 
 
 def set_recipients(s: Session, form: Form, codes: Iterable[str]) -> None:

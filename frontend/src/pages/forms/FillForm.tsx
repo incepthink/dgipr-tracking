@@ -1,42 +1,29 @@
 import * as React from "react";
 import { Link, useBlocker, useParams, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertCircle, Check, ChevronLeft, ClipboardPaste, History, Info, Lock } from "lucide-react";
-import { api, ApiError, type AnswerValue, type FormDef, type FormField, type PeriodsResponse, type Submission } from "@/lib/api";
+import { AlertCircle, Check, ChevronLeft, Loader2, Pencil, Undo2 } from "lucide-react";
+import { api, ApiError, type AnswerValue, type FormDef, type FormField, type LinkCheck, type PeriodsResponse, type Proof, type Submission } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn } from "@/lib/utils";
 import { RAlert, RButton, RCheck, RError, RLabel, RPage, RSelect, RSheet, RTextarea, StatusMark, markOf, type Mark } from "@/components/reports/kit";
 import { DateInput } from "@/components/reports/DateInput";
-import { dayMonth, entryClosed, isOverdue, longDay, periodOf, rangeText, shortDay, whenText } from "@/components/reports/period";
+import { dayMonth, entryClosed, isOverdue, longDay, periodOf, rangeText, whenText } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, groupName, useToday } from "./common";
-
-// Keys shown together are pressed together (Ctrl + V); each row is a separate shortcut.
-const SHORTCUTS: [string[], TKey][] = [
-  [["Tab"], "kb_next"], [["Enter"], "kb_down"], [["← ↑ → ↓"], "kb_arrows"],
-  [["Ctrl", "V"], "kb_paste"], [["Delete"], "kb_clear"], [["Ctrl", "S"], "kb_save"],
-];
+import {
+  EMPTY, FileBox, LinkCount, LinkLines, LinksInput, ProofList, fieldTakesFiles, fieldTakesLinks, parseLinks, proofDraftOf,
+  proofPayload, sameProof, uploadPicked, type FileItem, type ProofDraft,
+} from "./ProofBox";
 
 type Draft = Record<string, Record<string, string>>; // period_start -> field key -> text ("" = blank)
+type ProofDrafts = Record<string, Record<string, ProofDraft>>; // period_start -> field key -> links text + files
 type Tr = ReturnType<typeof useT>;
 
 function toText(v: AnswerValue | undefined) { return v === null || v === undefined ? "" : String(v); }
 const ck = (ps: string, k: string) => `${ps}|${k}`;
-
-export function useIsDesktop() {
-  const q = "(min-width: 1024px)";
-  const [m, setM] = React.useState(() => window.matchMedia(q).matches);
-  React.useEffect(() => {
-    const mq = window.matchMedia(q);
-    const on = () => setM(mq.matches);
-    mq.addEventListener("change", on);
-    return () => mq.removeEventListener("change", on);
-  }, []);
-  return m;
-}
 
 /** Why a typed value can't be saved, or "" when it's fine. */
 function problemOf(f: FormField, v: string, tr: Tr) {
@@ -49,9 +36,10 @@ function problemOf(f: FormField, v: string, tr: Tr) {
   return "";
 }
 
-function hintOf(f: FormField, tr: Tr) {
+function hintOf(f: FormField, tr: Tr, linksCount: boolean) {
   const help = tr.lang === "en" ? f.help_en || f.help_mr : f.help_mr;
-  const parts = [f.required ? tr.t("required") : "", f.type === "number" && f.max_value !== null ? tr.tf("range_hint", { min: f.min_value ?? 0, max: f.max_value }) : "", help];
+  const parts = [f.required ? tr.t("required") : "", f.type === "number" && f.max_value !== null && !linksCount ? tr.tf("range_hint", { min: f.min_value ?? 0, max: f.max_value }) : "",
+    linksCount ? tr.t("proof_links_hint") : "", help];
   return parts.filter(Boolean).join(" · ");
 }
 
@@ -61,18 +49,26 @@ function showValue(f: FormField, v: string, t: Tr["t"]) {
   return v;
 }
 
+/** `value`, once it has stopped changing for `ms`. */
+function useDebounced<T>(value: T, ms: number) {
+  const [v, setV] = React.useState(value);
+  React.useEffect(() => { const h = setTimeout(() => setV(value), ms); return () => clearTimeout(h); }, [value, ms]);
+  return v;
+}
+
+/** The server's verdict on each pasted link of one field, and whether it is still catching up with the typing. */
+type LinkState = { checks?: LinkCheck[]; checking: boolean };
+
 export default function FillFormPage() {
   const { id } = useParams();
   const formId = Number(id);
   const me = useUser();
   const tr = useT();
-  const { t, tf, name, lang } = tr;
+  const { t, name, lang } = tr;
   const { data: meta } = useMeta();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
   const today = useToday();
-  const isDesktop = useIsDesktop();
-  const view = isDesktop ? "sheet" : "day";
 
   const officesAll = meta?.divisions.flatMap((d) => d.offices) ?? [];
   const office = params.get("office") || (me.role === "district" ? me.office?.code ?? "" : "");
@@ -80,7 +76,7 @@ export default function FillFormPage() {
 
   const { data: formDef, error: formError } = useQuery({ queryKey: ["form", formId], enabled: !!formId, queryFn: () => api.get<FormDef>(`/api/forms/${formId}`) });
   const lastDay = formDef?.end_date && formDef.end_date < today ? formDef.end_date : today;
-  // every period of the form so far, all on one page
+  // every period of the form so far: the strip shows them all, the page one at a time
   const startPs = formDef?.start_date ?? "";
   const endPs = formDef ? periodOf(formDef, lastDay) : "";
   const { data, isLoading, error: periodsError } = useQuery({
@@ -92,26 +88,62 @@ export default function FillFormPage() {
   const error = formError ?? periodsError;
   const form = data?.form ?? formDef;
   const fields = React.useMemo(() => (form?.fields ?? []).filter((f) => !f.archived), [form]);
+  const proofFields = React.useMemo(() => fields.filter((f) => f.type === "number" && f.proof !== "none"), [fields]);
   const periods = React.useMemo(() => data?.periods ?? [], [data]);
   const selected = periods.find((p) => p.period_start === (form ? periodOf(form, requested) : "")) ?? periods[periods.length - 1];
+  /** Proof applies to this period: the form asks for it and the period isn't from before the rule. */
+  const proofOn = React.useCallback((ps: string) => !!form?.proof_from && ps >= form.proof_from, [form]);
 
   const original = React.useMemo(() => {
     const o: Draft = {};
     periods.forEach((p) => { o[p.period_start] = Object.fromEntries(fields.map((f) => [f.key, toText(p.values[f.key])])); });
     return o;
   }, [periods, fields]);
+  const proofOrig = React.useMemo(() => {
+    const o: ProofDrafts = {};
+    periods.forEach((p) => { o[p.period_start] = Object.fromEntries(proofFields.map((f) => [f.key, proofDraftOf(p.proofs?.[f.key])])); });
+    return o;
+  }, [periods, proofFields]);
   const [draft, setDraft] = React.useState<Draft>({});
+  const [proofDraft, setProofDraft] = React.useState<ProofDrafts>({});
   /** New zeros the office has said are real (saved zeros are confirmed already). */
   const [confirmed, setConfirmed] = React.useState<Set<string>>(new Set());
   const [busy, setBusy] = React.useState(false);
   const [reviewing, setReviewing] = React.useState<string | null>(null);
   const [sent, setSent] = React.useState<string[] | null>(null);
-  React.useEffect(() => { setDraft(original); setConfirmed(new Set()); }, [original]);
+  React.useEffect(() => { setDraft(original); setProofDraft({}); setConfirmed(new Set()); }, [original, proofOrig]);
 
   const cur = React.useCallback((ps: string, k: string) => draft[ps]?.[k] ?? original[ps]?.[k] ?? "", [draft, original]);
-  const dirtyOf = (ps: string) => fields.some((f) => cur(ps, f.key) !== (original[ps]?.[f.key] ?? ""));
+  const proofOf = React.useCallback((ps: string, k: string) => proofDraft[ps]?.[k] ?? proofOrig[ps]?.[k] ?? EMPTY, [proofDraft, proofOrig]);
+  const proofChanged = (ps: string, k: string) => !sameProof(proofOf(ps, k), proofOrig[ps]?.[k]);
+  const dirtyOf = (ps: string) => fields.some((f) => cur(ps, f.key) !== (original[ps]?.[f.key] ?? "")) || proofFields.some((f) => proofChanged(ps, f.key));
   const dirtyPeriods = periods.filter((p) => dirtyOf(p.period_start)).map((p) => p.period_start);
   const dirty = dirtyPeriods.length > 0;
+  const uploading = Object.values(proofDraft).some((byKey) => Object.values(byKey).some((d) => d.files.some((f) => f.status === "uploading")));
+
+  // live link checks for the open period (debounced), the same checks the server applies on save
+  const selPs = selected?.period_start ?? "";
+  const linkFields = proofFields.filter(fieldTakesLinks);
+  const wantChecks = linkFields.map((f) => [f.key, parseLinks(proofOf(selPs, f.key).linksText).join("\n")] as const);
+  const checkKey = JSON.stringify(wantChecks);
+  const debounced = useDebounced(checkKey, 500);
+  const checkedNow = JSON.parse(debounced) as [string, string][];
+  const checksOn = !!selPs && proofOn(selPs) && !selected?.read_only_reason;
+  const checkResults = useQueries({
+    queries: checkedNow.map(([k, text]) => ({
+      queryKey: ["proof-check", formId, office, selPs, k, text],
+      enabled: checksOn && text !== "",
+      staleTime: 30_000,
+      queryFn: () => api.post<{ links: LinkCheck[] }>(`/api/forms/${formId}/proof-check`, { office, period: selPs, field: k, text }),
+    })),
+  });
+  const linkState = (ps: string, k: string): LinkState => {
+    if (ps !== selPs || !checksOn) return { checking: false };
+    const want = wantChecks.find(([key]) => key === k)?.[1] ?? "";
+    const i = checkedNow.findIndex(([key, text]) => key === k && text === want);
+    const q = i >= 0 ? checkResults[i] : undefined;
+    return { checks: q?.data?.links, checking: want !== "" && (!q || q.isFetching || (!q.data && !q.isError)) };
+  };
 
   const isZero = (f: FormField, v: string) => f.type === "number" && v !== "" && /^\d+(\.\d+)?$/.test(v) && Number(v) === 0;
   const zeroState = (ps: string, f: FormField): "none" | "ask" | "ok" => {
@@ -119,27 +151,46 @@ export default function FillFormPage() {
     if (!isZero(f, v)) return "none";
     return original[ps]?.[f.key] === v || confirmed.has(ck(ps, f.key)) ? "ok" : "ask";
   };
+  /** Why a field's proof can't be saved (red links, more links than the number), or "". */
+  const proofProblem = (ps: string, f: FormField) => {
+    if (!proofOn(ps) || !fieldTakesLinks(f)) return "";
+    const links = parseLinks(proofOf(ps, f.key).linksText);
+    if (linkState(ps, f.key).checks?.some((c) => c.problem)) return t("proof_fix_links");
+    if (f.proof === "either" && links.length > Number(cur(ps, f.key) || 0)) return t("proof_more_links");
+    return "";
+  };
+  /** A figure above 0 that still needs its PDF/photo or link. */
+  const needsProof = (ps: string, f: FormField) => {
+    if (!proofOn(ps) || !fieldTakesFiles(f)) return false;
+    const v = cur(ps, f.key);
+    if (!/^\d+(\.\d+)?$/.test(v) || Number(v) <= 0) return false;
+    const d = proofOf(ps, f.key);
+    return !parseLinks(d.linksText).length && !d.files.some((x) => x.status === "done");
+  };
+  const fieldProblem = (ps: string, f: FormField) => problemOf(f, cur(ps, f.key), tr) || proofProblem(ps, f);
   const check = (ps: string) => {
-    const bad = fields.filter((f) => problemOf(f, cur(ps, f.key), tr));
+    const bad = fields.filter((f) => fieldProblem(ps, f));
     const ask = fields.filter((f) => zeroState(ps, f) === "ask");
     const missing = fields.filter((f) => f.required && cur(ps, f.key) === "");
+    const noProof = fields.filter((f) => needsProof(ps, f));
     const filled = fields.filter((f) => cur(ps, f.key) !== "").length;
-    return { bad, ask, missing, filled };
+    const checking = linkFields.some((f) => linkState(ps, f.key).checking);
+    return { bad, ask, missing, noProof, filled, checking, blocksSend: me.role !== "state" && noProof.length > 0 };
   };
 
   // unsaved-changes guard: in-app navigation and tab close
-  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => (dirty || uploading) && currentLocation.pathname !== nextLocation.pathname);
   React.useEffect(() => {
     if (blocker.state === "blocked") { if (confirm(t("unsaved_leave"))) blocker.proceed(); else blocker.reset(); }
   }, [blocker, t]);
   React.useEffect(() => {
-    if (!dirty) return;
+    if (!dirty && !uploading) return;
     const h = (e: BeforeUnloadEvent) => { e.preventDefault(); };
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
-  }, [dirty]);
+  }, [dirty, uploading]);
   const go = (patch: Record<string, string>, keepDraft = false) => {
-    if (dirty && !keepDraft && !confirm(t("unsaved_leave"))) return;
+    if ((dirty || uploading) && !keepDraft && !confirm(t("unsaved_leave"))) return;
     setParams((prev) => { const n = new URLSearchParams(prev); Object.entries(patch).forEach(([k, v]) => n.set(k, v)); return n; }, { replace: true });
   };
 
@@ -154,14 +205,36 @@ export default function FillFormPage() {
     keys.forEach((k) => (on ? n.add(ck(ps, k)) : n.delete(ck(ps, k))));
     return n;
   });
+  const setProof = (ps: string, k: string, fn: (d: ProofDraft) => ProofDraft) => setProofDraft((prev) => {
+    const d = prev[ps]?.[k] ?? proofOrig[ps]?.[k] ?? EMPTY;
+    return { ...prev, [ps]: { ...prev[ps], [k]: fn(d) } };
+  });
+  /** Pasted links; on a links field the figure follows their count (blank, or a ticked "none today" 0, when there are none). */
+  const setLinks = (ps: string, f: FormField, text: string) => {
+    setProof(ps, f.key, (d) => ({ ...d, linksText: text }));
+    if (f.proof === "links") {
+      const n = parseLinks(text).length;
+      setCell(ps, f.key, n ? String(n) : cur(ps, f.key) === "0" ? "0" : "");
+    }
+  };
+  const addFiles = (ps: string, f: FormField, list: File[]) => {
+    const upd = (uid: string, p: Partial<FileItem>) => setProof(ps, f.key, (d) => ({ ...d, files: d.files.map((x) => (x.uid === uid ? { ...x, ...p } : x)) }));
+    void uploadPicked(list, { formId, office, ps, field: f.key }, (it) => setProof(ps, f.key, (d) => ({ ...d, files: [...d.files, it] })), upd, t);
+  };
+  const removeFile = (ps: string, f: FormField, uid: string) => setProof(ps, f.key, (d) => ({ ...d, files: d.files.filter((x) => x.uid !== uid) }));
 
-  const payload = (ps: string) => Object.fromEntries(fields.map((f) => {
-    const v = cur(ps, f.key);
-    return [f.key, v === "" ? null : f.type === "number" ? Number(v) : v];
-  }));
+  const payload = (ps: string) => {
+    const values = Object.fromEntries(fields.map((f) => {
+      const v = cur(ps, f.key);
+      return [f.key, v === "" ? null : f.type === "number" ? Number(v) : v];
+    }));
+    const changed = proofFields.filter((f) => proofChanged(ps, f.key));
+    return { values, confirm_zero: true, proofs: changed.length ? Object.fromEntries(changed.map((f) => [f.key, proofPayload(proofOf(ps, f.key))])) : null };
+  };
   const refresh = async () => {
     await qc.invalidateQueries({ queryKey: ["form-periods"] });
     qc.invalidateQueries({ queryKey: ["forms-mine"] });
+    qc.invalidateQueries({ queryKey: ["proof-check"] });
   };
   const run = async (fn: () => Promise<void>, ok: string) => {
     setBusy(true);
@@ -169,23 +242,26 @@ export default function FillFormPage() {
     catch (e) { toast.error(e instanceof ApiError ? e.message : String(e)); qc.invalidateQueries({ queryKey: ["form-periods"] }); return false; }
     finally { setBusy(false); }
   };
-  /** Periods whose edits can be saved now: no bad figure, no zero waiting for a yes. */
-  const savable = dirtyPeriods.filter((ps) => { const c = check(ps); return !c.bad.length && !c.ask.length; });
-  const blockedDirty = dirtyPeriods.length - savable.length;
+  /** Periods whose edits can be saved now: no bad figure or link, no zero waiting for a yes. */
+  const savable = uploading ? [] : dirtyPeriods.filter((ps) => { const c = check(ps); return !c.bad.length && !c.ask.length; });
   const saveDrafts = () => run(async () => {
-    for (const ps of savable) await api.put(`/api/forms/${formId}/submissions/${office}/${ps}`, { values: payload(ps), confirm_zero: true });
+    for (const ps of savable) await api.put(`/api/forms/${formId}/submissions/${office}/${ps}`, payload(ps));
   }, t("saved"));
   const send = async (list: string[], note = "") => {
     const ok = await run(async () => {
       for (const ps of list) {
-        await api.put(`/api/forms/${formId}/submissions/${office}/${ps}`, { values: payload(ps), confirm_zero: true, note: note || null, submit: true });
+        await api.put(`/api/forms/${formId}/submissions/${office}/${ps}`, { ...payload(ps), note: note || null, submit: true });
       }
       // other edited periods are kept as drafts alongside
       for (const ps of savable.filter((x) => !list.includes(x))) {
-        await api.put(`/api/forms/${formId}/submissions/${office}/${ps}`, { values: payload(ps), confirm_zero: true });
+        await api.put(`/api/forms/${formId}/submissions/${office}/${ps}`, payload(ps));
       }
     }, t("sub_submitted"));
     if (ok) { setReviewing(null); setSent(list); }
+  };
+  const returnToOffice = async (ps: string, note: string) => {
+    const ok = await run(async () => { await api.post(`/api/forms/${formId}/submissions/${office}/${ps}/return`, { note }); }, t("returned_ok"));
+    return ok;
   };
 
   // offices this user can open: district = own; zone = its division's recipients; state = every recipient
@@ -218,8 +294,7 @@ export default function FillFormPage() {
       </RSelect>
     </RLabel>
   );
-  const sheetMode = view === "sheet" && form?.frequency !== "once";
-  // keep the chosen day visible in the phone strip (scrolls the strip only, never the page)
+  // keep the chosen day visible in the strip (scrolls the strip only, never the page)
   const stripRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     const strip = stripRef.current;
@@ -227,9 +302,16 @@ export default function FillFormPage() {
     if (strip && tab) strip.scrollLeft = tab.offsetLeft - strip.offsetLeft - (strip.clientWidth - tab.clientWidth) / 2;
   }, [selected?.period_start, periods.length]);
   const reviewP = periods.find((p) => p.period_start === reviewing);
+  const wide = proofFields.length > 0;
+
+  const proofProps = (p: Submission): ProofHooks => ({
+    on: proofOn(p.period_start), of: (k) => proofOf(p.period_start, k), saved: (k) => p.proofs?.[k] ?? [], links: (k) => linkState(p.period_start, k),
+    onLinks: (f, text) => setLinks(p.period_start, f, text), onPick: (f, list) => addFiles(p.period_start, f, list),
+    onRemove: (f, uid) => removeFile(p.period_start, f, uid), needs: (f) => needsProof(p.period_start, f),
+  });
 
   return (
-    <RPage className={cn("gap-4", !sheetMode && "mx-auto w-full max-w-[720px]")}>
+    <RPage className={cn("mx-auto w-full gap-4", wide ? "max-w-[720px] lg:max-w-[1120px]" : "max-w-[720px]")}>
       {/* ---------------------------------------------------------------- header */}
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
@@ -238,17 +320,14 @@ export default function FillFormPage() {
               <ChevronLeft className="size-6" aria-hidden />
             </Link>
             <div className="flex min-w-0 flex-col">
-              <h1 className={cn("m-0 leading-[1.15] font-bold", sheetMode ? "disp text-[32px]" : "text-[19px]")}>{form ? formTitle(form, lang) : "…"}</h1>
-              <span className={cn("text-sm text-r-muted", !sheetMode && "hidden sm:inline")}>
-                {name(officeRef)}
-                {form && sheetMode && <> · {t(`freq_${form.frequency}` as TKey)}, {rangeText(form.start_date, form.end_date ?? lastDay, lang)}{form.deadline_hours !== null && <> · {tf("each_due", { h: form.deadline_hours })}</>}</>}
-              </span>
+              <h1 className="m-0 text-[19px] leading-[1.15] font-bold lg:text-[24px]">{form ? formTitle(form, lang) : "…"}</h1>
+              <span className="hidden text-sm text-r-muted sm:inline">{name(officeRef)}</span>
             </div>
           </div>
           {officePicker && <div className="flex flex-wrap items-end gap-3">{officePicker}</div>}
         </div>
 
-        {!sheetMode && form && form.frequency !== "once" && periods.length > 0 && (
+        {form && form.frequency !== "once" && periods.length > 0 && (
           <div className="flex items-stretch gap-1.5">
             <div ref={stripRef} role="tablist" aria-label={t("period")} className="flex flex-1 gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
               {periods.map((p) => {
@@ -268,7 +347,7 @@ export default function FillFormPage() {
             </div>
           </div>
         )}
-        {!sheetMode && form && form.frequency !== "once" && periods.length > 0 && (
+        {form && form.frequency !== "once" && periods.length > 0 && (
           <div className="flex gap-4 text-[13px] text-r-muted sm:hidden">
             {(["sent", "missed", "fill"] as const).map((k) => (
               <span key={k} className="flex items-center gap-1.5"><DayDot kind={k} decorative />{t(DOT_LABEL[k])}</span>
@@ -283,22 +362,18 @@ export default function FillFormPage() {
         <div className="flex flex-col gap-3" aria-busy>{[0, 1, 2].map((i) => <div key={i} className="h-28 animate-pulse rounded-2xl bg-r-sunk" />)}</div>
       ) : !periods.length ? (
         <RAlert tone="info">{t("rows_none")}</RAlert>
-      ) : sheetMode ? (
-        <SheetView form={form} periods={periods} fields={fields} cur={cur} setCell={setCell} original={original}
-          zeroState={zeroState} check={check} confirmZeros={confirmZeros} dirtyOf={dirtyOf} busy={busy}
-          instructions={instructions} onSave={saveDrafts} savable={savable.length} blockedDirty={blockedDirty} dirtyCount={dirtyPeriods.length}
-          onDiscard={() => { setDraft(original); setConfirmed(new Set()); }} onSend={(l) => send(l)}
-          snapshot={() => ({ draft, confirmed })} restore={(s) => { setDraft(s.draft); setConfirmed(s.confirmed); }} />
       ) : selected && (
-        <DayView form={form} p={selected} fields={fields} cur={cur} setCell={setCell} original={original[selected.period_start] ?? {}}
+        <DayView form={form} p={selected} office={office} fields={fields} cur={cur} setCell={setCell} original={original[selected.period_start] ?? {}}
           zeroState={(f) => zeroState(selected.period_start, f)} confirmZero={(k, on) => confirmZeros(selected.period_start, [k], on)}
-          check={check(selected.period_start)} instructions={instructions} busy={busy} dirty={dirty} changed={dirtyOf(selected.period_start)} canSave={savable.length > 0}
-          onSave={saveDrafts} onReview={() => setReviewing(selected.period_start)} />
+          check={check(selected.period_start)} fieldProblem={(f) => fieldProblem(selected.period_start, f)} proof={proofProps(selected)}
+          instructions={instructions} busy={busy} uploading={uploading} dirty={dirty} changed={dirtyOf(selected.period_start)} canSave={savable.length > 0}
+          onSave={saveDrafts} onReview={() => setReviewing(selected.period_start)} onReturn={(note) => returnToOffice(selected.period_start, note)} />
       )}
 
       {reviewP && form && (
         <ReviewSheet form={form} p={reviewP} fields={fields} cur={cur} setCell={setCell} zeroState={(f) => zeroState(reviewP.period_start, f)}
           confirmZero={(k, on) => confirmZeros(reviewP.period_start, [k], on)} check={check(reviewP.period_start)}
+          fieldProblem={(f) => fieldProblem(reviewP.period_start, f)} uploading={uploading}
           busy={busy} onClose={() => setReviewing(null)} onSend={(note) => send([reviewP.period_start], note)} officeName={name(officeRef)} />
       )}
       {sent && form && (
@@ -309,7 +384,7 @@ export default function FillFormPage() {
   );
 }
 
-/** Phone day strip: one plain coloured circle per day — sent, missed, or still to fill. */
+/** Day strip: one plain coloured circle per day on phones — sent, missed, or still to fill. */
 type DotKind = "sent" | "missed" | "fill";
 const DOT_LABEL: Record<DotKind, TKey> = { sent: "dot_sent", missed: "dot_missed", fill: "dot_to_fill" };
 const DOT_BG: Record<DotKind, string> = { sent: "bg-r-accepted", missed: "bg-r-overdue", fill: "bg-r-focus" };
@@ -351,8 +426,14 @@ function SentSheet({ form, sent, periods, onClose, onNext }: {
   );
 }
 
-// --------------------------------------------------------------------------- one period (phone first)
-type Check = { bad: FormField[]; ask: FormField[]; missing: FormField[]; filled: number };
+// --------------------------------------------------------------------------- one period
+type Check = { bad: FormField[]; ask: FormField[]; missing: FormField[]; noProof: FormField[]; filled: number; checking: boolean; blocksSend: boolean };
+
+/** Everything a field row needs for its proof box, bound to one period. */
+type ProofHooks = {
+  on: boolean; of: (k: string) => ProofDraft; saved: (k: string) => Proof[]; links: (k: string) => LinkState; needs: (f: FormField) => boolean;
+  onLinks: (f: FormField, text: string) => void; onPick: (f: FormField, list: File[]) => void; onRemove: (f: FormField, uid: string) => void;
+};
 
 function statusLine(p: Submission, tr: Tr) {
   if (p.status === "submitted") return tr.t("st_locked_sub");
@@ -365,10 +446,11 @@ function periodTitle(form: FormDef, p: Submission, lang: string) {
   return form.frequency === "daily" ? longDay(p.period_start, lang) : form.frequency === "weekly" ? rangeText(p.period_start, p.period_end, lang) : formTitle(form, lang);
 }
 
-function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZero, check, instructions, busy, dirty, changed, canSave, onSave, onReview }: {
-  form: FormDef; p: Submission; fields: FormField[]; cur: (ps: string, k: string) => string; setCell: (ps: string, k: string, v: string) => void;
+function DayView({ form, p, office, fields, cur, setCell, original, zeroState, confirmZero, check, fieldProblem, proof, instructions, busy, uploading, dirty, changed, canSave, onSave, onReview, onReturn }: {
+  form: FormDef; p: Submission; office: string; fields: FormField[]; cur: (ps: string, k: string) => string; setCell: (ps: string, k: string, v: string) => void;
   original: Record<string, string>; zeroState: (f: FormField) => "none" | "ask" | "ok"; confirmZero: (k: string, on: boolean) => void;
-  check: Check; instructions: string; busy: boolean; dirty: boolean; changed: boolean; canSave: boolean; onSave: () => void; onReview: () => void;
+  check: Check; fieldProblem: (f: FormField) => string; proof: ProofHooks; instructions: string; busy: boolean; uploading: boolean; dirty: boolean;
+  changed: boolean; canSave: boolean; onSave: () => void; onReview: () => void; onReturn: (note: string) => Promise<boolean>;
 }) {
   const tr = useT();
   const { t, tf, lang } = tr;
@@ -379,18 +461,31 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
   const overdue = isOverdue(p.status, p.deadline);
   const mark: Mark = dirty && writable ? "draft" : markOf(p.status, overdue);
   const corrections = Object.entries(p.corrections);
-  const problems = [check.bad.length ? tf("n_problems", { n: check.bad.length }) : "", check.ask.length ? tf("n_zeros", { n: check.ask.length }) : ""].filter(Boolean).join(" · ");
+  const problems = [check.bad.length ? tf("n_problems", { n: check.bad.length }) : "", check.ask.length ? tf("n_zeros", { n: check.ask.length }) : "",
+    check.noProof.length ? tf("n_proof_missing", { n: check.noProof.length }) : ""].filter(Boolean).join(" · ");
   const groups = Array.from(new Set(fields.map((f) => f.group)));
+  const [returning, setReturning] = React.useState(false);
+  const exemptLine = p.proof_exempt && fields.some((f) => f.proof !== "none");
 
   return (
     <>
-      <div className="flex flex-col">
-        <span className="disp text-[22px] font-bold">{periodTitle(form, p, lang)}</span>
-        <span className="flex flex-wrap items-center gap-x-1.5 text-sm text-r-muted">
-          <StatusMark mark={mark} late={p.late} size={12} /> {statusLine(p, tr)}
-          {p.deadline && (p.status === "none" || p.status === "draft") && <span>· {overdue ? t("overdue") : tf("due_by", { when: whenText(p.deadline, lang) })}</span>}
-          {writable && me.role === "district" && <span>· {tf("open_till", { day: dayMonth(p.period_end, lang) })}</span>}
-        </span>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col">
+          <span className="disp text-[22px] font-bold">{periodTitle(form, p, lang)}</span>
+          <span className="flex flex-wrap items-center gap-x-1.5 text-sm text-r-muted">
+            <StatusMark mark={mark} late={p.late} size={12} /> {statusLine(p, tr)}
+            {p.deadline && (p.status === "none" || p.status === "draft") && <span>· {overdue ? t("overdue") : tf("due_by", { when: whenText(p.deadline, lang) })}</span>}
+            {writable && me.role === "district" && <span>· {tf("open_till", { day: dayMonth(p.period_end, lang) })}</span>}
+          </span>
+        </div>
+        {me.role === "state" && (
+          <div className="flex flex-wrap gap-2">
+            <RButton asChild size="sm">
+              <Link to={`/forms/responses?form=${form.id}&day=${ps}&office=${office}`}><Pencil aria-hidden /> {t("edit_values")}</Link>
+            </RButton>
+            {p.status === "submitted" && <RButton size="sm" variant="danger" onClick={() => setReturning(true)}><Undo2 aria-hidden /> {t("return_to_office")}</RButton>}
+          </div>
+        )}
       </div>
 
       {p.status === "returned" && (
@@ -404,7 +499,7 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
         : p.read_only_reason && p.status !== "submitted" && <RAlert tone="info">{p.read_only_reason}</RAlert>}
 
       {instructions.trim() && (
-        <details className="rounded-xl bg-r-card px-3.5 py-3" open={p.status === "none" && !dirty ? undefined : undefined}>
+        <details className="rounded-xl bg-r-card px-3.5 py-3">
           <summary className="min-h-7 cursor-pointer font-bold">{t("instructions_from")}</summary>
           <Instructions text={instructions} className="mt-2" />
         </details>
@@ -429,13 +524,15 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
         </div>
       )}
 
+      {exemptLine && <p className="m-0 px-1 text-sm text-r-muted">{t("proof_exempt")}</p>}
+
       {groups.map((g) => (
-        <fieldset key={g || "-"} className="m-0 flex flex-col rounded-[14px] border-0 bg-r-card p-0">
+        <fieldset key={g || "-"} className="m-0 flex min-w-0 flex-col rounded-[14px] border-0 bg-r-card p-0">
           {groups.length > 1 && <legend className="sr-only">{groupName(g, form.group_names, t)}</legend>}
           {groups.length > 1 && <div aria-hidden className="px-3.5 pt-3 text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{groupName(g, form.group_names, t)}</div>}
           {fields.filter((f) => f.group === g).map((f, i) => (
-            <FieldRow key={f.key} f={f} first={i === 0} value={cur(ps, f.key)} disabled={!writable} corrected={!!p.corrections[f.key]}
-              changed={cur(ps, f.key) !== (original[f.key] ?? "")} zero={zeroState(f)} problem={problemOf(f, cur(ps, f.key), tr)}
+            <FieldRow key={f.key} formId={form.id} f={f} first={i === 0} value={cur(ps, f.key)} disabled={!writable} corrected={!!p.corrections[f.key]}
+              changed={cur(ps, f.key) !== (original[f.key] ?? "")} zero={zeroState(f)} problem={fieldProblem(f)} proof={proof}
               onChange={(v) => setCell(ps, f.key, v)} onConfirm={(on) => confirmZero(f.key, on)} />
           ))}
         </fieldset>
@@ -451,18 +548,35 @@ function DayView({ form, p, fields, cur, setCell, original, zeroState, confirmZe
       {writable && (
         <footer className="sticky bottom-0 z-20 -mx-4 mt-auto flex flex-col gap-2.5 border-t border-r-line bg-r-card px-4 pt-3 pb-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:rounded-t-2xl lg:border-x">
           <div className="flex flex-wrap justify-between gap-2 text-sm">
-            <span>{tf("n_entered", { a: check.filled, b: fields.length })}</span>
+            <span>{uploading ? <span className="inline-flex items-center gap-1.5 font-bold"><Loader2 className="size-4 animate-spin" aria-hidden />{t("proof_uploading")}</span>
+              : tf("n_entered", { a: check.filled, b: fields.length })}</span>
             {problems && <span className="font-bold text-r-overdue-ink">{problems}</span>}
           </div>
           <div className="flex gap-2.5">
             <RButton size="lg" className="flex-1" loading={busy} disabled={!canSave} onClick={onSave}>{t("save_draft")}</RButton>
-            <RButton size="lg" variant="pri" className="flex-[1.4]" disabled={busy || check.filled === 0 || (p.status === "submitted" && !changed)} onClick={onReview}>
+            <RButton size="lg" variant="pri" className="flex-[1.4]" disabled={busy || uploading || check.filled === 0 || (p.status === "submitted" && !changed)} onClick={onReview}>
               {p.status === "returned" ? t("review_resend") : p.status === "submitted" ? t("review_send_changes") : t("review_submit")}
             </RButton>
           </div>
         </footer>
       )}
+
+      {returning && <ReturnSheet busy={busy} onClose={() => setReturning(false)} onSend={async (note) => { if (await onReturn(note)) setReturning(false); }} />}
     </>
+  );
+}
+
+/** The state office sends a sent day back to the office with a note saying what to fix. */
+function ReturnSheet({ busy, onClose, onSend }: { busy: boolean; onClose: () => void; onSend: (note: string) => void }) {
+  const { t } = useT();
+  const [note, setNote] = React.useState("");
+  return (
+    <RSheet open onClose={onClose} closeLabel={t("close")} title={t("return_to_office")}
+      footer={<RButton size="lg" variant="danger" disabled={!note.trim()} loading={busy} onClick={() => onSend(note.trim())}><Undo2 aria-hidden /> {t("return_send")}</RButton>}>
+      <RLabel label={t("return_note_label")}>
+        <RTextarea value={note} autoFocus onChange={(e) => setNote(e.target.value)} className="min-h-28 text-base" />
+      </RLabel>
+    </RSheet>
   );
 }
 
@@ -501,21 +615,32 @@ function ChangeHistory({ p, fields }: { p: Submission; fields: FormField[] }) {
   );
 }
 
-function FieldRow({ f, first, value, disabled, corrected, changed, zero, problem, onChange, onConfirm }: {
-  f: FormField; first: boolean; value: string; disabled: boolean; corrected: boolean; changed: boolean;
-  zero: "none" | "ask" | "ok"; problem: string; onChange: (v: string) => void; onConfirm: (on: boolean) => void;
+/** One question. A field that asks for proof gets its proof box beside the number on wide screens, under it on phones. */
+function FieldRow({ formId, f, first, value, disabled, corrected, changed, zero, problem, proof, onChange, onConfirm }: {
+  formId: number; f: FormField; first: boolean; value: string; disabled: boolean; corrected: boolean; changed: boolean;
+  zero: "none" | "ask" | "ok"; problem: string; proof: ProofHooks; onChange: (v: string) => void; onConfirm: (on: boolean) => void;
 }) {
   const tr = useT();
   const { t, lang } = tr;
   const id = `f_${f.key}`;
-  const hint = hintOf(f, tr);
+  const withProof = proof.on && f.type === "number" && f.proof !== "none";
+  const linksCount = withProof && f.proof === "links";
+  const hint = hintOf(f, tr, linksCount);
+  const pd = proof.of(f.key);
+  const links = parseLinks(pd.linksText);
+  const ls = proof.links(f.key);
+  const bad = ls.checks?.filter((c) => c.problem).length ?? 0;
+  const needs = withProof && proof.needs(f);
   const inputCls = cn("h-[54px] w-28 shrink-0 rounded-xl px-3.5 text-right num text-xl font-semibold text-r-ink placeholder:font-body placeholder:text-sm placeholder:font-normal placeholder:text-r-faint disabled:opacity-100",
     "border-[1.5px] border-r-faint bg-r-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-r-action focus:outline-2 focus:outline-offset-0 focus:outline-r-action/30",
     zero === "ask" && "border-2 border-solid border-r-returned bg-r-returned-soft",
     problem && "border-2 border-solid border-r-overdue bg-r-overdue-soft text-r-overdue-ink",
     corrected && "text-r-corrected-ink", disabled && "border-solid bg-r-sunk/60", changed && !problem && zero !== "ask" && "border-r-action");
   const wide = f.type === "text" || f.type === "choice" || f.type === "yesno" || f.type === "date";
-  const control = f.type === "yesno" || f.type === "choice" ? (
+  const control = linksCount ? (
+    <LinkCount id={id} count={links.length - bad} bad={bad} zero={value === "0"} disabled={disabled}
+      onZero={(on) => { onChange(on ? "0" : ""); if (on) onConfirm(true); }} />
+  ) : f.type === "yesno" || f.type === "choice" ? (
     <RSelect id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn("min-h-[54px] w-full rounded-xl text-base", corrected && "text-r-corrected-ink")}>
       <option value="">{t("choose")}</option>
       {(f.type === "yesno" ? [["yes", t("yes")], ["no", t("no")]] : f.options.map((o) => [o, o])).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -527,47 +652,69 @@ function FieldRow({ f, first, value, disabled, corrected, changed, zero, problem
   ) : (
     <span className={cn("relative", corrected && "[&>input]:pr-6")}>
       <input id={id} type="text" inputMode={f.integer ? "numeric" : "decimal"} placeholder={t("not_entered")} value={value} disabled={disabled}
-        onChange={(e) => onChange(e.target.value.trim())} aria-invalid={!!problem || undefined}
-        aria-describedby={problem || zero !== "none" ? `${id}_m` : undefined} className={inputCls} />
+        onChange={(e) => onChange(e.target.value.trim())} aria-invalid={!!problem || needs || undefined}
+        aria-describedby={problem || needs || zero !== "none" ? `${id}_m` : undefined} className={inputCls} />
       {corrected && <span aria-hidden className="pointer-events-none absolute top-1.5 right-1.5 border-[5px] border-transparent border-t-r-corrected border-r-r-corrected" />}
     </span>
   );
+  const message = problem || (needs ? t(f.proof === "files" ? "proof_needed_files" : "proof_needed") : "");
+  // read-only: a blank or zero figure with nothing attached needs no "no proof" line
+  const quiet = disabled && !proof.saved(f.key).length && !(Number(value) > 0);
+  const box = withProof && !quiet && (
+    <div className="flex min-w-0 flex-col gap-2" aria-label={`${t("proof_word")} · ${fieldLabel(f, lang)}`} role="group">
+      <span className="text-[13px] font-bold text-r-muted">{t("proof_word")} · {t(`proof_type_${f.proof}` as TKey)}</span>
+      {disabled ? <ProofList formId={formId} proofs={proof.saved(f.key)} /> : (
+        <>
+          {fieldTakesLinks(f) && (
+            <>
+              <LinksInput id={`${id}_links`} value={pd.linksText} onChange={(v) => proof.onLinks(f, v)} />
+              <LinkLines links={links} checks={ls.checks} checking={ls.checking} />
+            </>
+          )}
+          {fieldTakesFiles(f) && <FileBox formId={formId} files={pd.files} onPick={(list) => proof.onPick(f, list)} onRemove={(uid) => proof.onRemove(f, uid)} />}
+        </>
+      )}
+    </div>
+  );
   return (
-    <div className={cn("flex flex-col gap-2 px-3.5 py-3", !first && "border-t border-r-sunk")}>
-      <div className={cn("flex gap-3", wide ? "flex-col" : "items-center justify-between")}>
-        <label htmlFor={id} className="flex flex-1 flex-col">
-          <span className="leading-tight font-bold">{fieldLabel(f, lang)}{f.required && <span className="text-r-overdue" aria-hidden> *</span>}</span>
-          {hint && <span className="text-[13px] text-r-muted">{hint}</span>}
-        </label>
-        {control}
+    <div className={cn("flex flex-col gap-2 px-3.5 py-3", !first && "border-t border-r-sunk", withProof && "lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8")}>
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className={cn("flex gap-3", wide ? "flex-col" : "items-center justify-between")}>
+          <label htmlFor={linksCount ? `${id}_links` : id} className="flex flex-1 flex-col">
+            <span className="leading-tight font-bold">{fieldLabel(f, lang)}{f.required && <span className="text-r-overdue" aria-hidden> *</span>}</span>
+            {hint && <span className="text-[13px] text-r-muted">{hint}</span>}
+          </label>
+          {control}
+        </div>
+        {message && (
+          <div id={`${id}_m`} className="flex items-start gap-2 text-sm font-bold text-r-overdue-ink">
+            <AlertCircle className="mt-px size-[18px] shrink-0 text-r-overdue" aria-hidden /> {message}
+          </div>
+        )}
+        {!message && !linksCount && zero === "ask" && !disabled && (
+          <div id={`${id}_m`} className="flex items-center justify-between gap-2.5 rounded-[10px] bg-r-returned-soft px-2.5 py-2">
+            <span className="text-sm text-r-returned-ink">{t("zero_q")}</span>
+            <button type="button" onClick={() => onConfirm(true)}
+              className="min-h-10 shrink-0 cursor-pointer rounded-[10px] border-[1.5px] border-r-returned-ink bg-r-card px-3.5 text-sm font-bold text-r-returned-ink">{t("yes_zero")}</button>
+          </div>
+        )}
+        {!message && !linksCount && zero === "ok" && changed && (
+          <div id={`${id}_m`} className="flex items-center gap-2 text-sm font-bold text-r-accepted">
+            <StatusMark mark="acc" size={12} /> {t("zero_ok")}
+            {!disabled && <button type="button" onClick={() => onConfirm(false)} className="ml-auto min-h-8 cursor-pointer border-0 bg-transparent text-sm font-normal text-r-action">{t("undo")}</button>}
+          </div>
+        )}
       </div>
-      {problem && (
-        <div id={`${id}_m`} className="flex items-start gap-2 text-sm font-bold text-r-overdue-ink">
-          <AlertCircle className="mt-px size-[18px] shrink-0 text-r-overdue" aria-hidden /> {problem}
-        </div>
-      )}
-      {!problem && zero === "ask" && !disabled && (
-        <div id={`${id}_m`} className="flex items-center justify-between gap-2.5 rounded-[10px] bg-r-returned-soft px-2.5 py-2">
-          <span className="text-sm text-r-returned-ink">{t("zero_q")}</span>
-          <button type="button" onClick={() => onConfirm(true)}
-            className="min-h-10 shrink-0 cursor-pointer rounded-[10px] border-[1.5px] border-r-returned-ink bg-r-card px-3.5 text-sm font-bold text-r-returned-ink">{t("yes_zero")}</button>
-        </div>
-      )}
-      {!problem && zero === "ok" && changed && (
-        <div id={`${id}_m`} className="flex items-center gap-2 text-sm font-bold text-r-accepted">
-          <StatusMark mark="acc" size={12} /> {t("zero_ok")}
-          {!disabled && <button type="button" onClick={() => onConfirm(false)} className="ml-auto min-h-8 cursor-pointer border-0 bg-transparent text-sm font-normal text-r-action">{t("undo")}</button>}
-        </div>
-      )}
+      {box}
     </div>
   );
 }
 
 // --------------------------------------------------------------------------- check before sending
-function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, check, busy, onClose, onSend, officeName }: {
+function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, check, fieldProblem, uploading, busy, onClose, onSend, officeName }: {
   form: FormDef; p: Submission; fields: FormField[]; cur: (ps: string, k: string) => string; setCell: (ps: string, k: string, v: string) => void;
-  zeroState: (f: FormField) => "none" | "ask" | "ok"; confirmZero: (k: string, on: boolean) => void; check: Check; busy: boolean;
-  onClose: () => void; onSend: (note: string) => void; officeName: string;
+  zeroState: (f: FormField) => "none" | "ask" | "ok"; confirmZero: (k: string, on: boolean) => void; check: Check; fieldProblem: (f: FormField) => string;
+  uploading: boolean; busy: boolean; onClose: () => void; onSend: (note: string) => void; officeName: string;
 }) {
   const tr = useT();
   const { t, tf, lang } = tr;
@@ -580,8 +727,10 @@ function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, ch
   const blanks = fields.filter((f) => blankKeys.includes(f.key));
   const otherZeros = zeros.filter((f) => !blankKeys.includes(f.key));
   const figures = fields.filter((f) => cur(ps, f.key) !== "" && !(f.type === "number" && Number(cur(ps, f.key)) === 0 && /^\d/.test(cur(ps, f.key))));
-  const ready = !check.ask.length && !check.bad.length && !check.missing.length;
+  const ready = !check.ask.length && !check.bad.length && !check.missing.length && !check.blocksSend && !check.checking && !uploading;
   const label = check.bad.length ? t("fix_to_send") : check.missing.length ? tf("required_missing", { list: check.missing.map((f) => fieldLabel(f, lang)).join(", ") })
+    : check.blocksSend ? tf("proof_missing_list", { list: check.noProof.map((f) => fieldLabel(f, lang)).join(", ") })
+    : uploading ? t("proof_uploading") : check.checking ? t("links_checking")
     : check.ask.length ? tf("confirm_n_to_send", { n: check.ask.length }) : isOverdue(p.status, p.deadline) ? tf("send_day_late", { day }) : tf("send_day", { day });
   return (
     <RSheet open onClose={onClose} closeLabel={t("close_keep_editing")} title={tf("check_before", { day })}
@@ -592,7 +741,12 @@ function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, ch
         <p className="m-0 text-center text-sm text-r-muted">{tf("after_send_locked", { day })}</p>
       </>}>
       {check.bad.length > 0 && (
-        <RAlert tone="danger">{check.bad.map((f) => `${fieldLabel(f, lang)}: ${problemOf(f, cur(ps, f.key), tr)}`).join(" · ")}</RAlert>
+        <RAlert tone="danger">{check.bad.map((f) => `${fieldLabel(f, lang)}: ${fieldProblem(f)}`).join(" · ")}</RAlert>
+      )}
+      {check.noProof.length > 0 && (
+        <RAlert tone={check.blocksSend ? "danger" : "info"}>
+          {check.noProof.map((f) => `${fieldLabel(f, lang)}: ${t(f.proof === "files" ? "proof_needed_files" : "proof_needed")}`).join(" · ")}
+        </RAlert>
       )}
 
       {otherZeros.length > 0 && (
@@ -655,257 +809,4 @@ function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, ch
     // a zero confirmed on this visit stays a checkbox so it can be unticked
     return cur(ps, f.key) !== toText(p.values[f.key]);
   }
-}
-
-// --------------------------------------------------------------------------- several periods (desktop sheet)
-type Snapshot = { draft: Draft; confirmed: Set<string> };
-
-function SheetView({ form, periods, fields, cur, setCell, original, zeroState, check, confirmZeros, dirtyOf, busy, instructions,
-  onSave, savable, blockedDirty, dirtyCount, onDiscard, onSend, snapshot, restore }: {
-  form: FormDef; periods: Submission[]; fields: FormField[]; cur: (ps: string, k: string) => string; setCell: (ps: string, k: string, v: string) => void;
-  original: Draft; zeroState: (ps: string, f: FormField) => "none" | "ask" | "ok"; check: (ps: string) => Check;
-  confirmZeros: (ps: string, keys: string[], on?: boolean) => void; dirtyOf: (ps: string) => boolean; busy: boolean; instructions: string;
-  onSave: () => void; savable: number; blockedDirty: number; dirtyCount: number; onDiscard: () => void; onSend: (list: string[]) => void;
-  snapshot: () => Snapshot; restore: (s: Snapshot) => void;
-}) {
-  const tr = useT();
-  const { t, tf, lang } = tr;
-  const tableRef = React.useRef<HTMLTableElement>(null);
-  const [pasted, setPasted] = React.useState<{ snap: Snapshot; rows: number; cols: number; from: string; zeros: number } | null>(null);
-  const label = (ps: string, p?: Submission) => form.frequency === "weekly" ? rangeText(ps, p?.period_end ?? addDays(ps, 6), lang) : shortDay(ps, lang);
-
-  const focusCell = (r: number, c: number) => {
-    const el = tableRef.current?.querySelector<HTMLElement>(`[data-r="${r}"][data-c="${c}"]`);
-    if (el) { el.focus(); if (el instanceof HTMLInputElement) el.select(); }
-  };
-  // Tab with nothing focused yet jumps straight to the first box the office can fill, skipping the header links.
-  React.useEffect(() => {
-    const h = (e: KeyboardEvent) => {
-      if (e.key !== "Tab" || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return;
-      if (document.activeElement && document.activeElement !== document.body) return;
-      const el = tableRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>("[data-r]:not(:disabled)");
-      if (!el) return;
-      e.preventDefault();
-      el.focus();
-      if (el instanceof HTMLInputElement) el.select();
-    };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, []);
-  const onKey = (e: React.KeyboardEvent<HTMLElement>, r: number, c: number) => {
-    const el = e.currentTarget as HTMLInputElement;
-    const atStart = !(el instanceof HTMLInputElement) || (el.selectionStart === 0 && el.selectionEnd === 0);
-    const atEnd = !(el instanceof HTMLInputElement) || el.selectionStart === el.value.length;
-    const move: Record<string, [number, number] | undefined> = {
-      ArrowUp: [r - 1, c], ArrowDown: [r + 1, c], Enter: [r + 1, c],
-      ArrowLeft: atStart ? [r, c - 1] : undefined, ArrowRight: atEnd ? [r, c + 1] : undefined,
-    };
-    const to = move[e.key];
-    if (to && !(e.key === "Enter" && el.tagName === "SELECT")) { e.preventDefault(); focusCell(to[0], to[1]); return; }
-    if ((e.key === "Delete") && el instanceof HTMLInputElement) { e.preventDefault(); setCell(periods[r].period_start, fields[c].key, ""); }
-  };
-  // Paste a block copied from Excel: tab-separated columns, newline-separated periods, starting at the focused cell.
-  const onPaste = (e: React.ClipboardEvent, pi: number, fi: number) => {
-    const text = e.clipboardData.getData("text");
-    if (!/[\t\n]/.test(text)) return;
-    e.preventDefault();
-    const snap = snapshot();
-    const lines = text.replace(/\r/g, "").split("\n").filter((l, i, a) => l !== "" || i < a.length - 1);
-    let zeros = 0, cols = 0;
-    lines.forEach((line, r) => {
-      const p = periods[pi + r];
-      if (!p || p.read_only_reason) return;
-      const cells = line.split("\t");
-      cols = Math.max(cols, cells.length);
-      cells.forEach((cell, c) => {
-        const f = fields[fi + c];
-        if (!f) return;
-        const v = cell.trim();
-        if (f.type === "number" && v !== "" && Number(v.replace(/[^\d.]/g, "")) === 0) zeros++;
-        setCell(p.period_start, f.key, v);
-      });
-    });
-    setPasted({ snap, rows: lines.length, cols: Math.min(cols, fields.length - fi), from: label(periods[pi].period_start), zeros });
-  };
-
-  // The send panel: every writable period with something in it not sent yet, and sent ones with changes.
-  const candidates = periods.filter((p) => !p.read_only_reason && (p.status === "submitted" ? dirtyOf(p.period_start)
-    : ["none", "draft", "returned"].includes(p.status) && fields.some((f) => cur(p.period_start, f.key) !== "")));
-  const [historyOf, setHistoryOf] = React.useState<Submission | null>(null);
-  const readyOf = (ps: string) => { const c = check(ps); return !c.bad.length && !c.ask.length && !c.missing.length; };
-  const [unticked, setUnticked] = React.useState<Set<string>>(new Set());
-  const toSend = candidates.filter((p) => readyOf(p.period_start) && !unticked.has(p.period_start)).map((p) => p.period_start);
-  const emptyOpen = periods.filter((p) => !p.read_only_reason && p.status === "none" && !fields.some((f) => cur(p.period_start, f.key) !== ""));
-
-  return (
-    <>
-      {pasted && (
-        <div role="status" className="flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-xl bg-r-action-soft px-4 py-3 text-r-action-hover dark:text-r-ink">
-          <ClipboardPaste className="size-5" aria-hidden />
-          <span><b>{tf("pasted", { r: pasted.rows, c: pasted.cols, day: pasted.from })}</b>{pasted.zeros > 0 && <> {tf("pasted_zeros", { n: pasted.zeros })}</>}</span>
-          <RButton size="sm" className="ml-auto" onClick={() => { restore(pasted.snap); setPasted(null); }}>{t("undo")}</RButton>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-5">
-        <div className="flex min-w-0 flex-col gap-2.5">
-          <div className="max-h-[560px] overflow-auto rounded-xl border border-r-line bg-r-card scrollbar-thin">
-            <table ref={tableRef} className="w-full border-separate border-spacing-0 text-sm" aria-label={`${formTitle(form, lang)} · ${rangeText(periods[0].period_start, periods.at(-1)!.period_start, lang)}`}>
-              <thead className="sticky top-0 z-20">
-                <tr>
-                  <th scope="col" className="sticky left-0 z-30 min-w-40 border-b border-r border-r-line bg-r-card px-3 py-2 text-left text-xs font-bold text-r-muted">{t("period")}</th>
-                  {fields.map((f) => (
-                    <th key={f.key} scope="col" className="min-w-[84px] border-b border-r-line bg-r-card px-1.5 py-2 text-right align-bottom text-xs leading-tight font-bold text-r-muted">
-                      {fieldLabel(f, lang)}{f.required && <span className="text-r-overdue" aria-hidden>*</span>}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {periods.map((p, r) => {
-                  const ps = p.period_start;
-                  const w = !p.read_only_reason;
-                  const mark: Mark = dirtyOf(ps) && w ? "draft" : markOf(p.status, isOverdue(p.status, p.deadline));
-                  const tint = p.status === "returned" ? "bg-r-returned-soft" : !w ? "bg-r-sunk/50" : "bg-r-card";
-                  return (
-                    <tr key={ps} className={tint}>
-                      <th scope="row" className={cn("sticky left-0 z-10 border-r border-b border-r-line px-3 py-1.5 text-left font-normal", tint)}>
-                        <div className="flex items-center justify-between gap-2.5">
-                          <span className="flex flex-col leading-tight">
-                            <b className="num text-sm">{label(ps, p)}</b>
-                            <span className="text-xs text-r-muted">{w ? statusWord(p, mark, t) : <span className="inline-flex items-center gap-1"><Lock className="size-3" aria-hidden />{statusWord(p, mark, t)}</span>}</span>
-                          </span>
-                          {(p.status === "submitted" || p.edits.length > 0) && (
-                            <button type="button" onClick={() => setHistoryOf(p)} title={tf("history_n", { n: p.edits.length })} aria-label={`${label(ps, p)} · ${tf("history_n", { n: p.edits.length })}`}
-                              className="inline-flex min-h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border-0 bg-transparent px-1.5 text-xs text-r-muted hover:bg-r-sunk hover:text-r-ink">
-                              <History className="size-3.5" aria-hidden />
-                            </button>
-                          )}
-                        </div>
-                        {p.status === "returned" && p.review_note && <div className="mt-0.5 max-w-52 truncate text-xs text-r-returned-ink" title={p.review_note}>“{p.review_note}”</div>}
-                      </th>
-                      {fields.map((f, c) => {
-                        const v = cur(ps, f.key);
-                        const z = zeroState(ps, f);
-                        const prob = problemOf(f, v, tr);
-                        const corr = p.corrections[f.key];
-                        const changed = v !== (original[ps]?.[f.key] ?? "");
-                        const cls = cn("h-9 w-full min-w-[72px] rounded-md border border-r-field bg-r-card px-1.5 text-right num text-sm font-semibold text-r-ink no-spin shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] enabled:hover:border-r-faint focus:border-r-action focus:outline-2 focus:outline-offset-0 focus:outline-r-action/30 disabled:cursor-default disabled:shadow-none",
-                          z === "ask" && "border-2 border-solid border-r-returned bg-r-returned-soft",
-                          prob && "border-2 border-solid border-r-overdue bg-r-overdue-soft text-r-overdue-ink",
-                          corr && "text-r-corrected-ink", !w && "border-transparent bg-transparent", changed && !prob && z !== "ask" && "border-r-action");
-                        const title = prob || (z === "ask" ? t("zero_q") : corr ? `${t("corrected")}: ${t("original")} ${toText(corr.original) || "—"}${corr.note ? ` · ${corr.note}` : ""}` : undefined);
-                        return (
-                          <td key={f.key} className="relative border-b border-r-line p-1" title={title}>
-                            {f.type === "yesno" || f.type === "choice" ? (
-                              <select data-r={r} data-c={c} value={v} disabled={!w} aria-label={`${label(ps, p)} ${fieldLabel(f, lang)}`}
-                                onChange={(e) => setCell(ps, f.key, e.target.value)} onKeyDown={(e) => onKey(e, r, c)} className={cn(cls, "text-left font-normal")}>
-                                <option value="">–</option>
-                                {(f.type === "yesno" ? [["yes", t("yes")], ["no", t("no")]] : f.options.map((o) => [o, o])).map(([ov, ol]) => <option key={ov} value={ov}>{ol}</option>)}
-                              </select>
-                            ) : (
-                              <input data-r={r} data-c={c} type={f.type === "date" ? "date" : "text"} value={v} disabled={!w}
-                                inputMode={f.type === "number" ? (f.integer ? "numeric" : "decimal") : undefined}
-                                aria-label={`${label(ps, p)} ${fieldLabel(f, lang)}`} aria-invalid={!!prob || undefined}
-                                onChange={(e) => setCell(ps, f.key, e.target.value)} onKeyDown={(e) => onKey(e, r, c)} onPaste={(e) => onPaste(e, r, c)}
-                                className={cn(cls, f.type !== "number" && "text-left font-normal")} />
-                            )}
-                            {z === "ask" && <span aria-hidden className="pointer-events-none absolute top-1/2 left-2 -translate-y-1/2 text-[11px] font-bold text-r-returned-ink">?</span>}
-                            {corr && <span aria-hidden className="pointer-events-none absolute top-1 right-1 border-[5px] border-transparent border-t-r-corrected border-r-r-corrected" />}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-col gap-2 text-[13px] text-r-muted">
-            <span className="text-xs font-bold text-r-ink">{t("kb_title")}</span>
-            <dl className="m-0 grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 sm:grid-cols-[auto_1fr_auto_1fr] sm:gap-x-4">
-              {SHORTCUTS.map(([keys, k]) => (
-                <React.Fragment key={k}>
-                  <dt className="flex items-center gap-1 whitespace-nowrap">
-                    {keys.map((key, j) => <React.Fragment key={key}>{j > 0 && <span aria-hidden>+</span>}<kbd className="kbd">{key}</kbd></React.Fragment>)}
-                  </dt>
-                  <dd className="m-0">{t(k)}</dd>
-                </React.Fragment>
-              ))}
-            </dl>
-          </div>
-          {instructions.trim() && (
-            <details id="instructions" className="rounded-xl bg-r-card px-3.5 py-3">
-              <summary className="cursor-pointer font-bold">{t("instructions_from")}</summary>
-              <Instructions text={instructions} className="mt-2" />
-            </details>
-          )}
-        </div>
-
-        <aside aria-label={t("send_title")} className="flex w-full flex-col gap-3.5 rounded-[14px] bg-r-card p-[18px]">
-          <h2 className="m-0 text-lg font-bold">{t("send_title")}</h2>
-          {candidates.length > 0 && <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">{candidates.map((p) => {
-            const ps = p.period_start;
-            const c = check(ps);
-            const ready = !c.bad.length && !c.ask.length && !c.missing.length;
-            const over = isOverdue(p.status, p.deadline);
-            const head = `${label(ps, p)} · ${p.status === "submitted" ? t("sent_changed") : p.status === "returned" ? t("sub_returned") : over ? t("overdue") : p.status === "draft" ? t("sub_draft") : t("sub_none")}`;
-            const tone = c.bad.length || c.missing.length ? "border-r-overdue" : c.ask.length ? "border-r-returned bg-r-returned-soft" : "border-r-line";
-            return (
-              <div key={ps} className={cn("flex items-start gap-2.5 rounded-[10px] border-[1.5px] p-3", tone)}>
-                <RCheck plain id={`send_${ps}`} disabled={!ready} checked={ready && !unticked.has(ps)} className="mt-0.5 [&>span:first-child]:size-5"
-                  onChange={(on) => setUnticked((prev) => { const n = new Set(prev); if (on) n.delete(ps); else n.add(ps); return n; })} />
-                <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                  <label htmlFor={`send_${ps}`} className="font-bold">{head}</label>
-                  {c.bad.length > 0 && <span className="text-sm font-bold text-r-overdue-ink">{fieldLabel(c.bad[0], lang)} {cur(ps, c.bad[0].key)}: {problemOf(c.bad[0], cur(ps, c.bad[0].key), tr)}</span>}
-                  {!c.bad.length && c.missing.length > 0 && <span className="text-sm font-bold text-r-overdue-ink">{tf("required_missing", { list: c.missing.map((f) => fieldLabel(f, lang)).join(", ") })}</span>}
-                  {!c.bad.length && !c.missing.length && c.ask.length > 0 && (
-                    <>
-                      <span className="text-sm text-r-returned-ink">{tf("zeros_q_list", { list: c.ask.map((f) => fieldLabel(f, lang)).join(", ") })}</span>
-                      <RButton size="sm" className="self-start border-r-returned-ink text-r-returned-ink" onClick={() => confirmZeros(ps, c.ask.map((f) => f.key))}>
-                        {c.ask.length > 1 ? t("yes_all_zero") : t("yes_zero")}
-                      </RButton>
-                    </>
-                  )}
-                  {ready && <span className="text-sm text-r-muted">{tf("n_entered", { a: c.filled, b: fields.length })}. {t("ready_word")}</span>}
-                </div>
-              </div>
-            );
-          })}</div>}
-          {emptyOpen.length > 0 && candidates.length > 0 && (
-            <div className="text-sm text-r-muted">{emptyOpen.map((p) => label(p.period_start, p)).join(", ")}: {t("not_saved_yet")}</div>
-          )}
-          <RButton size="lg" variant="pri" className="w-full" disabled={!toSend.length || busy} loading={busy} onClick={() => onSend(toSend)}>
-            {toSend.length ? tf("send_n", { n: toSend.length <= 3 ? toSend.map((ps) => label(ps)).join(", ") : String(toSend.length) }) : t("send_title")}
-          </RButton>
-          <p className="m-0 flex items-start gap-2 text-[13px] text-r-muted">
-            <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
-            <span>{candidates.length === 0 && `${t("nothing_to_send")} `}{t("sent_lock_note")}</span>
-          </p>
-          {dirtyCount > 0 && (
-            <div className="flex flex-col gap-2 border-t border-r-line pt-3">
-              <span className="text-sm font-bold">{dirtyCount} · {t("unsaved")}</span>
-              {blockedDirty > 0 && <span className="text-[13px] text-r-returned-ink">{t("zeros_need_confirm")}</span>}
-              <div className="flex flex-wrap gap-2">
-                <RButton size="sm" loading={busy} disabled={!savable} onClick={onSave}>{t("save_draft")} <span className="kbd">Ctrl S</span></RButton>
-                <RButton size="sm" variant="ghost" onClick={() => { onDiscard(); setPasted(null); }}>{t("discard")}</RButton>
-              </div>
-            </div>
-          )}
-        </aside>
-      </div>
-
-      {historyOf && (
-        <RSheet open onClose={() => setHistoryOf(null)} closeLabel={t("close")} title={`${t("edit_history")} · ${label(historyOf.period_start, historyOf)}`} description={formTitle(form, lang)}>
-          <ChangeHistory p={historyOf} fields={fields} />
-        </RSheet>
-      )}
-    </>
-  );
-}
-
-function statusWord(p: Submission, mark: Mark, t: Tr["t"]) {
-  if (mark === "draft" && p.status !== "draft") return t("unsaved");
-  const map: Record<Mark, TKey> = { pend: "st_pending", draft: "sub_draft", over: "overdue", sub: "sub_submitted", acc: "sub_accepted", ret: "sub_returned", na: "st_na" };
-  return t(map[mark]) + (p.late && mark !== "over" && mark !== "pend" && mark !== "draft" ? ` · ${t("late")}` : "");
 }

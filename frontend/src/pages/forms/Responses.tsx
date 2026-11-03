@@ -487,9 +487,11 @@ function Row({ r, fields, canEdit, editing, onEdit }: {
         const v = r.values[x.key];
         const c = r.corrections[x.key];
         const shown = c ? <span className="corr">{showValue(x, v, t)}</span> : !sent && r.status !== "draft" ? "—" : showValue(x, v, t);
-        const tip = c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : undefined;
+        const noProof = r.proof_missing?.includes(x.key);
+        const tip = [c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : "", noProof ? t("proof_missing_mark") : ""].filter(Boolean).join(" · ") || undefined;
         return (
-          <td key={x.key} className={cn("num truncate border-b border-r-line-soft text-center", !sent && "text-r-faint", canEdit ? "p-0.5" : "px-1.5 py-1.5")}>
+          <td key={x.key} className={cn("num relative truncate border-b border-r-line-soft text-center", !sent && "text-r-faint", canEdit ? "p-0.5" : "px-1.5 py-1.5")}>
+            {noProof && <span aria-label={t("proof_missing_mark")} role="img" title={t("proof_missing_mark")} className="pointer-events-none absolute top-0.5 left-0.5 size-1.5 rounded-full bg-r-overdue" />}
             {canEdit ? (
               <button type="button" onClick={() => onEdit(x.key)} title={tip ?? t("edit_value")} aria-label={`${t("edit_value")}: ${fieldLabel(x, lang)}, ${officeName(r, lang)}`}
                 className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-center text-sm hover:bg-r-card hover:text-r-ink hover:ring-1 hover:ring-r-line",

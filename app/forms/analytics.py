@@ -307,9 +307,54 @@ def _cell_out(f, v):
     return v
 
 
-def workbook(s: Session, form: Form, offices: list[str], start: date, end: date) -> bytes:
+def _proof_sheet(s: Session, ws, form: Form, ps_list, subs, meta, app_url: str, st) -> None:
+    """One row per live proof item of the sent (submitted / returned) periods, in डेटा एंट्री order."""
+    from app.forms.service import proofs_of
+    from openpyxl.utils import get_column_letter
+    header = ["दिनांक", "विभाग", "कार्यालय", "रकाना", "प्रकार", "लिंक"]
+    ws.cell(1, 1, f"{form.title_mr} — पुरावा").font = st["title_font"]
+    ws.cell(1, 1).fill = st["head_fill"]
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(header))
+    ws.cell(2, 1, "फाइल उघडण्यासाठी लॉगिन आवश्यक.").font = st["bold"]
+    for i, h in enumerate(header, start=1):
+        c = ws.cell(3, i, h)
+        c.font, c.fill, c.border, c.alignment = st["head_font"], st["head_fill"], st["box"], st["center"]
+    counted = [x for x in subs.values() if x.status in COUNTED]
+    proofs = proofs_of(s, counted)
+    labels = {f.id: f.label_mr for f in form.fields}
+    kinds = {"application/pdf": "PDF", "image/jpeg": "फोटो", "image/png": "फोटो"}
+    base = app_url.rstrip("/")
+    row = 3
+    for ps in ps_list:
+        for o, d in meta:
+            sub = subs.get((o.code, ps))
+            if sub is None or sub.status not in COUNTED:
+                continue
+            for pr in sorted(proofs.get(sub.id, []), key=lambda p: (p.field_id, p.sort_order, p.id)):
+                row += 1
+                if pr.kind == "link":
+                    link, kind = pr.url, "लिंक"
+                else:
+                    link = f"{base}/backend/api/forms/{form.id}/proofs/{pr.id}/file"
+                    kind = kinds.get(pr.file_type or "", "फाइल")
+                ws.cell(row, 1, ps).number_format = "yyyy-mm-dd"
+                ws.cell(row, 2, office_names(o.code, d.summary_label_mr, o.name_mr)[0])
+                ws.cell(row, 3, o.name_mr)
+                ws.cell(row, 4, labels.get(pr.field_id, ""))
+                ws.cell(row, 5, kind)
+                c = ws.cell(row, 6, link)
+                if link.startswith("http"):
+                    c.hyperlink = link
+                    c.style = "Hyperlink"
+    for i, w in enumerate((14, 20, 20, 24, 10, 80), start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A4"
+
+
+def workbook(s: Session, form: Form, offices: list[str], start: date, end: date, app_url: str = "") -> bytes:
     """The admin's workbook: सूचना, डेटा एंट्री (every office × period, corrected cells highlighted with a
-    comment), then the five roll-up sheets (the daily ones for the last period of the range)."""
+    comment), पुरावा (each proof link and file, when a field asks for proof), then the five roll-up sheets (the
+    daily ones for the last period of the range). File links point at {app_url}/backend/… and need a login."""
     from openpyxl import Workbook
     from openpyxl.comments import Comment
     from openpyxl.utils import get_column_letter
@@ -372,6 +417,10 @@ def workbook(s: Session, form: Form, offices: list[str], start: date, end: date)
         de.column_dimensions[get_column_letter(i)].width = 14 if i == 1 else 20 if i <= 3 else 12
     de.row_dimensions[3].height = 48
     de.freeze_panes = "D4"
+
+    # ------------------------------------------------------------- पुरावा
+    if any(f.proof != "none" for f in form.fields):
+        _proof_sheet(s, wb.create_sheet("पुरावा"), form, ps_list, subs, meta, app_url, st)
 
     # ------------------------------------------------------------- roll-ups
     last = ps_list[-1] if ps_list else start

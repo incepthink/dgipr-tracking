@@ -108,7 +108,7 @@ def _divisions(s: Session, visible: Optional[set[str]] = None) -> list[dict[str,
 def api_meta(request: Request, s: Session = Depends(get_session)):
     user = current_user(request)
     columns = [{"key": c.key, "label_mr": c.label_mr, "label_en": c.label_en, "source": c.source,
-                "group": c.group} for c in COLUMNS]
+                "group": c.group, "proof": c.proof} for c in COLUMNS]
     base = {"operator": user.username, "default_day": _default_day().isoformat(), "columns": columns,
             "divisions": _divisions(s, None if user.role == "state" else set(visible_office_codes(s, user)))}
     if user.role != "state":

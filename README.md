@@ -64,7 +64,8 @@ Access is default-deny (`app/auth.py`): every route except login, static files a
 
 **Report forms (अहवाल फॉर्म)** replace the Excel sheet the state office sends round (`दुष्काळ_प्रसिद्धी_अहवाल_….xlsx`):
 * **Forms** (state): build a form with a Marathi/English title and instructions and its fields (number, text, yes/no, dropdown or date; required, min/max). Then pick the offices it goes to (all, or by division), how often it is filled (daily, weekly or one-time), its dates and a deadline, and publish it. After an office has answered a field, that field can be renamed, reordered or archived but not deleted or retyped. **Duplicate** copies a form for the next campaign.
-* **My forms** (offices): the forms sent to the office, with their instructions and what is pending, overdue or returned. On a phone each period is one card; on a desktop it's a week grid that accepts Excel paste. A blank field stays *not entered*, and saving a 0 needs a "confirm zeros" tick. **Submit** locks the period until the state office returns it.
+* **My forms** (offices): the forms sent to the office, with their instructions and what is pending, overdue or returned. Each period is one page, with a strip of days (coloured by status) above it on phones and desktops alike. A blank field stays *not entered*, and saving a 0 needs a "confirm zeros" tick. **Submit** locks the period until the state office returns it.
+* **Proof (पुरावा)**: a number field can ask for proof, set per field in the builder: *links* (the office pastes post links, one per line, and the number is the count of links), *PDF/photo*, or *links or PDF/photo* (the number is typed, and anything above 0 needs at least one item). Links are checked while the office types: right platform, not repeated, not already counted in this form by any office on any day. Photos are shrunk in the browser; PDF, JPG and PNG up to 10 MB go straight to storage (see *Proof files* below). A district office can't send a figure above 0 without its proof, from the day the form first asked for proof (`proof_from`; earlier days are exempt). State-office entries and corrections are never blocked. The Desk marks each sent day *पुरावा ✓* or *पुरावा नाही* and opens the day page, where the state office sees the links and files and can return the day with a note. The workbook gets a **पुरावा** sheet listing every link and file. `scripts/set_default_proof.py <form-slug>` switches proof on for the report columns of an existing form.
 * **Responses** (state; zone read-only): everyone's data combined, like the डेटा एंट्री sheet. The state office can **accept** a submission, **return** it with a note, or **correct** a value. A correction keeps the office's original value and the reason, and the cell shows yellow. The compliance tab shows offices × periods coloured by status (late ones outlined), and one click copies the list of offices that haven't sent, for WhatsApp follow-up.
 * **Analytics** and **Tables & export**: totals, trend, rankings and the sheet's five tables for any form. **Full workbook** exports one xlsx with सूचना, डेटा एंट्री and the five roll-up sheets. It uses the sheet's own names, and corrected cells are yellow with the original value in a comment.
 
@@ -274,3 +275,41 @@ test is skipped when no browser is available).
   scp -i ~/.ssh/dgipr-prod /tmp/dgipr.tgz ubuntu@54.169.233.35:/opt/dgipr/
   ssh -i ~/.ssh/dgipr-prod ubuntu@54.169.233.35 'cd /opt/dgipr && tar xzf dgipr.tgz && cd deploy && sudo docker compose up -d --build'
   ```
+
+### Proof files (पुरावा)
+
+Proof files live in a **private S3 bucket in ap-south-1 (Mumbai)**. The browser uploads each file straight to S3 on a
+presigned PUT, because the Vercel rewrite in front of the backend caps request bodies at about 4.5 MB. Files open through
+`/api/forms/{id}/proofs/{pid}/file`, which checks the viewer's access and redirects to a presigned GET that is valid for
+5 minutes. Nothing is ever deleted from the bucket: removing a proof only marks the row as removed. Without
+`PROOF_STORAGE=s3`, files are kept under `DATA_DIR/proofs/` (dev and tests).
+
+One-time AWS setup (AWS CLI, as an account admin):
+```bash
+aws s3api create-bucket --bucket dgipr-proofs --region ap-south-1   --create-bucket-configuration LocationConstraint=ap-south-1
+aws s3api put-public-access-block --bucket dgipr-proofs --public-access-block-configuration   BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+aws s3api put-bucket-encryption --bucket dgipr-proofs --server-side-encryption-configuration   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
+aws s3api put-bucket-versioning --bucket dgipr-proofs --versioning-configuration Status=Enabled
+aws s3api put-bucket-cors --bucket dgipr-proofs --cors-configuration '{"CORSRules":[{
+  "AllowedOrigins":["https://dgipr.hashcase.tech","http://localhost:5173"],
+  "AllowedMethods":["PUT"],"AllowedHeaders":["Content-Type"],"MaxAgeSeconds":3000}]}'
+
+# an IAM user that can only put and get proof objects (HeadObject is covered by GetObject)
+aws iam create-user --user-name dgipr-proofs-app
+aws iam put-user-policy --user-name dgipr-proofs-app --policy-name dgipr-proofs --policy-document '{
+  "Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:PutObject","s3:GetObject"],
+  "Resource":"arn:aws:s3:::dgipr-proofs/proofs/*"}]}'
+aws iam create-access-key --user-name dgipr-proofs-app     # copy AccessKeyId / SecretAccessKey
+```
+(An EC2 instance role with the same policy works instead of the IAM user. Leave the keys out and boto3 uses the role.)
+
+Then add these to `/opt/dgipr/deploy/app.env`, which is never committed, and redeploy:
+```
+PROOF_STORAGE=s3
+PROOF_S3_BUCKET=dgipr-proofs
+PROOF_S3_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=…
+AWS_SECRET_ACCESS_KEY=…
+PUBLIC_APP_URL=https://dgipr.hashcase.tech/tracking
+```
+`PUBLIC_APP_URL` builds the file links in the Excel पुरावा sheet. Opening one requires a login.

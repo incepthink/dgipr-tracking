@@ -37,6 +37,25 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return res.json() as Promise<T>;
 }
 
+/** PUT a file to a presigned upload URL (S3, or the backend's local stand-in), reporting progress 0–1. Cookies go only
+ * to the backend's own URL, never to S3. Not `request`: that one is JSON-only. */
+export function uploadFile(url: string, headers: Record<string, string>, blob: Blob, onProgress?: (p: number) => void) {
+  const local = url.startsWith("/");
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", local ? backendUrl(url) : url);
+    xhr.withCredentials = local;
+    Object.entries(headers).forEach(([k, v]) => xhr.setRequestHeader(k, v));
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(e.loaded / e.total); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new ApiError(xhr.status, xhr.statusText || `upload failed (${xhr.status})`)));
+    xhr.onerror = () => reject(new ApiError(0, "upload failed"));
+    xhr.send(blob);
+  });
+}
+
+/** A proof file, opened in a new tab (needs the login cookie; S3 files redirect to a short-lived link). */
+export const proofFileUrl = (formId: number, proofId: number) => backendUrl(`/api/forms/${formId}/proofs/${proofId}/file`);
+
 export const api = {
   get: <T>(url: string) => request<T>("GET", url),
   post: <T>(url: string, body?: unknown) => request<T>("POST", url, body ?? {}),
@@ -50,7 +69,7 @@ export interface OfficeRef { code: string; name_mr: string; name_en: string; kin
 export interface Division { code: string; label_mr: string; offices: OfficeRef[] }
 export interface Provider { platform: string; provider: string; credentials: string }
 export interface CampaignBrief { id: number; slug: string; title_mr: string; title_en: string; active: boolean; version: number }
-export interface Column { key: string; label_mr: string; label_en: string; source: string; group: "print" | "video" | "social" | "other" }
+export interface Column { key: string; label_mr: string; label_en: string; source: string; group: "print" | "video" | "social" | "other"; proof?: ProofType }
 
 export interface Meta {
   operator: string;
@@ -201,11 +220,14 @@ export type FieldType = "number" | "text" | "yesno" | "choice" | "date";
 export type Frequency = "daily" | "weekly" | "once";
 export type FormStatus = "draft" | "published" | "paused" | "archived";
 export type SubStatus = "none" | "draft" | "submitted" | "returned";
+/** What a number field asks offices to attach: links (the number is their count), PDF/photo files, or either. */
+export type ProofType = "none" | "links" | "files" | "either";
 
 export interface FormField {
   id: number | null; key: string; label_mr: string; label_en: string; help_mr: string; help_en: string;
   type: FieldType; required: boolean; options: string[]; min_value: number | null; max_value: number | null;
   integer: boolean; group: string; sort_order?: number; aggregate: "sum" | "none"; archived: boolean; locked: boolean;
+  proof: ProofType;
 }
 
 export interface FormDef {
@@ -215,6 +237,8 @@ export interface FormDef {
   updated_at: string; recipients: string[]; schedule_locked: boolean; fields?: FormField[];
   /** Names the admin gave field groups, by group key. */
   group_names?: Record<string, string>;
+  /** The first day offices must attach proof; earlier periods are exempt. */
+  proof_from?: string | null;
 }
 
 /** Admin list card. */
@@ -235,12 +259,22 @@ export interface Correction { original: AnswerValue; by: string; at: string; not
 /** One change to a value after its period was sent, by the state office or the office itself; `reverts` names the edit an undo went back on. */
 export interface ValueEdit { id: number; key: string; before: AnswerValue; after: AnswerValue; by: string; at: string; note: string; reverts: number | null; source: "office" | "state" }
 
+export interface Proof {
+  id: number; kind: "link" | "file"; url: string | null; key: string | null; name: string | null; type: string | null; size: number | null;
+  added_by: string; added_at: string;
+}
+/** One pasted link as the server checks it; `problem` is why it can't be counted. */
+export type LinkProblem = "not_link" | "wrong_platform" | "repeated" | "used_here" | "used_other";
+export interface LinkCheck { url: string; key: string; host: string; problem: LinkProblem | null; day: string | null }
+
 export interface Submission {
   form_id: number; office: string; period_start: string; period_end: string; label: string; status: SubStatus;
   late: boolean; deadline: string | null; submitted_at: string | null; submitted_by: string; reviewed_at: string | null;
   reviewed_by: string; review_note: string; note: string; values: Record<string, AnswerValue>;
   corrections: Record<string, Correction>; edits: ValueEdit[]; entered_by: string | null; entered_at: string | null;
   read_only_reason?: string | null;
+  /** Live proof per field key; the fields whose figure needs proof and has none; whether the period predates the rule. */
+  proofs: Record<string, Proof[]>; proof_missing: string[]; proof_exempt: boolean;
 }
 
 export interface PeriodsResponse {

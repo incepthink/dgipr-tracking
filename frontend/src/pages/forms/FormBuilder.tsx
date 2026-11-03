@@ -3,11 +3,11 @@ import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight, Eye, GripVertical, Info, Lock, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
-import { api, ApiError, type Column, type FormDef, type FormField, type Frequency } from "@/lib/api";
+import { api, ApiError, type Column, type FormDef, type FormField, type Frequency, type ProofType } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { RButton, RCard, RCardTitle, RCheck, RError, RInput, RLabel, RPage, RSegmented, RSheet, RTextarea, StatusMark } from "@/components/reports/kit";
+import { RButton, RCard, RCardTitle, RCheck, RError, RInput, RLabel, RPage, RSegmented, RSelect, RSheet, RTextarea, StatusMark } from "@/components/reports/kit";
 import { DateInput } from "@/components/reports/DateInput";
 import { dayMonth, fig, fullDay } from "@/components/reports/period";
 import { Instructions } from "./MyForms";
@@ -15,6 +15,7 @@ import { fieldLabel, formTitle, groupName, useToday } from "./common";
 
 /** Weekly is no longer offered for new forms; an existing weekly form keeps showing it. */
 const FREQS: Frequency[] = ["daily", "once"];
+const PROOFS: ProofType[] = ["none", "links", "files", "either"];
 
 type EditField = FormField & { uid: string; optionsText: string };
 interface Draft {
@@ -37,12 +38,14 @@ function blankField(): EditField {
   return {
     uid: uid(), id: null, key: "", label_mr: "", label_en: "", help_mr: "", help_en: "", type: "number", required: false,
     options: [], optionsText: "", min_value: 0, max_value: null, integer: true, group: "", aggregate: "sum", archived: false, locked: false,
+    proof: "none",
   };
 }
 
-/** A number field for one of the 12 report columns (the office data-entry sheet), keyed so imports and reports line up. */
+/** A number field for one of the 12 report columns (the office data-entry sheet), keyed so imports and reports line up,
+ * asking for the column's usual proof (links for posts and videos, PDF/photo for clippings). */
 function columnField(c: Column): EditField {
-  return { ...blankField(), key: c.key, label_mr: c.label_mr, label_en: c.label_en, group: c.group === "other" ? "" : c.group };
+  return { ...blankField(), key: c.key, label_mr: c.label_mr, label_en: c.label_en, group: c.group === "other" ? "" : c.group, proof: c.proof ?? "none" };
 }
 
 function toDraft(f: FormDef | null, allOffices: string[], today: string, columns: Column[] = []): Draft {
@@ -73,7 +76,7 @@ function toPayload(d: Draft) {
       id: f.id, key: f.key || null, label_mr: f.label_mr, label_en: f.label_en, help_mr: f.help_mr, help_en: f.help_en, type: f.type,
       required: f.required, options: f.optionsText.split("\n").map((o) => o.trim()).filter(Boolean),
       min_value: f.min_value, max_value: f.max_value, integer: f.integer, group: f.group, aggregate: f.type === "number" ? f.aggregate : "none",
-      archived: f.archived,
+      archived: f.archived, proof: f.type === "number" ? f.proof ?? "none" : "none",
     })),
   };
 }
@@ -90,7 +93,8 @@ function writeLocal(formId: number | null, d: Draft | null) {
 /** Reuse the server draft's uids for saved fields so the "changed" highlight compares like with like. */
 function restore(local: Draft, server: Draft): Draft {
   const byId = new Map(server.fields.filter((f) => f.id !== null).map((f) => [f.id, f.uid]));
-  return { ...server, ...local, fields: byGroup(local.fields.map((f) => ({ ...f, uid: (f.id !== null && byId.get(f.id)) || f.uid }))) };
+  const proofOf = new Map(server.fields.filter((f) => f.id !== null).map((f) => [f.id, f.proof]));
+  return { ...server, ...local, fields: byGroup(local.fields.map((f) => ({ ...f, proof: f.proof ?? proofOf.get(f.id) ?? "none", uid: (f.id !== null && byId.get(f.id)) || f.uid }))) };
 }
 
 /** Human list of what changed since the last save, for the sticky bar. */
@@ -377,6 +381,11 @@ export default function FormBuilderPage() {
                 ];
               })}
             </div>
+            {form?.proof_from && (
+              <p className="m-0 mt-2 flex items-center gap-2 rounded-[10px] bg-r-ground px-3.5 py-2.5 text-sm">
+                <Info className="size-4 shrink-0 text-r-action" aria-hidden /> {tf("proof_from_note", { day: dayMonth(form.proof_from, lang) })}
+              </p>
+            )}
             {archivedF.length > 0 && (
               <details className="mt-2.5 rounded-[10px] bg-r-ground px-3.5 py-3">
                 <summary className="cursor-pointer font-bold">{t("archived")} · {archivedF.length}</summary>
@@ -437,6 +446,11 @@ function FieldRow({ f, n, open, dragging, changed, onToggle, onChange, onGrab, o
           <RInput value={f.label_mr} aria-label={t("field_label_mr")} onChange={(e) => onChange({ label_mr: e.target.value })} className="min-w-0 flex-1" />
           {/* Older forms may still carry non-number fields; show what they are. */}
           {f.type !== "number" && <span className="shrink-0 rounded-md bg-r-sunk px-2 py-1 text-[13px] font-bold whitespace-nowrap text-r-muted">{t(`type_${f.type}` as TKey)}</span>}
+          {f.type === "number" && f.proof !== "none" && (
+            <span title={t("proof_word")} className="hidden shrink-0 rounded-md bg-r-action-soft px-2 py-1 text-[13px] font-bold whitespace-nowrap text-r-action-hover sm:inline dark:text-r-ink">
+              {t("proof_word")}: {t(`proof_type_${f.proof}` as TKey)}
+            </span>
+          )}
         </span>
         <button type="button" aria-expanded={open} aria-label={t("more_for_field")} onClick={onToggle}
           className="flex size-9 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-r-ink hover:bg-r-sunk">
@@ -448,6 +462,13 @@ function FieldRow({ f, n, open, dragging, changed, onToggle, onChange, onGrab, o
           <RLabel small label={t("field_label_en")}><RInput value={f.label_en} onChange={(e) => onChange({ label_en: e.target.value })} /></RLabel>
           <RLabel small label={`${t("help_text")} (मराठी)`}><RInput value={f.help_mr} onChange={(e) => onChange({ help_mr: e.target.value })} /></RLabel>
           <RLabel small label={`${t("help_text")} (English)`}><RInput value={f.help_en} onChange={(e) => onChange({ help_en: e.target.value })} /></RLabel>
+          {f.type === "number" && (
+            <RLabel small label={`${t("proof_word")} / Proof`}>
+              <RSelect value={f.proof ?? "none"} onChange={(e) => onChange({ proof: e.target.value as ProofType })} className="w-full">
+                {PROOFS.map((p) => <option key={p} value={p}>{t(`proof_type_${p}` as TKey)}</option>)}
+              </RSelect>
+            </RLabel>
+          )}
           {f.type === "choice" && (
             <RLabel small label={t("options")} className="sm:col-span-2"><RTextarea rows={3} value={f.optionsText} onChange={(e) => onChange({ optionsText: e.target.value })} /></RLabel>
           )}

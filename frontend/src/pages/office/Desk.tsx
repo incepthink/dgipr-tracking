@@ -227,7 +227,8 @@ function DeskCard({ formId, minimized, onToggle }: { formId: number; minimized: 
     return { days: acc.days + days, offices: acc.offices + (days ? 1 : 0) };
   }, { days: 0, offices: 0 }) : { days: 0, offices: 0 };
   const chase = cdata && form && j >= 0 ? chaseText({ form, data: cdata, j, withOld: true, tr, now }) : "";
-  const respTo = (r: ResponseRow) => `/forms/responses${qs({ form: formId, day: r.period_start, office: r.office })}`;
+  // the day page shows the figures with their proof; corrections are made from there on the responses page
+  const respTo = (r: ResponseRow) => `/forms/${formId}/fill${qs({ office: r.office, period: r.period_start })}`;
   const shown = (r: ResponseRow) => filter === "all" || (filter === "none" ? !isSent(r.status) : r.status === filter);
   const error = formError ?? resp.error ?? comp.error;
 
@@ -326,6 +327,8 @@ function DistrictRow({ r, form, history, cols, to, overdue }: {
   const a =r.status === "submitted" ? anomalyOf(r, history, cols) : null;
   const z = r.status === "submitted" ? zerosOf(r, cols) : 0;
   const flag = a ? tf("x_usual", { f: fieldLabel(a.field, lang), x: Number.isFinite(a.ratio) ? Math.round(a.ratio) : "∞" }) : z ? tf("n_zeros_short", { n: z }) : "";
+  const proofed = sent && !r.proof_exempt && (form.fields ?? []).some((f) => f.proof !== "none" && typeof r.values[f.key] === "number" && (r.values[f.key] as number) > 0);
+  const proofMark = r.proof_missing?.length ? "missing" : proofed ? "ok" : null;
   const when = r.submitted_at ? (r.submitted_at.slice(0, 10) === r.period_end ? timeOf(r.submitted_at, lang) : whenText(r.submitted_at, lang)) : "";
   const sub = !sent
     ? (overdue ? t("overdue") : r.status === "draft" ? t("sub_draft") : "")
@@ -340,6 +343,11 @@ function DistrictRow({ r, form, history, cols, to, overdue }: {
         {(sub || flag) && (
           <span className={cn("truncate text-[13px]", overdue ? "font-bold text-r-overdue-ink" : "text-r-muted")}>
             {sub}{flag && <span className="ml-1.5 rounded-full bg-r-sunk px-1.5 py-px text-xs font-bold text-r-ink">{flag}</span>}
+          </span>
+        )}
+        {proofMark && (
+          <span className={cn("text-xs font-bold", proofMark === "missing" ? "text-r-overdue-ink" : "text-r-accepted")}>
+            {proofMark === "missing" ? t("proof_missing_mark") : t("proof_ok_mark")}
           </span>
         )}
       </span>

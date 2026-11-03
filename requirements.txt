@@ -10,3 +10,4 @@ playwright==1.64.0      # Chromium/Edge for HTML -> PDF with correct Devanagari 
 pymupdf==1.28.2         # PDF -> PNG for visual comparison, PDF tests
 pytest==9.1.1
 openpyxl==3.1.5        # xlsx export of office reports, one-time sheet import
+boto3==1.43.123          # proof files: presigned uploads to the private S3 bucket

@@ -9,7 +9,11 @@
 Blank fields stay missing (no row); a typed 0 is stored only when the office confirms zeros, so an untouched
 field can never pass for a confirmed zero. An edit keeps the office's original value and adds a FormValueEdit
 (before, after, who, when, why), so every edit can be undone; the UI and the Excel export highlight edited
-values. Every change writes an audit entry."""
+values. Every change writes an audit entry.
+
+Proof (app.forms.proof): from the form's proof_from day, a district office can't send a figure above 0 without
+the links or files its field asks for; a links field's number is the count of its links. Proof rows are only
+soft-removed. The state office's own entries and corrections are never blocked."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -21,9 +25,11 @@ from sqlalchemy.orm import Session
 
 from app import audit
 from app.auth import can_edit, visible_office_codes
+from app.forms import proof as P
 from app.forms.periods import deadline, entry_closes, is_period_start, label, period_end, periods
 from app.forms.schema import FormError, active_fields, recipient_codes
-from app.models import Division, Form, FormField, FormRecipient, FormSubmission, FormValue, FormValueEdit, Office, User
+from app.models import (Division, Form, FormField, FormProof, FormRecipient, FormSubmission, FormValue, FormValueEdit,
+                        Office, User)
 from app.timeutil import today_ist, utcnow
 
 COUNTED = ("submitted", "returned")  # what roll-ups and reports sum; drafts are work in progress
@@ -151,7 +157,8 @@ def _late(form: Form, ps: date, sub: Optional[FormSubmission], now: datetime) ->
 
 
 def submission_json(form: Form, office: str, ps: date, sub: Optional[FormSubmission],
-                    now: Optional[datetime] = None) -> dict[str, Any]:
+                    now: Optional[datetime] = None, proofs: Optional[list[FormProof]] = None) -> dict[str, Any]:
+    """`proofs`: the submission's proof rows when the caller loaded them in bulk (else sub.proofs)."""
     now = now or utcnow()
     fields = {f.id: f for f in form.fields}
     rows = {v.field_id: v for v in (sub.values if sub else [])}
@@ -165,6 +172,11 @@ def submission_json(form: Form, office: str, ps: date, sub: Optional[FormSubmiss
                                   "at": row.corrected_at.isoformat() + "Z", "note": row.correction_note}
     latest = max((r for r in rows.values()), key=lambda r: r.entered_at, default=None)
     dl = deadline(form, ps)
+    live = P.live(sub, proofs) if sub else []
+    by_field: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for pr in live:
+        if pr.field_id in fields:
+            by_field[fields[pr.field_id].key].append(P.proof_json(pr))
     return {"form_id": form.id, "office": office, "period_start": ps.isoformat(),
             "period_end": period_end(form, ps).isoformat(), "label": label(form, ps),
             "status": sub.status if sub else "none", "late": _late(form, ps, sub, now),
@@ -176,7 +188,20 @@ def submission_json(form: Form, office: str, ps: date, sub: Optional[FormSubmiss
             "note": sub.note if sub else "", "values": values, "corrections": corrections,
             "edits": [edit_json(e) for e in sub.edits] if sub else [],
             "entered_by": latest.entered_by if latest else None,
-            "entered_at": latest.entered_at.isoformat() + "Z" if latest else None}
+            "entered_at": latest.entered_at.isoformat() + "Z" if latest else None,
+            "proofs": dict(by_field), "proof_exempt": P.exempt(form, ps),
+            "proof_missing": [f.key for f in P.missing_proof(form, sub, live)] if sub else []}
+
+
+def proofs_of(s: Session, subs: list[FormSubmission]) -> dict[int, list[FormProof]]:
+    """Live proof rows of many submissions in one query, by submission id."""
+    ids = [x.id for x in subs]
+    out: dict[int, list[FormProof]] = {i: [] for i in ids}
+    if ids:
+        for pr in s.scalars(select(FormProof).where(FormProof.submission_id.in_(ids),
+                                                     FormProof.removed_at.is_(None))).all():
+            out[pr.submission_id].append(pr)
+    return out
 
 
 def office_periods(s: Session, form: Form, office: str, start: date, end: date) -> list[dict[str, Any]]:
@@ -186,7 +211,9 @@ def office_periods(s: Session, form: Form, office: str, start: date, end: date) 
         FormSubmission.form_id == form.id, FormSubmission.office_code == office,
         FormSubmission.period_start.in_(ps_list or [date.min]))).all()}
     now = utcnow()
-    return [submission_json(form, office, ps, subs.get(ps), now) for ps in ps_list]
+    proofs = proofs_of(s, list(subs.values()))
+    return [submission_json(form, office, ps, subs.get(ps), now, proofs.get(subs[ps].id) if ps in subs else None)
+            for ps in ps_list]
 
 
 def editable(user: User, form: Form, office: str, ps: date, sub: Optional[FormSubmission],
@@ -222,9 +249,13 @@ def check_writable(s: Session, user: User, form: Form, office: str, ps: date,
 
 def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, values: dict[str, Any], *,
          confirm_zero: bool = False, note: Optional[str] = None, submit: bool = False,
-         actor: Optional[str] = None, check: bool = True) -> FormSubmission:
+         actor: Optional[str] = None, check: bool = True, proofs: Optional[dict[str, Any]] = None,
+         store=None) -> FormSubmission:
     """Save (part of) one office-period. Keys absent from `values` are left untouched; None/"" clears one.
-    check=False skips permission/schedule checks and required fields (imports, migration)."""
+    check=False skips permission/schedule checks and required fields (imports, migration).
+
+    proofs: {field_key: {"links": [str], "files": [{key, name, type, size, sha256}]}}, each the field's whole
+    proof list (absent keys are left untouched). `store` (proof.storage) confirms uploaded files exist."""
     if s.get(Office, office) is None:
         raise FormError(f"unknown office {office}", 404)
     sub = find(s, form, office, ps)
@@ -238,6 +269,16 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
     unknown = [k for k in values if k not in by_key or (check and by_key[k].archived)]
     if unknown:
         raise FormError(f"unknown field(s): {', '.join(unknown)}")
+    values = dict(values)
+    plan = _proof_plan(s, form, office, ps, sub, by_key, proofs or {}, store)
+    if P.applies(form, ps):
+        # a links field's figure is the number of its links; with none, only a confirmed 0 (or blank) is kept
+        for k, f in by_key.items():
+            if f.proof != "links" or (k not in plan and not (check and k in values)):
+                continue
+            n = len(plan[k]["links"]) if k in plan else sum(
+                1 for pr in P.live(sub) if pr.field_id == f.id and pr.kind == "link")
+            values[k] = n if n else (0 if _is_zero(values.get(k)) else None)
     cleaned = {k: clean_value(by_key[k], v) for k, v in values.items()}
 
     if sub is None:
@@ -280,17 +321,121 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
     if note is not None:
         sub.note = note[:500]
     sub.updated_at = now
+    _apply_proofs(s, form, sub, by_key, plan, who, now)
     s.flush()
-    s.expire(sub, ["values"])
+    s.expire(sub, ["values", "proofs"])
     after = {r.field.key: value_of(r.field, r) for r in sub.values}
+    for k, item in plan.items():
+        f = by_key[k]
+        n = next((r.value_num for r in sub.values if r.field_id == f.id), None)
+        if f.proof == "either" and len(item["links"]) > (n or 0):
+            raise FormError(f"{f.label_mr}: more links than the number")
     if check and sub.status == "submitted" and not submit and (missing := missing_required(form, sub)):
         raise FormError("a sent period can't lose a required field: " + ", ".join(f.label_mr for f in missing))
+    if (check and sub.status == "submitted" and not submit and user is not None and user.role != "state"
+            and (missing := P.missing_proof(form, sub))):
+        raise FormError("a sent period can't lose its proof: " + ", ".join(f.label_mr for f in missing))
     if before != after:
         audit.record(s, who, "form_submission.save", "form_submission", _eid(form, office, ps),
                      before=before or None, after=after or None, note=note or "")
     if submit:
         submit_(s, user, form, sub, actor=who, check=check)
     return sub
+
+
+def _is_zero(v: Any) -> bool:
+    try:
+        return v is not None and not isinstance(v, bool) and float(str(v).strip() or "x") == 0
+    except ValueError:
+        return False
+
+
+def _proof_plan(s: Session, form: Form, office: str, ps: date, sub: Optional[FormSubmission],
+                by_key: dict[str, FormField], proofs: dict[str, Any], store) -> dict[str, dict[str, Any]]:
+    """Validate the incoming proof lists: {key: {"links": [(url, url_key)], "files": [item]}}, or FormError."""
+    plan: dict[str, dict[str, Any]] = {}
+    current = {pr.file_key for pr in P.live(sub) if pr.kind == "file"}
+    prefix = P.object_prefix(form, office, ps)
+    for k, raw in proofs.items():
+        f = by_key.get(k)
+        if f is None or f.archived:
+            raise FormError(f"unknown field {k}")
+        if f.proof == "none":
+            raise FormError(f"{f.label_mr}: this field takes no proof")
+        raw = raw or {}
+        if not isinstance(raw, dict):
+            raise FormError(f"{f.label_mr}: proof must be an object with links and files")
+        links = P.extract_links("\n".join(str(x) for x in (raw.get("links") or [])))
+        files = list(raw.get("files") or [])
+        if links and f.proof == "files":
+            raise FormError(f"{f.label_mr}: attach a PDF or photo, not a link")
+        if files and f.proof == "links":
+            raise FormError(f"{f.label_mr}: paste links, not files")
+        for item in P.check_links(s, form, f, office, sub, links):
+            if item["problem"]:
+                raise FormError(_link_message(f, item))
+        clean_files = []
+        for it in files:
+            if not isinstance(it, dict) or not isinstance(it.get("key"), str):
+                raise FormError(f"{f.label_mr}: bad file")
+            key = it["key"]
+            if key not in current:
+                if not key.startswith(prefix) or ".." in key:
+                    raise FormError(f"{f.label_mr}: this file was not uploaded for this office and day")
+                if it.get("type") not in P.FILE_TYPES:
+                    raise FormError(f"{f.label_mr}: only PDF, JPG or PNG files")
+                size = it.get("size")
+                if not isinstance(size, int) or not 0 < size <= P.MAX_FILE:
+                    raise FormError(f"{f.label_mr}: a file can be at most 10 MB")
+                if store is None or store.head(key) != size:
+                    raise FormError(f"{f.label_mr}: the file upload did not finish; add it again")
+            clean_files.append({"key": key, "name": str(it.get("name") or "file")[:300], "type": it.get("type"),
+                                "size": it.get("size"), "sha256": str(it.get("sha256") or "")[:64] or None})
+        if len({x["key"] for x in clean_files}) != len(clean_files):
+            raise FormError(f"{f.label_mr}: the same file twice")
+        plan[k] = {"links": [(u, P.canonical(u)) for u in links], "files": clean_files}
+    return plan
+
+
+def _link_message(f: FormField, item: dict[str, Any]) -> str:
+    why = {"not_link": "not a web link", "repeated": "the same link twice",
+           "wrong_platform": "not a link for this platform (" + ", ".join(P.allowed_hosts(f)) + ")",
+           "used_here": f"already counted on {item['day']}", "used_other": "already counted by another office"}
+    return f"{f.label_mr}: {item['url']} — {why[item['problem']]}"
+
+
+def _apply_proofs(s: Session, form: Form, sub: FormSubmission, by_key: dict[str, FormField],
+                  plan: dict[str, dict[str, Any]], who: str, now: datetime) -> None:
+    """Make each planned field's live proof equal its list: soft-remove what's gone, add what's new, keep order."""
+    eid = _eid(form, sub.office_code, sub.period_start)
+    rows = P.live(sub)
+    for k, item in plan.items():
+        f = by_key[k]
+        mine = [pr for pr in rows if pr.field_id == f.id]
+        want = [("link", key, url, None) for url, key in item["links"]] + \
+               [("file", it["key"], None, it) for it in item["files"]]
+        have = {(pr.kind, pr.url_key if pr.kind == "link" else pr.file_key): pr for pr in mine}
+        keep = set()
+        for order, (kind, key, url, it) in enumerate(want):
+            pr = have.get((kind, key))
+            if pr is not None:
+                pr.sort_order = order
+                keep.add(pr.id)
+                continue
+            pr = FormProof(field_id=f.id, kind=kind, sort_order=order, added_by=who, added_at=now)
+            if kind == "link":
+                pr.url, pr.url_key = url, key
+            else:
+                pr.file_key, pr.file_name, pr.file_type = it["key"], it["name"], it["type"]
+                pr.file_size, pr.file_sha256 = it["size"], it["sha256"]
+            sub.proofs.append(pr)
+            audit.record(s, who, "form_proof.add", "form_submission", eid,
+                         after={"field": k, "kind": kind, "item": url or it["name"]})
+        for pr in mine:
+            if pr.id not in keep:
+                pr.removed_at, pr.removed_by = now, who
+                audit.record(s, who, "form_proof.remove", "form_submission", eid,
+                             before={"field": k, "kind": pr.kind, "item": pr.url or pr.file_name, "id": pr.id})
 
 
 def _eid(form: Form, office: str, ps: date) -> str:
@@ -314,6 +459,8 @@ def submit_(s: Session, user: Optional[User], form: Form, sub: FormSubmission, *
             raise FormError("fill in the required field(s) first: " + ", ".join(f.label_mr for f in missing))
         if not any(_has(v) for v in sub.values):
             raise FormError("nothing filled in yet")
+        if user.role != "state" and (missing := P.missing_proof(form, sub)):
+            raise FormError("proof missing: " + ", ".join(f.label_mr for f in missing))
     before = sub.status
     if before == "submitted":  # sending changes to a sent period keeps when it was first sent
         return sub
@@ -443,10 +590,12 @@ def responses(s: Session, form: Form, offices: list[str], start: date, end: date
     subs = _subs(s, form, offices, ps_list)
     meta = _office_meta(s, offices)
     now = utcnow()
+    proofs = proofs_of(s, list(subs.values()))
     rows = []
     for ps in ps_list:
         for o, d in meta:
-            r = submission_json(form, o.code, ps, subs.get((o.code, ps)), now)
+            sub = subs.get((o.code, ps))
+            r = submission_json(form, o.code, ps, sub, now, proofs.get(sub.id) if sub else None)
             rows.append({**r, "office_name_mr": o.name_mr, "office_name_en": o.name_en,
                          "division": d.code, "division_mr": d.summary_label_mr})
     return {"periods": [p.isoformat() for p in ps_list], "rows": rows}

@@ -85,6 +85,14 @@ class Settings:
     openai_model: str = ""
     openai_base_url: str = "https://api.openai.com/v1"
     ai_daily_call_limit: int = 200
+    # Proof files (app/forms/proof.py): "local" keeps them under DATA_DIR/proofs (dev, tests); "s3" uses a private
+    # bucket. AWS keys are read by boto3 itself (env or instance role). PUBLIC_APP_URL is where the SPA lives, for
+    # file links in the Excel export.
+    proof_storage: str = "local"
+    proof_s3_bucket: str = ""
+    proof_s3_region: str = "ap-south-1"
+    proof_secret: str = field(default="", repr=False)
+    public_app_url: str = ""
 
     @property
     def pdf_dir(self) -> Path:
@@ -138,4 +146,9 @@ def load_settings(env_file: Path | None = None) -> Settings:
         openai_model=env("OPENAI_MODEL", ""),
         openai_base_url=env("OPENAI_BASE_URL", "") or "https://api.openai.com/v1",
         ai_daily_call_limit=_int("AI_DAILY_CALL_LIMIT", 200),
+        proof_storage=(env("PROOF_STORAGE", "") or "local").lower(),
+        proof_s3_bucket=env("PROOF_S3_BUCKET", ""),
+        proof_s3_region=env("PROOF_S3_REGION", "") or "ap-south-1",
+        proof_secret=env("PROOF_SECRET", ""),
+        public_app_url=env("PUBLIC_APP_URL", "").rstrip("/"),
     )

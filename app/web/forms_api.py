@@ -10,15 +10,15 @@ from typing import Any, Optional
 from urllib.parse import quote
 
 from fastapi import Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.auth import current_user, editable_office_codes, require_role
-from app.forms import analytics, insights, schema, service
+from app.forms import analytics, insights, proof, schema, service
 from app.forms.periods import MAX_PERIODS, periods
 from app.forms.schema import FormError
-from app.models import Form, User
+from app.models import Form, FormProof, FormSubmission, User
 from app.timeutil import today_ist
 from app.web.main import app, get_session, settings
 
@@ -90,6 +90,7 @@ class FieldIn(BaseModel):
     group: str = ""
     aggregate: Optional[str] = None
     archived: bool = False
+    proof: str = "none"
 
 
 class FormIn(BaseModel):
@@ -256,6 +257,7 @@ class SaveIn(BaseModel):
     confirm_zero: bool = False
     note: Optional[str] = None
     submit: bool = False
+    proofs: Optional[dict[str, Any]] = None
 
 
 @app.put("/api/forms/{form_id}/submissions/{office}/{period}")
@@ -264,7 +266,8 @@ def api_submission_save(request: Request, form_id: int, office: str, period: dat
     user, form = _submission_target(request, s, form_id, office, period)
     try:
         sub = service.save(s, user, form, office, period, body.values, confirm_zero=body.confirm_zero,
-                           note=body.note, submit=body.submit)
+                           note=body.note, submit=body.submit, proofs=body.proofs,
+                           store=proof.storage(settings) if body.proofs else None)
     except FormError as exc:
         s.rollback()
         _err(exc)
@@ -286,6 +289,98 @@ def api_submission_submit(request: Request, form_id: int, office: str, period: d
         _err(exc)
     s.commit()
     return _with_access(s, user, form, office, period, sub)
+
+
+# --------------------------------------------------------------------------- proof (app/forms/proof.py)
+class UploadIn(BaseModel):
+    field: str
+    name: str = ""
+    type: str
+    size: int
+
+
+def _proof_field(form: Form, key: str):
+    f = next((x for x in form.fields if x.key == key and not x.archived), None)
+    if f is None:
+        raise HTTPException(400, f"unknown field {key}")
+    return f
+
+
+@app.post("/api/forms/{form_id}/submissions/{office}/{period}/uploads")
+def api_proof_upload(request: Request, form_id: int, office: str, period: date, body: UploadIn,
+                     s: Session = Depends(get_session)):
+    """A presigned PUT for one proof file; the browser sends the file straight to storage, then saves its key."""
+    user, form = _submission_target(request, s, form_id, office, period)
+    try:
+        service.check_writable(s, user, form, office, period, service.find(s, form, office, period))
+    except FormError as exc:
+        _err(exc)
+    f = _proof_field(form, body.field)
+    if f.proof not in ("files", "either"):
+        raise HTTPException(400, "this field takes links, not files")
+    if body.type not in proof.FILE_TYPES:
+        raise HTTPException(400, "only PDF, JPG or PNG files")
+    if not 0 < body.size <= proof.MAX_FILE:
+        raise HTTPException(400, "a file can be at most 10 MB")
+    key = proof.new_object_key(form, office, period, body.type)
+    return {"key": key, **proof.storage(settings).presign_put(key, body.type, body.size)}
+
+
+class ProofCheckIn(BaseModel):
+    office: str
+    period: date
+    field: str
+    text: str = ""
+
+
+@app.post("/api/forms/{form_id}/proof-check")
+def api_proof_check(request: Request, form_id: int, body: ProofCheckIn, s: Session = Depends(get_session)):
+    """The links in pasted text, each with the problem save() would reject it for (read-only)."""
+    user, form = _submission_target(request, s, form_id, body.office, body.period)
+    f = _proof_field(form, body.field)
+    sub = service.find(s, form, body.office, body.period)
+    links = proof.extract_links(body.text)[:200]
+    return {"links": proof.check_links(s, form, f, body.office, sub, links), "hosts": proof.allowed_hosts(f)}
+
+
+@app.get("/api/forms/{form_id}/proofs/{proof_id}/file")
+def api_proof_file(request: Request, form_id: int, proof_id: int, s: Session = Depends(get_session)):
+    """Open one proof file (state: any; zone: its division; district: its own office)."""
+    user = current_user(request)
+    form = _form(s, user, form_id)
+    pr = s.get(FormProof, proof_id)
+    sub = s.get(FormSubmission, pr.submission_id) if pr is not None else None
+    if pr is None or sub is None or sub.form_id != form.id or pr.kind != "file":
+        raise HTTPException(404, "file not found")
+    _scope(s, user, form, office=sub.office_code)
+    store = proof.storage(settings)
+    if store.kind == "s3":
+        return RedirectResponse(store.open_url(pr.file_key, pr.file_name, pr.file_type), status_code=302)
+    path = store.path(pr.file_key)
+    if not path.is_file():
+        raise HTTPException(404, "file not found")
+    return FileResponse(path, media_type=pr.file_type,
+                        headers={"Content-Disposition": proof.content_disposition(pr.file_name or "proof"),
+                                 "Cache-Control": "private, max-age=300"})
+
+
+@app.put("/api/forms/proof-uploads/{token}")
+async def api_proof_local_put(token: str, request: Request):
+    """The local backend's stand-in for an S3 presigned PUT (PROOF_STORAGE=local only)."""
+    store = proof.storage(settings)
+    if store.kind != "local":
+        raise HTTPException(404, "not found")
+    try:
+        t = store.read_token(token)
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(403, str(exc))
+    if request.headers.get("content-type", "").split(";")[0].strip() != t["t"]:
+        raise HTTPException(400, "wrong content type")
+    data = await request.body()
+    if len(data) != t["n"] or len(data) > proof.MAX_FILE:
+        raise HTTPException(400, "file size does not match")
+    store.write(t["k"], data)
+    return {"ok": True}
 
 
 # --------------------------------------------------------------------------- review (state; zone reads)
@@ -536,6 +631,7 @@ def api_form_export(request: Request, form_id: int, start: Optional[str] = None,
     user = current_user(request)
     form = _form(s, user, form_id)
     d0, d1 = _range(form, start, end, default_periods=0)
-    data = analytics.workbook(s, form, _scope(s, user, form, division, office), d0, d1)
+    data = analytics.workbook(s, form, _scope(s, user, form, division, office), d0, d1,
+                              app_url=settings.public_app_url)
     return Response(data, media_type=XLSX, headers=_attachment(f"{form.title_mr}_{d0}_{d1}.xlsx"))
 
