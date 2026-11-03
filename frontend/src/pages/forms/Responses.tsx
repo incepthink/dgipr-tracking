@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, Clock, FileSpreadsheet, Maximize2, Minimize2, RotateCcw, Undo2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSpreadsheet, Maximize2, Minimize2, Paperclip, RotateCcw, Undo2, X } from "lucide-react";
 import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, cn, dmy } from "@/lib/utils";
@@ -12,8 +12,15 @@ import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { fieldLabel, formTitle, useFormFilters } from "./common";
 import { periodName, useResponses } from "../office/shared";
+import { ProofList } from "./ProofBox";
 
 const SENT = ["submitted", "returned"];
+/** A sent row with a figure that needs proof and has none. */
+const lacksProof = (r: ResponseRow) => SENT.includes(r.status) && (r.proof_missing?.length ?? 0) > 0;
+/** Every live link and file of a row, over all its fields. */
+const proofCount = (r: ResponseRow) => Object.values(r.proofs ?? {}).reduce((n, l) => n + l.length, 0);
+/** Whether the proof column offers "View": something is attached, or something sent still needs it. */
+const hasProofView = (r: ResponseRow) => proofCount(r) > 0 || lacksProof(r);
 
 export function showValue(f: FormField, v: AnswerValue, t: (k: TKey) => string) {
   if (v === null || v === undefined || v === "") return "—";
@@ -232,17 +239,22 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
 
   // as in a spreadsheet: a header click sorts high → low (offices A → Z), each further click reverses it
   const [sort, setSort] = React.useState<Sort | null>(null);
+  // "Missing proof only": just the sent rows with a figure that still needs its proof
+  // the column shows while a field asks for proof, or proof is still attached from before it stopped asking
+  const asksProof = fields.some((x) => x.proof !== "none") || all.some((r) => proofCount(r) > 0);
+  const [onlyNoProof, setOnlyNoProof] = React.useState(false);
   const sortBy = (key: string) => setSort((s) => (s?.key === key
     ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
     : { key, dir: key === OFFICE ? "asc" : "desc" }));
 
   // newest date first, each date under its own band; the sort applies within each band
   const groups = React.useMemo(() => {
-    if (!byDate) return [{ ps: "", rows: sortRows(rows, sort, fields, lang) }];
+    const shown = onlyNoProof ? rows.filter(lacksProof) : rows;
+    if (!byDate) return [{ ps: "", rows: sortRows(shown, sort, fields, lang) }];
     const m = new Map<string, ResponseRow[]>();
-    rows.forEach((r) => m.set(r.period_start, [...(m.get(r.period_start) ?? []), r]));
+    shown.forEach((r) => m.set(r.period_start, [...(m.get(r.period_start) ?? []), r]));
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([p, rs]) => ({ ps: p, rows: sortRows(rs, sort, fields, lang) }));
-  }, [rows, byDate, sort, fields, lang]);
+  }, [rows, onlyNoProof, byDate, sort, fields, lang]);
 
   // the date band sticks just under the column headings, whose height depends on how their labels wrap
   const head = React.useRef<HTMLTableSectionElement>(null);
@@ -258,10 +270,12 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<{ id: string; key: string } | null>(null);
   const [showLog, setShowLog] = React.useState(false);
+  // the row whose proof is open; previous / next walk the rows offering "View", in table order
+  const [proofOf, setProofOf] = React.useState<string | null>(null);
 
   // full screen: the same body, laid over the page; Escape leaves it unless an edit or the history is open on top
   const [full, setFull] = React.useState(false);
-  const overlaid = !!editing || showLog;
+  const overlaid = !!editing || showLog || !!proofOf;
   React.useEffect(() => {
     if (!full) return;
     const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !overlaid) setFull(false); };
@@ -296,9 +310,12 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   if (ws.length && (data || error) && !rows.length) return null;
   const sent = all.filter((r) => SENT.includes(r.status)).length;
   const edited = all.filter((r) => Object.keys(r.corrections).length > 0).length;
+  const noProof = all.filter(lacksProof).length;
   const bodyId = `form-${form.id}`;
   const editRow = editing && all.find((r) => rowId(r) === editing.id);
   const editField = editing && fields.find((x) => x.key === editing.key);
+  const proofRows = groups.flatMap((g) => g.rows).filter(hasProofView);
+  const proofAt = proofRows.findIndex((r) => rowId(r) === proofOf);
   const when = byDate ? `${t("zb_all_dates")} · ${rangeText(start, end, lang)}` : periodName(form, ps, lang);
 
   return (
@@ -310,9 +327,9 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
           <b className="truncate text-[17px]">{formTitle(form, lang)}</b>
           <span className="text-[13px] text-r-muted">{when}</span>
           {/* on a phone the chips go under the title, which keeps the full width */}
-          {data && <CountChips sent={sent} total={all.length} edited={edited} small className="mt-1.5 sm:hidden" />}
+          {data && <CountChips sent={sent} total={all.length} edited={edited} noProof={noProof}small className="mt-1.5 sm:hidden" />}
         </span>
-        {data && <CountChips sent={sent} total={all.length} edited={edited} className="hidden justify-end sm:flex" />}
+        {data && <CountChips sent={sent} total={all.length} edited={edited} noProof={noProof}className="hidden justify-end sm:flex" />}
       </button>
 
       {open && full && <div className="fixed inset-0 z-40 bg-[#15202b]/55" aria-hidden onClick={() => setFull(false)} />}
@@ -324,9 +341,9 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
               <span className="flex min-w-0 flex-1 flex-col">
                 <b className="truncate text-[15px] sm:text-[17px]">{formTitle(form, lang)}</b>
                 <span className="truncate text-[13px] text-r-muted">{when}</span>
-                {data && <CountChips sent={sent} total={all.length} edited={edited} small className="mt-1.5 sm:hidden" />}
+                {data && <CountChips sent={sent} total={all.length} edited={edited} noProof={noProof}small className="mt-1.5 sm:hidden" />}
               </span>
-              {data && <CountChips sent={sent} total={all.length} edited={edited} className="hidden justify-end sm:flex" />}
+              {data && <CountChips sent={sent} total={all.length} edited={edited} noProof={noProof}className="hidden justify-end sm:flex" />}
               <button type="button" onClick={() => setFull(false)} aria-label={t("close")} title={t("close")}
                 className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-r-sunk text-r-ink hover:bg-r-line">
                 <X className="size-5" aria-hidden />
@@ -348,6 +365,13 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
               </>
             )}
             <PlaceFilters division={division} office={office} onChange={(p) => setPlace((s) => ({ ...s, ...p }))} />
+            {asksProof && (noProof > 0 || onlyNoProof) && (
+              <button type="button" aria-pressed={onlyNoProof} onClick={() => setOnlyNoProof((v) => !v)}
+                className={cn("inline-flex h-11.75 cursor-pointer items-center gap-2 rounded-xl border-[1.5px] px-4 text-[15px] font-semibold",
+                  onlyNoProof ? "border-r-overdue bg-r-overdue-soft text-r-overdue-ink" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
+                <span className="size-2 rounded-full bg-r-overdue" aria-hidden /> {t("resp_only_no_proof")}
+              </button>
+            )}
             {/* on a phone only the icon shows, so the date controls keep their row */}
             <RButton variant="ghost" size="sm" className="ml-auto" onClick={() => setFull((f) => !f)} aria-pressed={full}
               aria-label={t(full ? "collapse_table" : "expand_table")} title={t(full ? "collapse_table" : "expand_table")}>
@@ -355,22 +379,24 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
               <span className="hidden sm:inline">{t(full ? "collapse_table" : "expand_table")}</span>
             </RButton>
           </div>
-          {error ? <div className="p-4"><RError error={error} /></div> : isLoading || !data ? <div className="m-4 h-40 animate-pulse rounded-xl bg-r-sunk" /> : !rows.length ? (
+          {error ? <div className="p-4"><RError error={error} /></div> : isLoading || !data ? <div className="m-4 h-40 animate-pulse rounded-xl bg-r-sunk" /> : !groups.some((g) => g.rows.length) ? (
             <p className="m-0 p-5 text-r-muted">{t("resp_no_rows")}</p>
           ) : (
             <div className={cn("overflow-auto scrollbar-thin transition-opacity", full ? "min-h-0 flex-1" : "max-h-[70vh]", isFetching && "opacity-60")}>
               {/* every value column is wide enough that its heading wraps only between words; when they don't all fit,
                   the grid scrolls sideways with the office column pinned */}
-              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 148 + 72 + fields.length * 120 }}>
+              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 148 + 72 + (asksProof ? 88 : 0) + fields.length * 120 }}>
                 <colgroup>
                   <col className="w-[112px] md:w-[148px]" />
                   <col className="w-18" />
+                  {asksProof && <col className="w-22" />}
                   {fields.map((x) => <col key={x.key} />)}
                 </colgroup>
                 <thead ref={head} className="sticky top-0 z-20">
                   <tr>
                     <SortHead col={OFFICE} label={t("office")} sort={sort} onSort={sortBy} className="sticky left-0 z-30 pl-1.5 text-xs before:absolute before:inset-y-0 before:-left-2 before:w-2 before:bg-inherit" />
                     <SortHead col={SENT_COL} label={t("sent")} sort={sort} onSort={sortBy} className="px-0 text-xs" />
+                    {asksProof && <th scope="col" className="border-b border-r-line bg-r-card px-1 text-xs font-bold text-r-muted">{t("proof_word")}</th>}
                     {fields.map((x) => <SortHead key={x.key} col={x.key} label={fieldLabel(x, lang)} sort={sort} onSort={sortBy} center
                       className="px-0.5 text-xs leading-snug break-normal" />)}
                   </tr>
@@ -379,20 +405,20 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
                   <tbody key={g.ps || "one"}>
                     {byDate && (
                       <tr>
-                        <th scope="colgroup" colSpan={fields.length + 2} style={{ top: headH }}
+                        <th scope="colgroup" colSpan={fields.length + (asksProof ? 3 : 2)} style={{ top: headH }}
                           className="sticky z-15 border-b border-r-line bg-r-sunk px-3 py-1.5 text-left text-[13px]">
                           {/* the label also stays at the left edge while the grid scrolls sideways */}
                           <span className="sticky left-3 inline-flex items-center gap-2.5">
                             <span className="font-bold">{periodName(form, g.ps, lang)}</span>
                             <CountChips small sent={g.rows.filter((r) => SENT.includes(r.status)).length} total={g.rows.length}
-                              edited={g.rows.filter((r) => Object.keys(r.corrections).length > 0).length} />
+                              edited={g.rows.filter((r) => Object.keys(r.corrections).length > 0).length} noProof={g.rows.filter(lacksProof).length} />
                           </span>
                         </th>
                       </tr>
                     )}
                     {g.rows.map((r) => (
                       <Row key={rowId(r)} r={r} fields={fields} canEdit={canEdit} editing={editing?.id === rowId(r) ? editing.key : null}
-                        onEdit={(key) => setEditing({ id: rowId(r), key })} />
+                        onEdit={(key) => setEditing({ id: rowId(r), key })} asksProof={asksProof} onProof={() => setProofOf(rowId(r))} />
                     ))}
                   </tbody>
                 ))}
@@ -420,6 +446,10 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
         <EditSheet key={`${rowId(editRow)}:${editField.key}`} form={form} row={editRow} field={editField} busy={busy === rowId(editRow)}
           onSave={(v, note) => save(editRow, editField.key, v, note)} onRevert={(id) => revert(editRow, id)} onClose={() => setEditing(null)} />
       )}
+      {proofAt >= 0 && (
+        <ProofModal form={form} row={proofRows[proofAt]} fields={fields} at={proofAt} of={proofRows.length} byDate={byDate}
+          onStep={(d) => setProofOf(rowId(proofRows[proofAt + d]))} onClose={() => setProofOf(null)} />
+      )}
       {showLog && data && (
         <HistoryModal form={data.form} when={when} byDate={byDate} rows={all} fields={fields} canEdit={canEdit} busy={busy}
           onRevert={revert} onOpen={(r, key) => { setShowLog(false); setEditing({ id: rowId(r), key }); }} onClose={() => setShowLog(false)} />
@@ -430,7 +460,9 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
 
 /** "43 of 129 sent" (and "2 edited") as status chips, styled as on My forms: green when every office has sent,
  * soft green part way, grey when none has. */
-function CountChips({ sent, total, edited = 0, small, className }: { sent: number; total: number; edited?: number; small?: boolean; className?: string }) {
+function CountChips({ sent, total, edited = 0, noProof = 0, small, className }: {
+  sent: number; total: number; edited?: number; noProof?: number; small?: boolean; className?: string;
+}) {
   const { tf } = useT();
   const chip = cn("num inline-flex shrink-0 items-center rounded-full font-bold whitespace-nowrap", small ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-[13px]");
   return (
@@ -439,6 +471,7 @@ function CountChips({ sent, total, edited = 0, small, className }: { sent: numbe
         {tf("resp_counts", { a: sent, b: total })}
       </span>
       {edited > 0 && <span className={cn(chip, "bg-r-corrected/10 text-r-corrected-ink")}>{tf("resp_edited", { n: edited })}</span>}
+      {noProof > 0 && <span className={cn(chip, "bg-r-overdue-soft text-r-overdue-ink")}>{tf("resp_no_proof", { n: noProof })}</span>}
     </span>
   );
 }
@@ -466,11 +499,14 @@ function SortHead({ col, label, sort, onSort, center, className }: {
   );
 }
 
-function Row({ r, fields, canEdit, editing, onEdit }: {
+function Row({ r, fields, canEdit, editing, onEdit, asksProof, onProof }: {
   r: ResponseRow; fields: FormField[]; canEdit: boolean; editing: string | null; onEdit: (key: string) => void;
+  asksProof: boolean; onProof: () => void;
 }) {
   const { t, lang } = useT();
   const sent = SENT.includes(r.status);
+  const nProof = proofCount(r);
+  const missing = lacksProof(r);
   const bg = r.status === "returned" ? "bg-r-overdue-soft" : sent ? "bg-r-accepted-soft" : "bg-r-card";
   return (
     <tr className={bg}>
@@ -483,6 +519,19 @@ function Row({ r, fields, canEdit, editing, onEdit }: {
       <td className={cn("truncate border-b border-r-line-soft px-1.5 py-1.5 text-xs whitespace-nowrap", sent ? "text-r-muted" : "text-r-overdue-ink")}>
         {sent && r.submitted_at ? (r.submitted_at.slice(0, 10) <= r.period_end ? timeOf(r.submitted_at, lang) : whenText(r.submitted_at, lang)) : r.status === "draft" ? t("sub_draft") : t("sub_none")}
       </td>
+      {asksProof && (
+        <td className="border-b border-r-line-soft px-1 py-1 text-center">
+          {hasProofView(r) ? (
+            <button type="button" onClick={onProof} aria-label={`${t("proof_word")}: ${officeName(r, lang)}`}
+              title={missing ? t("proof_missing_mark") : undefined}
+              className={cn("num inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border-0 px-2.5 text-xs font-bold whitespace-nowrap",
+                missing ? "bg-r-overdue-soft text-r-overdue-ink hover:bg-r-overdue/20" : "bg-r-action-soft text-r-action hover:bg-r-action/20")}>
+              {missing ? <span className="size-1.5 rounded-full bg-r-overdue" aria-hidden /> : <Paperclip className="size-3" aria-hidden />}
+              {t("view")}{nProof > 0 && <span className="font-normal">· {nProof}</span>}
+            </button>
+          ) : <span className="text-xs text-r-faint">—</span>}
+        </td>
+      )}
       {fields.map((x) => {
         const v = r.values[x.key];
         const c = r.corrections[x.key];
@@ -551,6 +600,8 @@ function EditSheet({ form, row, field, busy, onSave, onRevert, onClose }: {
         <button type="submit" hidden />
       </form>
 
+      <ProofSection form={form} row={row} field={field} />
+
       <section className="flex flex-col gap-1" aria-labelledby="edit-history">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 id="edit-history" className="m-0 text-[15px] font-bold">{t("edit_history")}</h3>
@@ -602,6 +653,100 @@ function EditEntry({ e, first, latest, show, current, canGoBack, busy, onRevert 
         )}
       </span>
     </li>
+  );
+}
+
+// --------------------------------------------------------------------------- proof of one value
+/** The links and files the office attached to a figure (app/forms/proof.py), or why there are none. */
+function ProofSection({ form, row, field }: { form: FormDef; row: ResponseRow; field: FormField }) {
+  const { t } = useT();
+  if (field.proof === "none") return null;
+  const proofs = row.proofs?.[field.key] ?? [];
+  const missing = row.proof_missing?.includes(field.key);
+  return (
+    <section className="flex flex-col gap-2" aria-labelledby="value-proof">
+      <h3 id="value-proof" className="m-0 flex items-center gap-2 text-[15px] font-bold">
+        <Paperclip className="size-4 text-r-muted" aria-hidden /> {t("proof_word")}
+        {missing && <span className="rounded-full bg-r-overdue-soft px-2.5 py-0.5 text-xs font-bold text-r-overdue-ink">{t("proof_missing_mark")}</span>}
+      </h3>
+      {!proofs.length && row.proof_exempt ? <span className="text-sm text-r-muted">{t("proof_exempt")}</span>
+        : <ProofList formId={form.id} proofs={proofs} />}
+    </section>
+  );
+}
+
+/** All of one office's proof for a period, figure by figure: each field that asks for proof and has a figure or proof,
+ * with what was attached, who added it, and what is still missing. ← / → (or the footer) step to the previous / next office. */
+function ProofModal({ form, row, fields, at, of, byDate, onStep, onClose }: {
+  form: FormDef; row: ResponseRow; fields: FormField[]; at: number; of: number; byDate: boolean;
+  onStep: (d: -1 | 1) => void; onClose: () => void;
+}) {
+  const { t, tf, lang } = useT();
+  const sent = SENT.includes(row.status);
+  React.useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement)?.closest?.("input, textarea, select")) return;
+      if (e.key === "ArrowLeft" && at > 0) onStep(-1);
+      if (e.key === "ArrowRight" && at < of - 1) onStep(1);
+    };
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  }, [at, of, onStep]);
+
+  // figures left blank or at 0 need no proof; they are left out unless something was attached anyway
+  const shown = fields.filter((x) => (row.proofs?.[x.key]?.length ?? 0) > 0
+    || (x.proof !== "none" && (row.proof_missing?.includes(x.key) || Number(row.values[x.key]) > 0)));
+  const total = proofCount(row);
+  const missing = sent ? row.proof_missing?.length ?? 0 : 0;
+  const status = sent && row.submitted_at ? `${t("sub_submitted")} ${whenText(row.submitted_at, lang)}${row.submitted_by ? ` · ${row.submitted_by}` : ""}`
+    : row.status === "draft" ? t("sub_draft") : t("sub_none");
+
+  return (
+    <RSheet open wide onClose={onClose} closeLabel={t("close")} title={officeName(row, lang)}
+      description={`${byDate ? `${periodName(form, row.period_start, lang)} · ` : ""}${status}`}
+      footer={
+        <div className="flex items-center justify-between gap-2.5">
+          <RButton variant="ghost" size="sm" disabled={at === 0} onClick={() => onStep(-1)}><ChevronLeft aria-hidden /> {t("prev_day")}</RButton>
+          <span className="num text-[13px] text-r-muted">{at + 1} / {of}</span>
+          <RButton variant="ghost" size="sm" disabled={at >= of - 1} onClick={() => onStep(1)}>{t("next_day")} <ChevronRight aria-hidden /></RButton>
+        </div>
+      }>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="num inline-flex items-center gap-1 rounded-full bg-r-action-soft px-3 py-1 text-[13px] font-bold text-r-action">
+          <Paperclip className="size-3.5" aria-hidden /> {tf("proof_count", { n: total })}
+        </span>
+        {missing > 0 && <span className="num rounded-full bg-r-overdue-soft px-3 py-1 text-[13px] font-bold text-r-overdue-ink">{tf("n_proof_missing", { n: missing })}</span>}
+      </div>
+      {!shown.length ? <p className="m-0 text-r-muted">{row.proof_exempt ? t("proof_exempt") : t("proof_none_attached")}</p> : (
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {shown.map((x) => {
+            const list = row.proofs?.[x.key] ?? [];
+            const lack = sent && row.proof_missing?.includes(x.key);
+            const v = row.values[x.key];
+            const links = list.filter((p) => p.kind === "link").length;
+            // a links field counts one link per item; a later correction can leave the two apart
+            const off = x.proof === "links" && typeof v === "number" && list.length > 0 && links !== v;
+            const by = [...new Set(list.map((p) => p.added_by).filter(Boolean))].join(", ");
+            const last = list.map((p) => p.added_at).sort().at(-1);
+            return (
+              <li key={x.key} className={cn("flex flex-col gap-2.5 rounded-xl border p-3", lack ? "border-r-overdue/40 bg-r-overdue-soft/40" : "border-r-line")}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex min-w-0 flex-col">
+                    <b className="text-[15px] first-letter:uppercase">{fieldLabel(x, lang)}</b>
+                    <span className="text-xs text-r-muted">{t(`proof_type_${x.proof}` as TKey)}</span>
+                  </span>
+                  <span className="num shrink-0 text-[22px] leading-none font-bold">{showValue(x, v, t)}</span>
+                </div>
+                {lack && <span className="self-start rounded-full bg-r-overdue-soft px-2.5 py-0.5 text-xs font-bold text-r-overdue-ink">{t("proof_missing_mark")}</span>}
+                {off && <span className="text-xs font-bold text-r-overdue-ink">{tf("proof_links_match", { n: links })}</span>}
+                {list.length > 0 ? <ProofList formId={form.id} proofs={list} /> : !lack && <span className="text-sm text-r-muted">{t("proof_none_attached")}</span>}
+                {last && <span className="text-xs text-r-muted">{whenText(last, lang)}{by ? ` · ${by}` : ""}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </RSheet>
   );
 }
 
