@@ -107,8 +107,6 @@ const DICT = {
   zeros_real: { mr: "शून्य: प्रत्येक खरे आहे हे सांगा", en: "Zeros: say each one is real" },
   was_zero: { mr: "० होते", en: "was 0" },
   zero_confirmed_word: { mr: "निश्चित", en: "confirmed" },
-  left_blank: { mr: "रिकामे सोडलेले", en: "Left blank" },
-  left_blank_help: { mr: "हे “भरलेले नाही” म्हणून जातील, ० म्हणून मोजले जाणार नाहीत. खरोखर एकही नसेल तरच खूण करा.", en: "These go as not entered. They are not counted as 0. Tick one only if there really were none." },
   your_figures: { mr: "तुमची आकडेवारी", en: "Your figures" },
   required_missing: { mr: "आवश्यक, अजून रिकामे: {list}", en: "Required, still empty: {list}" },
   send_day: { mr: "{day} राज्य कार्यालयाला पाठवा", en: "Send {day} to the state office" },
@@ -1137,10 +1135,7 @@ const DICT = {
   link_used_other: { mr: "दुसऱ्या कार्यालयाने आधीच मोजली आहे", en: "Already counted by another office" },
   link_ok: { mr: "मोजली", en: "Counted" },
   link_open: { mr: "उघडा", en: "Open" },
-  links_none_today: { mr: "आज एकही नाही", en: "None today" },
-  links_count: { mr: "लिंकची संख्या", en: "Number of links" },
   links_checking: { mr: "लिंक तपासत आहे…", en: "Checking links…" },
-  n_links_bad: { mr: "{n} लिंक मोजता येत नाहीत", en: "{n} link(s) can't be counted" },
   file_too_big: { mr: "१० MB पेक्षा मोठी फाइल", en: "File over 10 MB" },
   file_bad_type: { mr: "फक्त PDF, JPG किंवा PNG", en: "Only PDF, JPG or PNG" },
   file_failed: { mr: "अपलोड झाले नाही", en: "Upload failed" },
@@ -1154,7 +1149,8 @@ const DICT = {
   proof_type_files: { mr: "PDF/फोटो", en: "PDF/photo" },
   proof_type_either: { mr: "लिंक किंवा PDF/फोटो", en: "Links or PDF/photo" },
   proof_from_note: { mr: "पुरावा आवश्यक: {day} पासून", en: "Proof required from {day}" },
-  proof_links_hint: { mr: "आकडा म्हणजे लिंकची संख्या", en: "The number is the count of links" },
+  proof_links_hint: { mr: "प्रत्येकासाठी एक लिंक द्या", en: "One link for each" },
+  proof_links_match: { mr: "आकडा लिंकच्या संख्येइतका हवा ({n} लिंक)", en: "The number must match the links ({n} links)" },
 } satisfies Record<string, Record<Lang, string>>;
 
 export type TKey = keyof typeof DICT;

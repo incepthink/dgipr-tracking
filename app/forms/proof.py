@@ -1,6 +1,6 @@
 """Proof behind reported figures (पुरावा): the post links or PDF/photo files an office attaches to a number.
 
-A field's `proof` says what it takes: none, links (the number is the count of links, set by the server), files,
+A field's `proof` says what it takes: none, links (the number is typed and must equal the count of links), files,
 or either (links or files; the number is typed and needs at least one item when above 0). Proof is required from
 the form's `proof_from` day; earlier periods are exempt.
 

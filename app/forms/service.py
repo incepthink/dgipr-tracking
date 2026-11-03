@@ -12,7 +12,7 @@ field can never pass for a confirmed zero. An edit keeps the office's original v
 values. Every change writes an audit entry.
 
 Proof (app.forms.proof): from the form's proof_from day, a district office can't send a figure above 0 without
-the links or files its field asks for; a links field's number is the count of its links. Proof rows are only
+the links or files its field asks for; a links field's typed number must equal the count of its links. Proof rows are only
 soft-removed. The state office's own entries and corrections are never blocked."""
 from __future__ import annotations
 
@@ -271,14 +271,6 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
         raise FormError(f"unknown field(s): {', '.join(unknown)}")
     values = dict(values)
     plan = _proof_plan(s, form, office, ps, sub, by_key, proofs or {}, store)
-    if P.applies(form, ps):
-        # a links field's figure is the number of its links; with none, only a confirmed 0 (or blank) is kept
-        for k, f in by_key.items():
-            if f.proof != "links" or (k not in plan and not (check and k in values)):
-                continue
-            n = len(plan[k]["links"]) if k in plan else sum(
-                1 for pr in P.live(sub) if pr.field_id == f.id and pr.kind == "link")
-            values[k] = n if n else (0 if _is_zero(values.get(k)) else None)
     cleaned = {k: clean_value(by_key[k], v) for k, v in values.items()}
 
     if sub is None:
@@ -330,6 +322,17 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
         n = next((r.value_num for r in sub.values if r.field_id == f.id), None)
         if f.proof == "either" and len(item["links"]) > (n or 0):
             raise FormError(f"{f.label_mr}: more links than the number")
+    if P.applies(form, ps):
+        # a links field's typed figure must equal its number of links (the state office may enter one without links)
+        for k in plan.keys() | values.keys():
+            f = by_key[k]
+            if f.proof != "links":
+                continue
+            n = next((r.value_num for r in sub.values if r.field_id == f.id), None)
+            links = sum(1 for pr in P.live(sub) if pr.field_id == f.id and pr.kind == "link")
+            if (n or 0) != links and not (links == 0 and (not check or (user is not None and user.role == "state"))):
+                typed = "blank" if n is None else f"{n:g}"
+                raise FormError(f"{f.label_mr}: the number ({typed}) must match the links ({links})")
     if check and sub.status == "submitted" and not submit and (missing := missing_required(form, sub)):
         raise FormError("a sent period can't lose a required field: " + ", ".join(f.label_mr for f in missing))
     if (check and sub.status == "submitted" and not submit and user is not None and user.role != "state"
@@ -341,13 +344,6 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
     if submit:
         submit_(s, user, form, sub, actor=who, check=check)
     return sub
-
-
-def _is_zero(v: Any) -> bool:
-    try:
-        return v is not None and not isinstance(v, bool) and float(str(v).strip() or "x") == 0
-    except ValueError:
-        return False
 
 
 def _proof_plan(s: Session, form: Form, office: str, ps: date, sub: Optional[FormSubmission],

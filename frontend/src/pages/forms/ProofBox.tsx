@@ -3,7 +3,7 @@ import { AlertCircle, Check, ExternalLink, FileText, Image as ImageIcon, Loader2
 import { api, ApiError, proofFileUrl, uploadFile, type FormField, type LinkCheck, type Proof } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import { RCheck, RTextarea } from "@/components/reports/kit";
+import { RTextarea } from "@/components/reports/kit";
 import { dayMonth } from "@/components/reports/period";
 
 /* The proof box beside a figure on the entry page (app/forms/proof.py): links pasted one per line, PDF/photo files
@@ -251,26 +251,6 @@ export function ProofList({ formId, proofs }: { formId: number; proofs: Proof[] 
         </a>
       ))}
     </div>
-  );
-}
-
-/** The big read-only count that stands in for the number box on a links field, with "none today" while there are none. */
-export function LinkCount({ id, count, bad, zero, disabled, onZero }: {
-  id: string; count: number; bad: number; zero: boolean; disabled?: boolean; onZero: (on: boolean) => void;
-}) {
-  const { t, tf } = useT();
-  return (
-    <span className="flex shrink-0 flex-col items-end gap-1">
-      <output id={id} aria-label={t("links_count")}
-        className={cn("flex h-[54px] min-w-28 items-center justify-end rounded-xl bg-r-sunk/60 px-3.5 num text-xl font-semibold",
-          count === 0 && !zero && "text-r-faint")}>
-        {count > 0 || zero ? count : "—"}
-      </output>
-      {bad > 0 && <span className="text-xs font-bold text-r-overdue-ink">{tf("n_links_bad", { n: bad })}</span>}
-      {count === 0 && bad === 0 && !disabled && (
-        <RCheck plain checked={zero} onChange={onZero} className="text-sm">{t("links_none_today")}</RCheck>
-      )}
-    </span>
   );
 }
 

@@ -14,7 +14,7 @@ import { dayMonth, entryClosed, isOverdue, longDay, periodOf, rangeText, whenTex
 import { Instructions } from "./MyForms";
 import { fieldLabel, formTitle, groupName, useToday } from "./common";
 import {
-  EMPTY, FileBox, LinkCount, LinkLines, LinksInput, ProofList, fieldTakesFiles, fieldTakesLinks, parseLinks, proofDraftOf,
+  EMPTY, FileBox, LinkLines, LinksInput, ProofList, fieldTakesFiles, fieldTakesLinks, parseLinks, proofDraftOf,
   proofPayload, sameProof, uploadPicked, type FileItem, type ProofDraft,
 } from "./ProofBox";
 
@@ -36,10 +36,10 @@ function problemOf(f: FormField, v: string, tr: Tr) {
   return "";
 }
 
-function hintOf(f: FormField, tr: Tr, linksCount: boolean) {
+function hintOf(f: FormField, tr: Tr, oneLinkEach: boolean) {
   const help = tr.lang === "en" ? f.help_en || f.help_mr : f.help_mr;
-  const parts = [f.required ? tr.t("required") : "", f.type === "number" && f.max_value !== null && !linksCount ? tr.tf("range_hint", { min: f.min_value ?? 0, max: f.max_value }) : "",
-    linksCount ? tr.t("proof_links_hint") : "", help];
+  const parts = [f.required ? tr.t("required") : "", f.type === "number" && f.max_value !== null ? tr.tf("range_hint", { min: f.min_value ?? 0, max: f.max_value }) : "",
+    oneLinkEach ? tr.t("proof_links_hint") : "", help];
   return parts.filter(Boolean).join(" · ");
 }
 
@@ -64,7 +64,7 @@ export default function FillFormPage() {
   const formId = Number(id);
   const me = useUser();
   const tr = useT();
-  const { t, name, lang } = tr;
+  const { t, tf, name, lang } = tr;
   const { data: meta } = useMeta();
   const qc = useQueryClient();
   const [params, setParams] = useSearchParams();
@@ -151,12 +151,14 @@ export default function FillFormPage() {
     if (!isZero(f, v)) return "none";
     return original[ps]?.[f.key] === v || confirmed.has(ck(ps, f.key)) ? "ok" : "ask";
   };
-  /** Why a field's proof can't be saved (red links, more links than the number), or "". */
+  /** Why a field's proof can't be saved (red links, more links than the number, number and links differ), or "". */
   const proofProblem = (ps: string, f: FormField) => {
     if (!proofOn(ps) || !fieldTakesLinks(f)) return "";
     const links = parseLinks(proofOf(ps, f.key).linksText);
     if (linkState(ps, f.key).checks?.some((c) => c.problem)) return t("proof_fix_links");
-    if (f.proof === "either" && links.length > Number(cur(ps, f.key) || 0)) return t("proof_more_links");
+    const n = Number(cur(ps, f.key) || 0);
+    if (f.proof === "either" && links.length > n) return t("proof_more_links");
+    if (f.proof === "links" && links.length !== n && !(me.role === "state" && !links.length)) return tf("proof_links_match", { n: links.length });
     return "";
   };
   /** A figure above 0 that still needs its PDF/photo or link. */
@@ -209,14 +211,7 @@ export default function FillFormPage() {
     const d = prev[ps]?.[k] ?? proofOrig[ps]?.[k] ?? EMPTY;
     return { ...prev, [ps]: { ...prev[ps], [k]: fn(d) } };
   });
-  /** Pasted links; on a links field the figure follows their count (blank, or a ticked "none today" 0, when there are none). */
-  const setLinks = (ps: string, f: FormField, text: string) => {
-    setProof(ps, f.key, (d) => ({ ...d, linksText: text }));
-    if (f.proof === "links") {
-      const n = parseLinks(text).length;
-      setCell(ps, f.key, n ? String(n) : cur(ps, f.key) === "0" ? "0" : "");
-    }
-  };
+  const setLinks = (ps: string, f: FormField, text: string) => setProof(ps, f.key, (d) => ({ ...d, linksText: text }));
   const addFiles = (ps: string, f: FormField, list: File[]) => {
     const upd = (uid: string, p: Partial<FileItem>) => setProof(ps, f.key, (d) => ({ ...d, files: d.files.map((x) => (x.uid === uid ? { ...x, ...p } : x)) }));
     void uploadPicked(list, { formId, office, ps, field: f.key }, (it) => setProof(ps, f.key, (d) => ({ ...d, files: [...d.files, it] })), upd, t);
@@ -371,7 +366,7 @@ export default function FillFormPage() {
       )}
 
       {reviewP && form && (
-        <ReviewSheet form={form} p={reviewP} fields={fields} cur={cur} setCell={setCell} zeroState={(f) => zeroState(reviewP.period_start, f)}
+        <ReviewSheet form={form} p={reviewP} fields={fields} cur={cur} zeroState={(f) => zeroState(reviewP.period_start, f)}
           confirmZero={(k, on) => confirmZeros(reviewP.period_start, [k], on)} check={check(reviewP.period_start)}
           fieldProblem={(f) => fieldProblem(reviewP.period_start, f)} uploading={uploading}
           busy={busy} onClose={() => setReviewing(null)} onSend={(note) => send([reviewP.period_start], note)} officeName={name(officeRef)} />
@@ -624,23 +619,18 @@ function FieldRow({ formId, f, first, value, disabled, corrected, changed, zero,
   const { t, lang } = tr;
   const id = `f_${f.key}`;
   const withProof = proof.on && f.type === "number" && f.proof !== "none";
-  const linksCount = withProof && f.proof === "links";
-  const hint = hintOf(f, tr, linksCount);
+  const hint = hintOf(f, tr, withProof && f.proof === "links");
   const pd = proof.of(f.key);
   const links = parseLinks(pd.linksText);
   const ls = proof.links(f.key);
-  const bad = ls.checks?.filter((c) => c.problem).length ?? 0;
   const needs = withProof && proof.needs(f);
-  const inputCls = cn("h-[54px] w-28 shrink-0 rounded-xl px-3.5 text-right num text-xl font-semibold text-r-ink placeholder:font-body placeholder:text-sm placeholder:font-normal placeholder:text-r-faint disabled:opacity-100",
+  const inputCls = cn("h-[54px] w-28 shrink-0 rounded-xl px-3 text-center num text-xl font-semibold text-r-ink placeholder:font-body placeholder:text-sm placeholder:font-normal placeholder:text-r-faint disabled:opacity-100",
     "border-[1.5px] border-r-faint bg-r-card shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)] focus:border-r-action focus:outline-2 focus:outline-offset-0 focus:outline-r-action/30",
     zero === "ask" && "border-2 border-solid border-r-returned bg-r-returned-soft",
     problem && "border-2 border-solid border-r-overdue bg-r-overdue-soft text-r-overdue-ink",
     corrected && "text-r-corrected-ink", disabled && "border-solid bg-r-sunk/60", changed && !problem && zero !== "ask" && "border-r-action");
   const wide = f.type === "text" || f.type === "choice" || f.type === "yesno" || f.type === "date";
-  const control = linksCount ? (
-    <LinkCount id={id} count={links.length - bad} bad={bad} zero={value === "0"} disabled={disabled}
-      onZero={(on) => { onChange(on ? "0" : ""); if (on) onConfirm(true); }} />
-  ) : f.type === "yesno" || f.type === "choice" ? (
+  const control = f.type === "yesno" || f.type === "choice" ? (
     <RSelect id={id} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cn("min-h-[54px] w-full rounded-xl text-base", corrected && "text-r-corrected-ink")}>
       <option value="">{t("choose")}</option>
       {(f.type === "yesno" ? [["yes", t("yes")], ["no", t("no")]] : f.options.map((o) => [o, o])).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -680,7 +670,7 @@ function FieldRow({ formId, f, first, value, disabled, corrected, changed, zero,
     <div className={cn("flex flex-col gap-2 px-3.5 py-3", !first && "border-t border-r-sunk", withProof && "lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8")}>
       <div className="flex min-w-0 flex-col gap-2">
         <div className={cn("flex gap-3", wide ? "flex-col" : "items-center justify-between")}>
-          <label htmlFor={linksCount ? `${id}_links` : id} className="flex flex-1 flex-col">
+          <label htmlFor={id} className="flex flex-1 flex-col">
             <span className="leading-tight font-bold">{fieldLabel(f, lang)}{f.required && <span className="text-r-overdue" aria-hidden> *</span>}</span>
             {hint && <span className="text-[13px] text-r-muted">{hint}</span>}
           </label>
@@ -691,14 +681,14 @@ function FieldRow({ formId, f, first, value, disabled, corrected, changed, zero,
             <AlertCircle className="mt-px size-[18px] shrink-0 text-r-overdue" aria-hidden /> {message}
           </div>
         )}
-        {!message && !linksCount && zero === "ask" && !disabled && (
+        {!message && zero === "ask" && !disabled && (
           <div id={`${id}_m`} className="flex items-center justify-between gap-2.5 rounded-[10px] bg-r-returned-soft px-2.5 py-2">
             <span className="text-sm text-r-returned-ink">{t("zero_q")}</span>
             <button type="button" onClick={() => onConfirm(true)}
               className="min-h-10 shrink-0 cursor-pointer rounded-[10px] border-[1.5px] border-r-returned-ink bg-r-card px-3.5 text-sm font-bold text-r-returned-ink">{t("yes_zero")}</button>
           </div>
         )}
-        {!message && !linksCount && zero === "ok" && changed && (
+        {!message && zero === "ok" && changed && (
           <div id={`${id}_m`} className="flex items-center gap-2 text-sm font-bold text-r-accepted">
             <StatusMark mark="acc" size={12} /> {t("zero_ok")}
             {!disabled && <button type="button" onClick={() => onConfirm(false)} className="ml-auto min-h-8 cursor-pointer border-0 bg-transparent text-sm font-normal text-r-action">{t("undo")}</button>}
@@ -711,8 +701,8 @@ function FieldRow({ formId, f, first, value, disabled, corrected, changed, zero,
 }
 
 // --------------------------------------------------------------------------- check before sending
-function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, check, fieldProblem, uploading, busy, onClose, onSend, officeName }: {
-  form: FormDef; p: Submission; fields: FormField[]; cur: (ps: string, k: string) => string; setCell: (ps: string, k: string, v: string) => void;
+function ReviewSheet({ form, p, fields, cur, zeroState, confirmZero, check, fieldProblem, uploading, busy, onClose, onSend, officeName }: {
+  form: FormDef; p: Submission; fields: FormField[]; cur: (ps: string, k: string) => string;
   zeroState: (f: FormField) => "none" | "ask" | "ok"; confirmZero: (k: string, on: boolean) => void; check: Check; fieldProblem: (f: FormField) => string;
   uploading: boolean; busy: boolean; onClose: () => void; onSend: (note: string) => void; officeName: string;
 }) {
@@ -721,11 +711,7 @@ function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, ch
   const ps = p.period_start;
   const [note, setNote] = React.useState("");
   const day = form.frequency === "daily" ? dayMonth(ps, lang) : form.frequency === "weekly" ? rangeText(ps, p.period_end, lang) : formTitle(form, lang);
-  const zeros = fields.filter((f) => zeroState(f) !== "none");
-  /** Blanks the office may still turn into a confirmed 0 here (they were blank, or became 0 on this sheet). */
-  const [blankKeys] = React.useState(() => fields.filter((f) => f.type === "number" && !f.required && cur(ps, f.key) === "").map((f) => f.key));
-  const blanks = fields.filter((f) => blankKeys.includes(f.key));
-  const otherZeros = zeros.filter((f) => !blankKeys.includes(f.key));
+  const otherZeros = fields.filter((f) => zeroState(f) !== "none");
   const figures = fields.filter((f) => cur(ps, f.key) !== "" && !(f.type === "number" && Number(cur(ps, f.key)) === 0 && /^\d/.test(cur(ps, f.key))));
   const ready = !check.ask.length && !check.bad.length && !check.missing.length && !check.blocksSend && !check.checking && !uploading;
   const label = check.bad.length ? t("fix_to_send") : check.missing.length ? tf("required_missing", { list: check.missing.map((f) => fieldLabel(f, lang)).join(", ") })
@@ -764,22 +750,6 @@ function ReviewSheet({ form, p, fields, cur, setCell, zeroState, confirmZero, ch
               <span className="flex-1"><b>{fieldLabel(f, lang)}</b> {t("was_zero")}</span>
             </RCheck>
           ))}
-        </section>
-      )}
-
-      {blanks.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <h2 className="mx-1 my-0 text-[17px] font-bold">{t("left_blank")} · {blanks.filter((f) => cur(ps, f.key) === "").length}</h2>
-          <p className="mx-1 my-0 text-[15px] text-r-muted">{t("left_blank_help")}</p>
-          {blanks.map((f) => {
-            const on = cur(ps, f.key) === "0";
-            return (
-              <RCheck plain key={f.key} checked={on} onChange={(v) => { if (v) { setCell(ps, f.key, "0"); confirmZero(f.key, true); } else setCell(ps, f.key, ""); }}
-                className="flex min-h-[52px] w-full gap-3 rounded-xl border-[1.5px] border-r-line bg-r-card px-3 py-2 text-[15px] [&>span:first-child]:size-6">
-                <span className="flex-1"><b>{fieldLabel(f, lang)}</b> {t("was_zero")}</span>
-              </RCheck>
-            );
-          })}
         </section>
       )}
 

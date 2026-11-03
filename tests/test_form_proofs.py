@@ -1,4 +1,4 @@
-"""Proof of work on report forms: link parsing and canonical form, the links-count rule, link checks (platform,
+"""Proof of work on report forms: link parsing and canonical form, the number-matches-links rule, link checks (platform,
 repeats, already counted), file uploads through the local backend, the district submit block, exempt periods,
 file access per role, soft removal with audit, responses and the Excel पुरावा sheet, and the S3 backend with a
 stubbed client."""
@@ -131,14 +131,17 @@ def upload(client, form, office, day, field, data: bytes, ctype="application/pdf
 
 
 # --------------------------------------------------------------------------- links
-def test_links_set_the_number(pform, solapur, web):
-    r = put(solapur, pform, "solapur", TODAY, {"facebook": 99}, {"facebook": {"links": FB}})
+def test_links_match_the_number(admin_client, pform, solapur, web):
+    bad = put(solapur, pform, "solapur", TODAY, {"facebook": 99}, {"facebook": {"links": FB}})
+    assert bad.status_code == 400 and "must match" in bad.json()["detail"]
+    r = put(solapur, pform, "solapur", TODAY, {"facebook": 4}, {"facebook": {"links": FB}})
     assert r.status_code == 200, r.text
     got = r.json()
     assert got["values"]["facebook"] == 4 and [p["url"] for p in got["proofs"]["facebook"]] == FB
     assert got["proof_exempt"] is False and got["proof_missing"] == []
-    # removing one: 3, the removed row stays on record, soft-deleted with an audit entry
-    got = put(solapur, pform, "solapur", TODAY, {}, {"facebook": {"links": FB[:3]}}).json()
+    # removing one needs the number lowered too; the removed row stays on record, soft-deleted with an audit entry
+    assert put(solapur, pform, "solapur", TODAY, {}, {"facebook": {"links": FB[:3]}}).status_code == 400
+    got = put(solapur, pform, "solapur", TODAY, {"facebook": 3}, {"facebook": {"links": FB[:3]}}).json()
     assert got["values"]["facebook"] == 3 and len(got["proofs"]["facebook"]) == 3
     with web.SessionF() as s:
         gone = s.scalars(select(FormProof).where(FormProof.url == FB[3])).one()
@@ -148,14 +151,18 @@ def test_links_set_the_number(pform, solapur, web):
     assert acts.count("form_proof.add") == 4 and acts.count("form_proof.remove") == 1
     # a pasted WhatsApp message: only the links are kept
     blob = "आजच्या पोस्ट: https://www.instagram.com/p/AAA/?igsh=x आणि https://instagram.com/p/BBB पहा"
-    got = put(solapur, pform, "solapur", TODAY, {}, {"instagram": {"links": [blob]}}).json()
-    assert got["values"]["instagram"] == 2
-    # the number of a links field can't be typed: no links and no "none today" tick stores blank, the tick stores 0
-    got = put(solapur, pform, "solapur", TODAY, {"instagram": 5}, {"instagram": {"links": []}}).json()
+    got = put(solapur, pform, "solapur", TODAY, {"instagram": 2}, {"instagram": {"links": [blob]}}).json()
+    assert got["values"]["instagram"] == 2 and len(got["proofs"]["instagram"]) == 2
+    # with no links the number is blank or 0
+    assert put(solapur, pform, "solapur", TODAY, {"instagram": 5}, {"instagram": {"links": []}}).status_code == 400
+    got = put(solapur, pform, "solapur", TODAY, {"instagram": None}, {"instagram": {"links": []}}).json()
     assert got["values"]["instagram"] is None
-    got = put(solapur, pform, "solapur", TODAY, {"instagram": 0}, {"instagram": {"links": []}}).json()
+    got = put(solapur, pform, "solapur", TODAY, {"instagram": 0}).json()
     assert got["values"]["instagram"] == 0
-    assert put(solapur, pform, "solapur", TODAY, {"facebook": 10}).json()["values"]["facebook"] == 3
+    assert put(solapur, pform, "solapur", TODAY, {"facebook": 10}).status_code == 400
+    # the state office may enter a figure without links
+    r = admin_client.put(url(pform, "satara", TODAY), json={"values": {"facebook": 2}})
+    assert r.status_code == 200 and r.json()["values"]["facebook"] == 2
 
 
 def test_link_checks(admin_client, solapur, satara, entry_open):
@@ -164,7 +171,7 @@ def test_link_checks(admin_client, solapur, satara, entry_open):
     assert bad.status_code == 400 and "platform" in bad.json()["detail"]
     bad = put(solapur, form, "solapur", TODAY, {}, {"facebook": {"links": [FB[0], FB[0].replace("www.", "m.")]}})
     assert bad.status_code == 400 and "twice" in bad.json()["detail"]
-    assert put(solapur, form, "solapur", EARLIER, {}, {"facebook": {"links": [FB[0]]}}).status_code == 200
+    assert put(solapur, form, "solapur", EARLIER, {"facebook": 1}, {"facebook": {"links": [FB[0]]}}).status_code == 200
     # the same post on another day of this office names the day; another office's only says so
     bad = put(solapur, form, "solapur", TODAY, {}, {"facebook": {"links": [FB[0]]}})
     assert bad.status_code == 400 and EARLIER.isoformat() in bad.json()["detail"]
@@ -172,7 +179,7 @@ def test_link_checks(admin_client, solapur, satara, entry_open):
     assert bad.status_code == 400 and "another office" in bad.json()["detail"] and EARLIER.isoformat() not in bad.json()["detail"]
     # a different form may count the same link
     other = new_form(admin_client)
-    assert put(satara, other, "satara", TODAY, {}, {"facebook": {"links": [FB[0]]}}).status_code == 200
+    assert put(satara, other, "satara", TODAY, {"facebook": 1}, {"facebook": {"links": [FB[0]]}}).status_code == 200
     # the live check gives the same answers without saving
     r = satara.post(f"/api/forms/{form['id']}/proof-check", json={
         "office": "satara", "period": TODAY.isoformat(), "field": "facebook",
@@ -257,7 +264,7 @@ def test_file_access_by_role(admin_client, solapur, pune, zone_pune, zone_nashik
 def test_responses_and_workbook(admin_client, solapur, satara):
     form = new_form(admin_client)
     pdf = upload(solapur, form, "solapur", TODAY, "clippings", b"%PDF-1.4 a")
-    r = put(solapur, form, "solapur", TODAY, {"clippings": 1}, {"clippings": {"files": [pdf]}, "facebook": {"links": FB[:2]}},
+    r = put(solapur, form, "solapur", TODAY, {"clippings": 1, "facebook": 2}, {"clippings": {"files": [pdf]}, "facebook": {"links": FB[:2]}},
             submit=True)
     assert r.status_code == 200, r.text
     admin_client.put(url(form, "satara", TODAY), json={"values": {"clippings": 4}, "submit": True})
