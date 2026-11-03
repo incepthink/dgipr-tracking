@@ -1,5 +1,5 @@
 import * as React from "react";
-import { AlertCircle, Check, ExternalLink, FileText, Image as ImageIcon, Loader2, X } from "lucide-react";
+import { AlertCircle, Check, ExternalLink, FileText, Image as ImageIcon, Link2, Loader2, X } from "lucide-react";
 import { api, ApiError, proofFileUrl, uploadFile, type FormField, type LinkCheck, type Proof } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -219,35 +219,43 @@ export function FileBox({ formId, files, disabled, onPick, onRemove }: {
   );
 }
 
-/** Read-only proof: clickable links, and file rows that open in a new tab (photos with a small thumbnail). */
+const ITEM = "group flex min-h-12 items-center gap-2.5 rounded-lg border border-r-line-soft bg-r-card px-2 py-1.5 text-sm text-r-ink no-underline transition-colors hover:border-r-action hover:bg-r-action-soft";
+const TILE = "flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md";
+
+/** Read-only proof: each link and file a row that opens in a new tab, with a tile for its kind (photos as a thumbnail). */
 export function ProofList({ formId, proofs }: { formId: number; proofs: Proof[] }) {
   const { t } = useT();
   const links = proofs.filter((p) => p.kind === "link");
   const files = proofs.filter((p) => p.kind === "file");
   if (!proofs.length) return <span className="text-sm text-r-muted">{t("proof_none_attached")}</span>;
+  const open = <ExternalLink className="size-4 shrink-0 text-r-muted group-hover:text-r-action" aria-hidden />;
   return (
     <div className="flex flex-col gap-1.5">
       {links.map((p) => {
         const { host, path } = hostAndPath(p.url ?? "");
         return (
-          <a key={p.id} href={p.url ?? "#"} target="_blank" rel="noopener noreferrer"
-            className="flex min-h-9 items-center gap-2 rounded-lg bg-r-ground px-2 py-1 text-sm text-r-ink no-underline hover:bg-r-sunk">
-            <ExternalLink className="size-4 shrink-0 text-r-action" aria-hidden />
-            <span className="min-w-0 truncate"><b>{host}</b><span className="text-r-muted">{path}</span></span>
+          <a key={p.id} href={p.url ?? "#"} target="_blank" rel="noopener noreferrer" title={p.url ?? undefined}
+            aria-label={`${t("link_open")}: ${host}${path}`} className={ITEM}>
+            <span className={cn(TILE, "bg-r-action-soft text-r-action")}><Link2 className="size-4" aria-hidden /></span>
+            <span className="flex min-w-0 flex-1 flex-col leading-tight">
+              <b className="truncate">{host}</b>
+              {path && <span className="truncate text-xs text-r-muted">{path}</span>}
+            </span>
+            {open}
           </a>
         );
       })}
       {files.map((p) => (
         <a key={p.id} href={proofFileUrl(formId, p.id)} target="_blank" rel="noopener noreferrer"
-          className="flex min-h-11 items-center gap-2 rounded-lg bg-r-ground px-2 py-1.5 text-sm text-r-ink no-underline hover:bg-r-sunk">
+          aria-label={`${t("link_open")}: ${p.name}`} className={ITEM}>
           {p.type?.startsWith("image/")
-            ? <img src={proofFileUrl(formId, p.id)} alt="" loading="lazy" className="size-10 shrink-0 rounded-md bg-r-sunk object-cover" />
-            : <FileText className="size-5 shrink-0 text-r-muted" aria-hidden />}
+            ? <img src={proofFileUrl(formId, p.id)} alt="" loading="lazy" className={cn(TILE, "bg-r-sunk object-cover")} />
+            : <span className={cn(TILE, "bg-r-sunk text-r-muted")}><FileText className="size-4.5" aria-hidden /></span>}
           <span className="flex min-w-0 flex-1 flex-col leading-tight">
-            <span className="truncate font-bold">{p.name}</span>
-            {p.size !== null && <span className="text-r-muted">{fmtSize(p.size)}</span>}
+            <b className="truncate">{p.name}</b>
+            <span className="text-xs text-r-muted">{p.type === "application/pdf" ? "PDF" : p.type?.startsWith("image/") ? t("proof_photo") : ""}{p.size !== null ? ` · ${fmtSize(p.size)}` : ""}</span>
           </span>
-          <ExternalLink className="size-4 shrink-0 text-r-action" aria-hidden />
+          {open}
         </a>
       ))}
     </div>

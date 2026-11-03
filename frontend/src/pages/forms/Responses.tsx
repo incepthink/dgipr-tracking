@@ -728,19 +728,30 @@ function ProofModal({ form, row, fields, at, of, byDate, onStep, onClose }: {
             const off = x.proof === "links" && typeof v === "number" && list.length > 0 && links !== v;
             const by = [...new Set(list.map((p) => p.added_by).filter(Boolean))].join(", ");
             const last = list.map((p) => p.added_at).sort().at(-1);
+            const files = list.length - links;
+            const counts = [links && tf("proof_n_links", { n: links }), files && tf("proof_n_files", { n: files })].filter(Boolean).join(" · ");
             return (
-              <li key={x.key} className={cn("flex flex-col gap-2.5 rounded-xl border p-3", lack ? "border-r-overdue/40 bg-r-overdue-soft/40" : "border-r-line")}>
-                <div className="flex items-start justify-between gap-3">
-                  <span className="flex min-w-0 flex-col">
-                    <b className="text-[15px] first-letter:uppercase">{fieldLabel(x, lang)}</b>
-                    <span className="text-xs text-r-muted">{t(`proof_type_${x.proof}` as TKey)}</span>
+              <li key={x.key} className={cn("overflow-hidden rounded-xl border", lack ? "border-r-overdue/40 bg-r-overdue-soft/60" : "border-r-line bg-r-sunk/60")}>
+                <div className="flex items-center gap-3 border-b border-r-line-soft px-3.5 py-2.5">
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <b className="truncate text-[15px] first-letter:uppercase">{fieldLabel(x, lang)}</b>
+                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-r-muted">
+                      <span className="rounded-full bg-r-card px-2 py-px font-semibold ring-1 ring-r-line-soft">{t(`proof_type_${x.proof}` as TKey)}</span>
+                      {counts && <span className="num">{counts}</span>}
+                    </span>
                   </span>
-                  <span className="num shrink-0 text-[22px] leading-none font-bold">{showValue(x, v, t)}</span>
+                  <span className="num flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg bg-r-card px-2.5 text-[20px] font-bold ring-1 ring-r-line-soft">{showValue(x, v, t)}</span>
                 </div>
-                {lack && <span className="self-start rounded-full bg-r-overdue-soft px-2.5 py-0.5 text-xs font-bold text-r-overdue-ink">{t("proof_missing_mark")}</span>}
-                {off && <span className="text-xs font-bold text-r-overdue-ink">{tf("proof_links_match", { n: links })}</span>}
-                {list.length > 0 ? <ProofList formId={form.id} proofs={list} /> : !lack && <span className="text-sm text-r-muted">{t("proof_none_attached")}</span>}
-                {last && <span className="text-xs text-r-muted">{whenText(last, lang)}{by ? ` · ${by}` : ""}</span>}
+                <div className="flex flex-col gap-2 p-3">
+                  {lack && <span className="self-start rounded-full bg-r-overdue px-2.5 py-0.5 text-xs font-bold text-r-card">{t("proof_missing_mark")}</span>}
+                  {off && <span className="text-xs font-bold text-r-overdue-ink">{tf("proof_links_match", { n: links })}</span>}
+                  {list.length > 0 ? <ProofList formId={form.id} proofs={list} /> : !lack && <span className="text-sm text-r-muted">{t("proof_none_attached")}</span>}
+                </div>
+                {last && (
+                  <div className="flex items-center gap-1.5 border-t border-r-line-soft px-3.5 py-2 text-xs text-r-muted">
+                    <Clock className="size-3.5" aria-hidden /> {whenText(last, lang)}{by ? ` · ${by}` : ""}
+                  </div>
+                )}
               </li>
             );
           })}
