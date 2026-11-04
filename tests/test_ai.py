@@ -59,9 +59,9 @@ def test_facts_and_template(session, drought_form, recent):
     assert ids == [f"f{i + 1}" for i in range(len(facts))]
     by = {f["hint"]: f for f in facts}
     assert by["offices that reported for that period"]["value"] == 1
-    assert by["offices expected"]["value"] == 43
+    assert by["offices expected"]["value"] == 45
     t = brief.template(facts)
-    assert "४३ पैकी 1" not in t and "43 पैकी 1 कार्यालयांनी" in t
+    assert "४५ पैकी 1" not in t and "45 पैकी 1 कार्यालयांनी" in t
     assert "Not yet received" in brief.template(facts, "en")
 
 
@@ -81,7 +81,7 @@ def test_brief_ai_path_fills_numbers_and_caches(session, settings, drought_form,
     seen: list = []
     ok = {"sentences": ["{f1} साठी {f3} पैकी {f2} कार्यालयांनी अहवाल पाठवला.", "उर्वरित कार्यालयांचा पाठपुरावा करावा."]}
     out = brief.brief(session, st, drought_form, offices(session), "state", "admin", client=_client(st, ok, seen))
-    assert out["source"] == "ai" and "43 पैकी 1 कार्यालयांनी" in out["text"] and "{" not in out["text"]
+    assert out["source"] == "ai" and "45 पैकी 1 कार्यालयांनी" in out["text"] and "{" not in out["text"]
     sent = seen[0]
     assert sent["model"] == "test-model" and sent["text"]["format"]["type"] == "json_schema"
     assert "facts" in sent["input"][1]["content"]
@@ -136,7 +136,7 @@ def test_validator(session, drought_form):
 def test_ask_runs_intents_in_scope(session, settings, drought_form, recent):
     offs = offices(session)
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="not_reported", params={"range": "latest"})
-    assert r["kind"] == "table" and r["summary"] == {"sent": 1, "offices": 43} and len(r["rows"]) == 42
+    assert r["kind"] == "table" and r["summary"] == {"sent": 1, "offices": 45} and len(r["rows"]) == 44
     r = ask.ask(session, settings, drought_form, offs, "admin", intent="top",
                 params={"field": "facebook", "level": "office", "range": "last7"})
     assert r["rows"][0]["name_en"] == "District Information Office, Pune" and r["rows"][0]["per_day"] == 3

@@ -55,7 +55,7 @@ def test_breakdown_division_and_office(session, drought_form, filled):
     by = {r["code"]: r["values"]["news"] for r in div["rows"]}
     assert by["pune"] == 8 and by["nashik"] == 9 and by["latur"] == 0 and div["total"]["news"] == 17
     off = analytics.breakdown(session, drought_form, offices, D1, D2, "office")
-    assert len(off["rows"]) == 43
+    assert len(off["rows"]) == 45
     assert next(r for r in off["rows"] if r["code"] == "satara")["values"]["articles"] == 55
 
 
@@ -135,7 +135,8 @@ def test_import_matches_sheet_totals(session, campaign, drought_form):
                 for r in wb["जिल्हानिहाय एकत्रित"].iter_rows(values_only=True) if (r[0], r[1]) in OFFICE_MAP}
     got = {r["code"]: [r["values"][k] for k in COLUMN_KEYS]
            for r in analytics.breakdown(session, drought_form, offices, start, end, "office")["rows"]}
-    assert got == expected
+    # the sheet predates the परिचय केंद्र offices, which have no figures there
+    assert {c: v for c, v in got.items() if c in expected} == expected
     # the 15 Oct Social Monitoring report shows the sheet's state total (कात्रणे 820 that day)
     data = compute_report(session, campaign, date(2026, 10, 15), date(2026, 10, 15))
     assert data["grand_total"]["clippings"]["value"] == 820

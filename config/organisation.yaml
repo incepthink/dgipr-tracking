@@ -12,6 +12,7 @@
 # city (जिमाका, नागपूर / जिमाका, पुणे …), then the division's other districts. Names use the official short
 # forms: विमाका = विभागीय माहिती कार्यालय, जिमाका = जिल्हा माहिती कार्यालय.
 # Division order (4.11.2026): मुंबई, कोकण, पुणे, कोल्हापूर, छ. संभाजीनगर, लातूर, नाशिक, नागपूर, अमरावती.
+# Then महाराष्ट्र परिचय केंद्र, नवी दिल्ली and महाराष्ट्र परिचय केंद्र, पणजी, गोवा (4.11.2026).
 
 divisions:
   - code: mumbai_hq
@@ -120,3 +121,20 @@ divisions:
       - {code: washim, name_mr: "जिमाका, वाशिम", name_en: "District Information Office, Washim", kind: district}
       - {code: buldhana, name_mr: "जिमाका, बुलढाणा", name_en: "District Information Office, Buldhana", kind: district}
       - {code: yavatmal, name_mr: "जिमाका, यवतमाळ", name_en: "District Information Office, Yavatmal", kind: district}
+
+  # Maharashtra Information Centres outside the state (added 4.11.2026), one office each, after अमरावती
+  - code: new_delhi_mic
+    summary_label_mr: "महाराष्ट्र परिचय केंद्र, नवी दिल्ली"
+    section_title_mr: "महाराष्ट्र परिचय केंद्र, नवी दिल्ली"
+    show_subtotal: false
+    detail_page: 3
+    offices:
+      - {code: new_delhi_mic, name_mr: "महाराष्ट्र परिचय केंद्र, नवी दिल्ली", name_en: "Maharashtra Information Centre, New Delhi", kind: information_centre}
+
+  - code: panaji_mic
+    summary_label_mr: "महाराष्ट्र परिचय केंद्र, पणजी, गोवा"
+    section_title_mr: "महाराष्ट्र परिचय केंद्र, पणजी, गोवा"
+    show_subtotal: false
+    detail_page: 3
+    offices:
+      - {code: panaji_mic, name_mr: "महाराष्ट्र परिचय केंद्र, पणजी, गोवा", name_en: "Maharashtra Information Centre, Panaji, Goa", kind: information_centre}

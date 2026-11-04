@@ -75,7 +75,7 @@ def test_meta_is_scoped(admin_client, district, zone):
     z = zone.get("/api/meta").json()
     assert [d["code"] for d in z["divisions"]] == ["pune"]
     assert {o["code"] for o in z["divisions"][0]["offices"]} == {"pune_rio", "pune", "solapur", "satara"}
-    assert len(admin_client.get("/api/meta").json()["divisions"]) == 9
+    assert len(admin_client.get("/api/meta").json()["divisions"]) == 11
 
 
 def test_deactivated_user_is_logged_out(web, admin_client):

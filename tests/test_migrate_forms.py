@@ -24,7 +24,7 @@ def test_migration_counts_sums_and_idempotence(session, campaign):
     assert report["forms"][0]["submissions"] == 3 and report["forms"][0]["values"] == 4
     form = session.scalar(select(Form).where(Form.campaign_id == campaign.id))
     assert form.status == "published" and form.frequency == "daily" and form.start_date == date(2026, 10, 1)
-    assert [f.key for f in form.fields] == list(COLUMN_KEYS) and len(form.recipients) == 43
+    assert [f.key for f in form.fields] == list(COLUMN_KEYS) and len(form.recipients) == 45
     assert session.scalar(select(func.count(FormSubmission.id)).where(FormSubmission.status == "submitted")) == 3
     v = session.scalar(select(FormValue).join(FormSubmission).where(FormSubmission.office_code == "satara"))
     assert v.value_num == 11 and v.entered_by == "pune_user" and v.entered_at == datetime(2026, 10, 2, 9, 0)

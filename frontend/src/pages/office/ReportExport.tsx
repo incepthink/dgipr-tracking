@@ -36,8 +36,8 @@ export function cellOut(v: string | number | null | undefined, numeric: boolean)
 /** District tables (two text columns): the division name only on the first row of its group. */
 export const groupStarts = (t: SheetTable, ri: number) => t.text_cols === 2 && (ri === 0 || t.rows[ri - 1][0] !== t.rows[ri][0]);
 
-/** RIO / director / headquarters rows, set apart from the districts. */
-export const isSubOffice = (name: string | number) => /विमाका|संचालक|मुख्यालय/.test(String(name));
+/** RIO / director / headquarters / परिचय केंद्र rows, set apart from the districts. */
+export const isSubOffice = (name: string | number) => /विमाका|संचालक|मुख्यालय|परिचय केंद्र/.test(String(name));
 
 // --------------------------------------------------------------------------- export sheet
 type What = Kind | "workbook";

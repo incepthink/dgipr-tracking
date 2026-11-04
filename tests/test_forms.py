@@ -84,7 +84,7 @@ def test_publish_needs_fields_and_recipients_and_duplicate(session, drought_form
         set_status(session, "t", empty, "published")
     copy = duplicate_form(session, "t", drought_form)
     assert copy.status == "draft" and copy.campaign_id is None and copy.slug != drought_form.slug
-    assert [f.key for f in copy.fields] == list(COLUMN_KEYS) and len(copy.recipients) == 43
+    assert [f.key for f in copy.fields] == list(COLUMN_KEYS) and len(copy.recipients) == 45
 
 
 def test_group_names_rename_without_changing_keys(session, drought_form):
