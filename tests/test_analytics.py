@@ -85,9 +85,12 @@ def test_tables_official_order_and_sorting(session, drought_form, filled):
     offices = all_offices(session)
     t = analytics.table(session, drought_form, offices, D1, D1, "cumulative_office")
     names = [r[1] for r in t["rows"]]
-    # मुंबई मुख्यालय first; each division's senior office, then its own city's जिमाका, then the other districts
-    assert names[:4] == ["मुंबई, मुख्यालय मंत्रालय", "संचालक, नागपूर", "जिमाका, नागपूर", "जिमाका, भंडारा"]
+    # मुंबई मुख्यालय first, then कोकण; each division's senior office, then its own city's जिमाका, then the other districts
+    assert names[:4] == ["मुंबई, मुख्यालय मंत्रालय", "विमाका, कोकण", "जिमाका, ठाणे", "जिमाका, रायगड"]
     assert names[names.index("विमाका, पुणे") + 1] == "जिमाका, पुणे"
+    assert names[names.index("संचालक, नागपूर") + 1] == "जिमाका, नागपूर"
+    div = analytics.table(session, drought_form, offices, D1, D1, "cumulative_division")
+    assert [r[0] for r in div["rows"]][1:3] == ["कोंकण", "पुणे"]
     col = 2 + COLUMN_KEYS.index("news")
     desc = analytics.table(session, drought_form, offices, D1, D1, "cumulative_office", "news", "desc")
     asc = analytics.table(session, drought_form, offices, D1, D1, "cumulative_office", "news", "asc")

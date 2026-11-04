@@ -222,6 +222,10 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   const { data, error, isLoading, isFetching } = useResponses(form.id, start, end, division);
   const fields = (data?.form.fields ?? []).filter((x) => !x.archived);
   const canEdit = data?.can_review ?? false;
+  // each division's senior office (मुख्यालय, संचालक, विमाका) stands out from its districts
+  const { data: meta } = useMeta();
+  const senior = React.useMemo(() => new Set((meta?.divisions ?? []).flatMap((d) => d.offices)
+    .filter((o) => o.kind && o.kind !== "district").map((o) => o.code)), [meta]);
   // the zone is filtered by the server; one district is picked out here
   const all = React.useMemo(() => (data?.rows ?? []).filter((r) => r.period_start >= start && r.period_start <= end && (!office || r.office === office)),
     [data, start, end, office]);
@@ -418,7 +422,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
                       </tr>
                     )}
                     {g.rows.map((r) => (
-                      <Row key={rowId(r)} r={r} fields={fields} canEdit={canEdit} editing={editing?.id === rowId(r) ? editing.key : null}
+                      <Row key={rowId(r)} r={r} senior={senior.has(r.office)} fields={fields} canEdit={canEdit} editing={editing?.id === rowId(r) ? editing.key : null}
                         onEdit={(key) => setEditing({ id: rowId(r), key })} asksProof={asksProof} onProof={() => setProofOf(rowId(r))} />
                     ))}
                   </tbody>
@@ -500,8 +504,8 @@ function SortHead({ col, label, sort, onSort, center, className }: {
   );
 }
 
-function Row({ r, fields, canEdit, editing, onEdit, asksProof, onProof }: {
-  r: ResponseRow; fields: FormField[]; canEdit: boolean; editing: string | null; onEdit: (key: string) => void;
+function Row({ r, senior, fields, canEdit, editing, onEdit, asksProof, onProof }: {
+  r: ResponseRow; senior: boolean; fields: FormField[]; canEdit: boolean; editing: string | null; onEdit: (key: string) => void;
   asksProof: boolean; onProof: () => void;
 }) {
   const { t, lang } = useT();
@@ -512,9 +516,11 @@ function Row({ r, fields, canEdit, editing, onEdit, asksProof, onProof }: {
   return (
     <tr className={bg}>
       {/* the before: strip paints the row colour a few pixels past the left edge, so no sliver of a cell scrolling
-          underneath shows when the pinned column lands on a fractional pixel */}
-      <th scope="row" className={cn("sticky left-0 z-10 border-b border-r-line-soft px-3 py-1.5 text-left font-medium whitespace-nowrap",
-        "before:absolute before:inset-y-0 before:-left-2 before:w-2 before:bg-inherit", bg)}>
+          underneath shows when the pinned column lands on a fractional pixel; a division's senior office gets a bar
+          in the action colour and bold type */}
+      <th scope="row" className={cn("sticky left-0 z-10 border-b border-r-line-soft px-3 py-1.5 text-left whitespace-nowrap",
+        "before:absolute before:inset-y-0 before:-left-2 before:w-2 before:bg-inherit", bg,
+        senior ? "font-bold text-r-ink after:absolute after:inset-y-0 after:left-0 after:w-1 after:bg-r-action" : "font-medium")}>
         <span title={officeName(r, lang)} className="block truncate">{shortOffice(r, lang)}</span>
       </th>
       <td className={cn("truncate border-b border-r-line-soft px-1.5 py-1.5 text-xs whitespace-nowrap", sent ? "text-r-muted" : "text-r-overdue-ink")}>
