@@ -4,7 +4,7 @@ import { ChevronDown, FileSpreadsheet, Search, X } from "lucide-react";
 import { backendUrl, type CampaignBrief, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
-import { cn, qs } from "@/lib/utils";
+import { byMenuOrder, cn, qs } from "@/lib/utils";
 import { RButton, RCard, RChip, RError, StatusMark, markOf } from "@/components/reports/kit";
 import { deadlineOf, isOverdue, timeOf, whenText } from "@/components/reports/period";
 import { fieldLabel, formTitle, sumColumns, useFormDef, useForms, useToday } from "../forms/common";
@@ -220,7 +220,7 @@ function DeskCard({ formId, minimized, onToggle }: { formId: number; minimized: 
   const divisions = React.useMemo(() => {
     const m = new Map<string, { name: string; rows: ResponseRow[] }>();
     today.forEach((r) => { const d = m.get(r.division) ?? { name: r.division_mr, rows: [] }; d.rows.push(r); m.set(r.division, d); });
-    return [...m.entries()];
+    return byMenuOrder([...m.entries()], ([code]) => code);
   }, [today]);
   const older = cdata && form ? cdata.rows.reduce((acc, r) => {
     const days = r.cells.filter((c, k) => k !== j && cellInfo(form, cdata.periods[k], c, now).overdue).length;

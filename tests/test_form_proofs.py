@@ -153,13 +153,12 @@ def test_links_match_the_number(admin_client, pform, solapur, web):
     blob = "आजच्या पोस्ट: https://www.instagram.com/p/AAA/?igsh=x आणि https://instagram.com/p/BBB पहा"
     got = put(solapur, pform, "solapur", TODAY, {"instagram": 2}, {"instagram": {"links": [blob]}}).json()
     assert got["values"]["instagram"] == 2 and len(got["proofs"]["instagram"]) == 2
-    # with no links the number is blank or 0
-    assert put(solapur, pform, "solapur", TODAY, {"instagram": 5}, {"instagram": {"links": []}}).status_code == 400
-    got = put(solapur, pform, "solapur", TODAY, {"instagram": None}, {"instagram": {"links": []}}).json()
-    assert got["values"]["instagram"] is None
+    # proof is optional: with no links any number goes, flagged as missing proof
+    got = put(solapur, pform, "solapur", TODAY, {"instagram": 5}, {"instagram": {"links": []}}).json()
+    assert got["values"]["instagram"] == 5 and got["proof_missing"] == ["instagram"]
     got = put(solapur, pform, "solapur", TODAY, {"instagram": 0}).json()
     assert got["values"]["instagram"] == 0
-    assert put(solapur, pform, "solapur", TODAY, {"facebook": 10}).status_code == 400
+    assert put(solapur, pform, "solapur", TODAY, {"facebook": 10}).status_code == 400  # it still has 3 links
     # the state office may enter a figure without links
     r = admin_client.put(url(pform, "satara", TODAY), json={"values": {"facebook": 2}})
     assert r.status_code == 200 and r.json()["values"]["facebook"] == 2
@@ -194,14 +193,13 @@ def test_link_checks(admin_client, solapur, satara, entry_open):
     assert put(solapur, form, "solapur", TODAY, {}, {"meetings": {"links": [FB[1]]}}).status_code == 400
 
 
-# --------------------------------------------------------------------------- files + the submit block
-def test_files_and_the_submit_block(admin_client, solapur, satara, web):
+# --------------------------------------------------------------------------- files; proof is optional
+def test_files_and_optional_proof(admin_client, solapur, satara, web):
     form = new_form(admin_client)
     assert put(solapur, form, "solapur", TODAY, {"clippings": 3}).status_code == 200
     r = solapur.post(url(form, "solapur", TODAY, "submit"))
-    assert r.status_code == 400 and "proof missing" in r.json()["detail"]
-    got = solapur.get(url(form, "solapur", TODAY)).json()
-    assert got["status"] == "draft" and got["proof_missing"] == ["clippings"]
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "submitted" and r.json()["proof_missing"] == ["clippings"]
     pdf = upload(solapur, form, "solapur", TODAY, "clippings", b"%PDF-1.4 " + b"x" * 2000)
     photo = upload(solapur, form, "solapur", TODAY, "clippings", b"\xff\xd8\xff" + b"y" * 500, "image/jpeg", "a.jpg")
     r = put(solapur, form, "solapur", TODAY, {"clippings": 3}, {"clippings": {"files": [pdf, photo]}}, submit=True)
@@ -210,10 +208,10 @@ def test_files_and_the_submit_block(admin_client, solapur, satara, web):
     assert got["status"] == "submitted" and got["proof_missing"] == []
     assert [(p["kind"], p["name"], p["size"]) for p in got["proofs"]["clippings"]] == [
         ("file", "पुरावा.pdf", 2009), ("file", "a.jpg", 503)]
-    # a sent day can't lose its proof
+    # a sent day may drop its proof; it's flagged again
     r = put(solapur, form, "solapur", TODAY, {}, {"clippings": {"files": []}})
-    assert r.status_code == 400 and "proof" in r.json()["detail"]
-    # the state office entering the same figure for another office is never blocked
+    assert r.status_code == 200 and r.json()["proof_missing"] == ["clippings"]
+    # the state office entering the same figure for another office
     r = admin_client.put(url(form, "satara", TODAY), json={"values": {"clippings": 2}, "submit": True})
     assert r.status_code == 200 and r.json()["status"] == "submitted" and r.json()["proof_missing"] == ["clippings"]
 

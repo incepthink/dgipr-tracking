@@ -110,6 +110,9 @@ export function useTheme() {
   return { dark, toggle };
 }
 
+/** Analytics and Monitoring are hidden from the sidebar for now; their pages still open by URL. */
+const SHOW_BETA_NAV = false;
+
 const ACTIVE = "bg-sidebar-accent text-white";
 
 const navCls = (active: boolean) =>
@@ -128,7 +131,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const current = activeOf(pathname);
   const [pwOpen, setPwOpen] = React.useState(false);
   const monitorActive = /^\/(monitor|publications|reports)(\/|$)/.test(pathname);
-  const analytics = me.role !== "district" && (
+  const analytics = SHOW_BETA_NAV && me.role !== "district" && (
     <div>
       <SectionLabel>{t("nav_analytics_beta")}</SectionLabel>
       <div className="space-y-0.5">
@@ -174,7 +177,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
         {isState && analytics}
 
-        {isState && (
+        {SHOW_BETA_NAV && isState && (
           <div>
             <SectionLabel>{t("nav_monitoring_beta")}</SectionLabel>
             <Link to="/monitor" onClick={onNavigate} aria-current={monitorActive ? "page" : undefined}

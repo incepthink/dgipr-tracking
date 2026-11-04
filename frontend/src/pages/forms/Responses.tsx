@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSpreadsheet, Maximize2, Minimize2, Paperclip, RotateCcw, Undo2, X } from "lucide-react";
 import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
-import { addDays, cn, dmy } from "@/lib/utils";
+import { addDays, byMenuOrder, cn, dmy } from "@/lib/utils";
 import { RButton, RError, RInput, RLabel, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
 import { fig, periodOf, rangeText, shortDay, stepOf, timeOf, whenText } from "@/components/reports/period";
 import { MonthCalendar } from "@/components/reports/DateInput";
@@ -159,8 +159,9 @@ function PlaceFilters({ division, office, onChange }: {
   const me = useUser();
   const { data: meta } = useMeta();
   const { t, name } = useT();
-  const divs = meta?.divisions.filter((d) => !division || d.code === division) ?? [];
-  const zones = me.role === "state" && (meta?.divisions.length ?? 0) > 1;
+  const all = byMenuOrder(meta?.divisions ?? [], (d) => d.code);
+  const divs = all.filter((d) => !division || d.code === division);
+  const zones = me.role === "state" && all.length > 1;
   const districts = divs.flatMap((d) => d.offices).length > 1;
   if (!zones && !districts) return null;
   return (
@@ -168,7 +169,7 @@ function PlaceFilters({ division, office, onChange }: {
       {zones && (
         <PlaceSelect label={t("role_zone")} value={division} onChange={(v) => onChange({ division: v, office: "" })}>
           <option value="">{t("resp_all_zones")}</option>
-          {meta!.divisions.map((d) => <option key={d.code} value={d.code}>{d.label_mr}</option>)}
+          {all.map((d) => <option key={d.code} value={d.code}>{d.label_mr}</option>)}
         </PlaceSelect>
       )}
       {districts && (

@@ -11,9 +11,9 @@ field can never pass for a confirmed zero. An edit keeps the office's original v
 (before, after, who, when, why), so every edit can be undone; the UI and the Excel export highlight edited
 values. Every change writes an audit entry.
 
-Proof (app.forms.proof): from the form's proof_from day, a district office can't send a figure above 0 without
-the links or files its field asks for; a links field's typed number must equal the count of its links. Proof rows are only
-soft-removed. The state office's own entries and corrections are never blocked."""
+Proof (app.forms.proof): from the form's proof_from day, the links or files a field asks for are optional; a
+figure sent without them is flagged (proof_missing) but never blocked. When a links field has links, its typed number
+must equal their count. Proof rows are only soft-removed."""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -323,21 +323,18 @@ def save(s: Session, user: Optional[User], form: Form, office: str, ps: date, va
         if f.proof == "either" and len(item["links"]) > (n or 0):
             raise FormError(f"{f.label_mr}: more links than the number")
     if P.applies(form, ps):
-        # a links field's typed figure must equal its number of links (the state office may enter one without links)
+        # a links field's typed figure must equal its number of links, when it has any (proof is optional)
         for k in plan.keys() | values.keys():
             f = by_key[k]
             if f.proof != "links":
                 continue
             n = next((r.value_num for r in sub.values if r.field_id == f.id), None)
             links = sum(1 for pr in P.live(sub) if pr.field_id == f.id and pr.kind == "link")
-            if (n or 0) != links and not (links == 0 and (not check or (user is not None and user.role == "state"))):
+            if links and (n or 0) != links:
                 typed = "blank" if n is None else f"{n:g}"
                 raise FormError(f"{f.label_mr}: the number ({typed}) must match the links ({links})")
     if check and sub.status == "submitted" and not submit and (missing := missing_required(form, sub)):
         raise FormError("a sent period can't lose a required field: " + ", ".join(f.label_mr for f in missing))
-    if (check and sub.status == "submitted" and not submit and user is not None and user.role != "state"
-            and (missing := P.missing_proof(form, sub))):
-        raise FormError("a sent period can't lose its proof: " + ", ".join(f.label_mr for f in missing))
     if before != after:
         audit.record(s, who, "form_submission.save", "form_submission", _eid(form, office, ps),
                      before=before or None, after=after or None, note=note or "")
@@ -455,8 +452,6 @@ def submit_(s: Session, user: Optional[User], form: Form, sub: FormSubmission, *
             raise FormError("fill in the required field(s) first: " + ", ".join(f.label_mr for f in missing))
         if not any(_has(v) for v in sub.values):
             raise FormError("nothing filled in yet")
-        if user.role != "state" and (missing := P.missing_proof(form, sub)):
-            raise FormError("proof missing: " + ", ".join(f.label_mr for f in missing))
     before = sub.status
     if before == "submitted":  # sending changes to a sent period keeps when it was first sent
         return sub

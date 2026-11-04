@@ -1131,7 +1131,6 @@ const DICT = {
   proof_none_attached: { mr: "पुरावा जोडलेला नाही", en: "No proof attached" },
   proof_fix_links: { mr: "लाल लिंक दुरुस्त करा किंवा काढा", en: "Fix or remove the red links" },
   n_proof_missing: { mr: "{n} पुरावा बाकी", en: "{n} proof missing" },
-  proof_missing_list: { mr: "पुरावा द्या: {list}", en: "Give proof: {list}" },
   proof_ok_mark: { mr: "पुरावा ✓", en: "Proof ✓" },
   proof_missing_mark: { mr: "पुरावा नाही", en: "No proof" },
   link_not_link: { mr: "ही वेब लिंक नाही", en: "Not a web link" },

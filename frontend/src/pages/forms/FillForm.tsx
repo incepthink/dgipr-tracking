@@ -158,10 +158,10 @@ export default function FillFormPage() {
     if (linkState(ps, f.key).checks?.some((c) => c.problem)) return t("proof_fix_links");
     const n = Number(cur(ps, f.key) || 0);
     if (f.proof === "either" && links.length > n) return t("proof_more_links");
-    if (f.proof === "links" && links.length !== n && !(me.role === "state" && !links.length)) return tf("proof_links_match", { n: links.length });
+    if (f.proof === "links" && links.length && links.length !== n) return tf("proof_links_match", { n: links.length });
     return "";
   };
-  /** A figure above 0 that still needs its PDF/photo or link. */
+  /** A figure above 0 without its PDF/photo or link (optional: flagged, never blocks sending). */
   const needsProof = (ps: string, f: FormField) => {
     if (!proofOn(ps) || !fieldTakesFiles(f)) return false;
     const v = cur(ps, f.key);
@@ -177,7 +177,7 @@ export default function FillFormPage() {
     const noProof = fields.filter((f) => needsProof(ps, f));
     const filled = fields.filter((f) => cur(ps, f.key) !== "").length;
     const checking = linkFields.some((f) => linkState(ps, f.key).checking);
-    return { bad, ask, missing, noProof, filled, checking, blocksSend: me.role !== "state" && noProof.length > 0 };
+    return { bad, ask, missing, noProof, filled, checking };
   };
 
   // unsaved-changes guard: in-app navigation and tab close
@@ -422,7 +422,7 @@ function SentSheet({ form, sent, periods, onClose, onNext }: {
 }
 
 // --------------------------------------------------------------------------- one period
-type Check = { bad: FormField[]; ask: FormField[]; missing: FormField[]; noProof: FormField[]; filled: number; checking: boolean; blocksSend: boolean };
+type Check = { bad: FormField[]; ask: FormField[]; missing: FormField[]; noProof: FormField[]; filled: number; checking: boolean };
 
 /** Everything a field row needs for its proof box, bound to one period. */
 type ProofHooks = {
@@ -713,9 +713,8 @@ function ReviewSheet({ form, p, fields, cur, zeroState, confirmZero, check, fiel
   const day = form.frequency === "daily" ? dayMonth(ps, lang) : form.frequency === "weekly" ? rangeText(ps, p.period_end, lang) : formTitle(form, lang);
   const otherZeros = fields.filter((f) => zeroState(f) !== "none");
   const figures = fields.filter((f) => cur(ps, f.key) !== "" && !(f.type === "number" && Number(cur(ps, f.key)) === 0 && /^\d/.test(cur(ps, f.key))));
-  const ready = !check.ask.length && !check.bad.length && !check.missing.length && !check.blocksSend && !check.checking && !uploading;
+  const ready = !check.ask.length && !check.bad.length && !check.missing.length && !check.checking && !uploading;
   const label = check.bad.length ? t("fix_to_send") : check.missing.length ? tf("required_missing", { list: check.missing.map((f) => fieldLabel(f, lang)).join(", ") })
-    : check.blocksSend ? tf("proof_missing_list", { list: check.noProof.map((f) => fieldLabel(f, lang)).join(", ") })
     : uploading ? t("proof_uploading") : check.checking ? t("links_checking")
     : check.ask.length ? tf("confirm_n_to_send", { n: check.ask.length }) : isOverdue(p.status, p.deadline) ? tf("send_day_late", { day }) : tf("send_day", { day });
   return (
@@ -730,7 +729,7 @@ function ReviewSheet({ form, p, fields, cur, zeroState, confirmZero, check, fiel
         <RAlert tone="danger">{check.bad.map((f) => `${fieldLabel(f, lang)}: ${fieldProblem(f)}`).join(" · ")}</RAlert>
       )}
       {check.noProof.length > 0 && (
-        <RAlert tone={check.blocksSend ? "danger" : "info"}>
+        <RAlert tone="info">
           {check.noProof.map((f) => `${fieldLabel(f, lang)}: ${t(f.proof === "files" ? "proof_needed_files" : "proof_needed")}`).join(" · ")}
         </RAlert>
       )}

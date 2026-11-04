@@ -42,3 +42,11 @@ export function qs(params: Record<string, string | number | undefined | null>) {
   const s = p.toString();
   return s ? `?${s}` : "";
 }
+
+/** Divisions as DGIPR lists them on screen (not the report/PDF layout in config/organisation.yaml); unknown codes keep
+ * their order after these. */
+const MENU_ORDER = ["mumbai_hq", "konkan", "pune", "kolhapur", "chh_sambhajinagar", "latur", "nashik", "nagpur", "amravati"];
+export function byMenuOrder<T>(items: T[], code: (x: T) => string) {
+  const rank = (x: T) => { const i = MENU_ORDER.indexOf(code(x)); return i < 0 ? MENU_ORDER.length : i; };
+  return [...items].sort((a, b) => rank(a) - rank(b));
+}
