@@ -7,3 +7,4 @@ data/
 frontend/node_modules/
 .claude/settings.local.json
 *.tsbuildinfo
+video/

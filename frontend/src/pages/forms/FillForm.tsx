@@ -163,7 +163,7 @@ export default function FillFormPage() {
   };
   /** A figure above 0 without its PDF/photo or link (optional: flagged, never blocks sending). */
   const needsProof = (ps: string, f: FormField) => {
-    if (!proofOn(ps) || !fieldTakesFiles(f)) return false;
+    if (!proofOn(ps) || f.proof === "none") return false;
     const v = cur(ps, f.key);
     if (!/^\d+(\.\d+)?$/.test(v) || Number(v) <= 0) return false;
     const d = proofOf(ps, f.key);
@@ -647,7 +647,7 @@ function FieldRow({ formId, f, first, value, disabled, corrected, changed, zero,
       {corrected && <span aria-hidden className="pointer-events-none absolute top-1.5 right-1.5 border-[5px] border-transparent border-t-r-corrected border-r-r-corrected" />}
     </span>
   );
-  const message = problem || (needs ? t(f.proof === "files" ? "proof_needed_files" : "proof_needed") : "");
+  const message = problem || (needs ? t(f.proof === "files" ? "proof_needed_files" : f.proof === "links" ? "proof_needed_links" : "proof_needed") : "");
   // read-only: a blank or zero figure with nothing attached needs no "no proof" line
   const quiet = disabled && !proof.saved(f.key).length && !(Number(value) > 0);
   const box = withProof && !quiet && (
@@ -730,7 +730,7 @@ function ReviewSheet({ form, p, fields, cur, zeroState, confirmZero, check, fiel
       )}
       {check.noProof.length > 0 && (
         <RAlert tone="info">
-          {check.noProof.map((f) => `${fieldLabel(f, lang)}: ${t(f.proof === "files" ? "proof_needed_files" : "proof_needed")}`).join(" · ")}
+          {check.noProof.map((f) => `${fieldLabel(f, lang)}: ${t(f.proof === "files" ? "proof_needed_files" : f.proof === "links" ? "proof_needed_links" : "proof_needed")}`).join(" · ")}
         </RAlert>
       )}
 

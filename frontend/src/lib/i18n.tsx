@@ -1126,6 +1126,7 @@ const DICT = {
   proof_uploading: { mr: "फाइल अपलोड होत आहे…", en: "File uploading…" },
   proof_needed: { mr: "PDF/फोटो किंवा लिंक द्या", en: "Give a PDF/photo or link" },
   proof_needed_files: { mr: "PDF किंवा फोटो जोडा", en: "Add a PDF or photo" },
+  proof_needed_links: { mr: "लिंक द्या", en: "Give the link(s)" },
   proof_more_links: { mr: "आकड्यापेक्षा जास्त लिंक आहेत", en: "More links than the number" },
   proof_exempt: { mr: "पुरावा नियमापूर्वीचा दिवस", en: "Day before the proof rule" },
   proof_none_attached: { mr: "पुरावा जोडलेला नाही", en: "No proof attached" },

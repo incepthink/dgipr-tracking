@@ -110,8 +110,8 @@ export function useTheme() {
   return { dark, toggle };
 }
 
-/** Analytics and Monitoring are hidden from the sidebar for now; their pages still open by URL. */
-const SHOW_BETA_NAV = false;
+/** Analytics and Monitoring sections in the sidebar. */
+const SHOW_BETA_NAV = true;
 
 const ACTIVE = "bg-sidebar-accent text-white";
 
