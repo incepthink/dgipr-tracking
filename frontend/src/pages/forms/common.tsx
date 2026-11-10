@@ -15,6 +15,25 @@ export function useForms() {
   return useQuery({ queryKey: ["forms"], queryFn: () => api.get<FormDef[]>("/api/forms"), staleTime: 30_000 });
 }
 
+/** Each form's number (Form 1, Form 2, …): its place in the order forms were made, oldest first, deleted ones counted,
+ * so a form has the same number on the Desk, Forms and Responses and keeps it when others are added or deleted. */
+export function useFormNumbers() {
+  const { data } = useQuery({ queryKey: ["forms", { archived: true }], queryFn: () => api.get<FormDef[]>("/api/forms?archived=true") });
+  return React.useMemo(() => new Map([...(data ?? [])].sort((a, b) => a.id - b.id).map((f, i) => [f.id, i + 1] as const)), [data]);
+}
+
+/** "Form 3" in the action colour, the label that says a card is a form. */
+export function FormNumber({ n, small }: { n: number | undefined; small?: boolean }) {
+  const { tf, num } = useT();
+  if (!n) return null;
+  return (
+    <span className={cn("num inline-flex shrink-0 items-center rounded-lg bg-r-action font-bold whitespace-nowrap text-white dark:text-r-ground",
+      small ? "px-2 py-0.5 text-[13px]" : "px-3 py-1 text-base")}>
+      {tf("form_n", { n: num(n) })}
+    </span>
+  );
+}
+
 export function useFormDef(id: number | null | undefined) {
   return useQuery({ queryKey: ["form", id], enabled: !!id, queryFn: () => api.get<FormDef>(`/api/forms/${id}`) });
 }

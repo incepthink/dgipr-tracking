@@ -100,7 +100,18 @@ export const DashedKey = ({ className }: { className: string }) => <span aria-hi
 
 /** The header of every Insights page: title and a line under it. */
 export function InsightsTitle({ title, sub, actions }: { title: React.ReactNode; sub?: React.ReactNode; actions?: React.ReactNode }) {
-  return <RTitle title={title} sub={sub} actions={actions} />;
+  return <><RTitle title={title} sub={sub} actions={actions} /><SampleBanner /></>;
+}
+
+/** Every Insights page still shows the made-up figures in ./sample.ts; say so plainly so nobody reads them as real. */
+export function SampleBanner() {
+  const { t } = useT();
+  return (
+    <div role="note" className="flex items-start gap-3 rounded-xl border-[1.5px] border-r-returned bg-r-returned-soft px-4 py-3 text-[15px] text-r-returned-ink">
+      <span className="shrink-0 rounded-md bg-r-returned px-2 py-0.5 text-xs font-bold text-white uppercase">{t("sample_chip")}</span>
+      <span>{t("sample_banner")}</span>
+    </div>
+  );
 }
 
 /** Overview · Posts · Districts, under the page title on small screens (the sidebar has them on large ones). */

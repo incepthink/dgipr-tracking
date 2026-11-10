@@ -312,7 +312,11 @@ def api_proof_upload(request: Request, form_id: int, office: str, period: date, 
     """A presigned PUT for one proof file; the browser sends the file straight to storage, then saves its key."""
     user, form = _submission_target(request, s, form_id, office, period)
     try:
-        service.check_writable(s, user, form, office, period, service.find(s, form, office, period))
+        # the state office attaches proof on the responses page too, after the period is sent (see set_field)
+        if user.role == "state":
+            service.check_state_target(s, form, office, period)
+        else:
+            service.check_writable(s, user, form, office, period, service.find(s, form, office, period))
     except FormError as exc:
         _err(exc)
     f = _proof_field(form, body.field)
@@ -446,6 +450,24 @@ def api_submission_correct(form_id: int, office: str, period: date, body: Correc
                    lambda form: service.correct(s, admin, form, office, period, body.key, body.value, body.note))
 
 
+class FieldEditIn(BaseModel):
+    key: str
+    value: Any = None  # left out: the figure stays as it is
+    note: str = ""
+    proofs: Optional[dict[str, Any]] = None  # {"links": [...], "files": [...]}: the field's whole proof list
+
+
+@app.post("/api/forms/{form_id}/submissions/{office}/{period}/field")
+def api_submission_field(form_id: int, office: str, period: date, body: FieldEditIn,
+                         admin: User = Depends(state_only), s: Session = Depends(get_session)):
+    """One field's figure and/or proof, saved together (the responses page's edit sheet)."""
+    kw = {"value": body.value} if "value" in body.model_fields_set else {}
+    store = proof.storage(settings) if body.proofs is not None else None
+    return _review(form_id, office, period, admin, s,
+                   lambda form: service.set_field(s, admin, form, office, period, body.key, note=body.note,
+                                                  proofs=body.proofs, store=store, **kw))
+
+
 @app.post("/api/forms/{form_id}/submissions/{office}/{period}/revert")
 def api_submission_revert(form_id: int, office: str, period: date, body: RevertIn,
                           admin: User = Depends(state_only), s: Session = Depends(get_session)):
@@ -532,6 +554,13 @@ def api_an_groups(qs=Depends(_q)):
 def api_an_map(column: str = "", group: str = "", qs=Depends(_q)):
     q, s = qs
     return _bad(lambda: insights.office_map(s, q.form, q.offices, q.start, q.end, column, group))
+
+
+@app.get("/api/forms/{form_id}/analytics/posts")
+def api_an_posts(qs=Depends(_q)):
+    """The post links and files the offices attached as proof (Analytics → Posts)."""
+    q, s = qs
+    return insights.posts(s, q.form, q.offices, q.start, q.end)
 
 
 @app.get("/api/forms/{form_id}/analytics/movers")

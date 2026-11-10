@@ -21,6 +21,7 @@ import { SeriesTable, TrendBars } from "@/components/analytics/TrendBars";
 import { fieldLabel, scopeQs, sumColumns, useFormFilters, type FormFilters } from "../forms/common";
 import MyNumbersPage from "./MyNumbers";
 import { DivisionPicker, FormPicker } from "./shared";
+import { AnalyticsTabs } from "../insights/shell";
 
 /** District offices see their own numbers here; state and zone users now land on Insights (post analytics). */
 export default function AnalyticsPage() {
@@ -102,6 +103,7 @@ export function FormAnalyticsPage() {
   return (
     <RPage>
       <RTitle title={t("nav_analytics")} sub={me.role === "zone" ? `${me.division?.label_mr ?? ""} · ${t("read_only_short")}` : t("all_maharashtra")} />
+      <AnalyticsTabs />
       <RFilterBar>
         <FormPicker f={f} />
         <RLabel small label={t("dates")}>

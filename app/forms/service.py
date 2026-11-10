@@ -470,12 +470,8 @@ def _review_target(s: Session, form: Form, office: str, ps: date) -> FormSubmiss
     return sub
 
 
-def _entry_target(s: Session, admin: User, form: Form, office: str, ps: date) -> FormSubmission:
-    """The period an admin edits a value of. One the office hasn't sent (or never opened) is taken as sent by
-    the admin, so the values it enters count in reports like any sent period's."""
-    sub = find(s, form, office, ps)
-    if sub is not None and sub.status in COUNTED:
-        return sub
+def check_state_target(s: Session, form: Form, office: str, ps: date) -> None:
+    """What a state-office edit needs, sent or not: a real office that receives the form, on a period that has started."""
     if s.get(Office, office) is None:
         raise FormError(f"unknown office {office}", 404)
     if office not in recipient_codes(s, form):
@@ -484,6 +480,15 @@ def _entry_target(s: Session, admin: User, form: Form, office: str, ps: date) ->
         raise FormError("not a reporting period of this form")
     if ps > today_ist():
         raise FormError("this period has not started yet")
+
+
+def _entry_target(s: Session, admin: User, form: Form, office: str, ps: date) -> FormSubmission:
+    """The period an admin edits a value of. One the office hasn't sent (or never opened) is taken as sent by
+    the admin, so the values it enters count in reports like any sent period's."""
+    sub = find(s, form, office, ps)
+    if sub is not None and sub.status in COUNTED:
+        return sub
+    check_state_target(s, form, office, ps)
     if sub is None:
         sub = FormSubmission(form_id=form.id, office_code=office, period_start=ps, status="draft")
         s.add(sub)
@@ -549,6 +554,38 @@ def correct(s: Session, admin: User, form: Form, office: str, ps: date, key: str
     audit.record(s, admin.username, "form_value.revert" if reverts else "form_value.correct", "form_submission",
                  _eid(form, office, ps), before={key: before}, after={key: value_of(f, row)}, note=note)
     return edit
+
+
+_KEEP = object()
+
+
+def set_field(s: Session, admin: User, form: Form, office: str, ps: date, key: str, *, value: Any = _KEEP,
+              note: str = "", proofs: Optional[dict[str, Any]] = None, store=None) -> FormSubmission:
+    """State office: one field's figure and/or its whole proof list in one step, from the responses page (e.g. figures
+    an office sent on WhatsApp). The figure goes through correct(), so a period the office hasn't sent is taken as sent
+    by the state office; proof follows the same link and file rules as save(). `value` left out keeps the figure."""
+    f = next((x for x in form.fields if x.key == key and not x.archived), None)
+    if f is None:
+        raise FormError(f"unknown field {key}")
+    if value is not _KEEP:
+        correct(s, admin, form, office, ps, key, value, note)
+    sub = _entry_target(s, admin, form, office, ps)
+    if proofs is None:
+        return sub
+    by_key = {x.key: x for x in form.fields}
+    plan = _proof_plan(s, form, office, ps, sub, by_key, {key: proofs}, store)
+    _apply_proofs(s, form, sub, by_key, plan, admin.username, utcnow())
+    sub.updated_at = utcnow()
+    s.flush()
+    s.expire(sub, ["proofs"])
+    n = next((r.value_num for r in sub.values if r.field_id == f.id), None)
+    links = len(plan[key]["links"])
+    if f.proof == "either" and links > (n or 0):
+        raise FormError(f"{f.label_mr}: more links than the number")
+    if f.proof == "links" and P.applies(form, ps) and links and (n or 0) != links:
+        typed = "blank" if n is None else f"{n:g}"
+        raise FormError(f"{f.label_mr}: the number ({typed}) must match the links ({links})")
+    return sub
 
 
 def revert(s: Session, admin: User, form: Form, office: str, ps: date, edit_id: int) -> FormValueEdit:

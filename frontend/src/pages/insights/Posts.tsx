@@ -1,105 +1,114 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
+import { ExternalLink, FileText, Image as ImageIcon, Link2 } from "lucide-react";
+import { proofFileUrl, type PostItem, type PostsData } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { PLATFORM_LABEL } from "@/lib/status";
-import { RPage, RSearch, RSegmented, RSelect } from "@/components/reports/kit";
-import { PlatformBadge } from "@/pages/monitor/shared";
-import { POSTS, type Platform, type Post } from "./sample";
-import { agoLabel, InsightsTabs, InsightsTitle, mult, multTone, Thumb, TONE_STROKE, TONE_TEXT, views } from "./kit";
+import { cn } from "@/lib/utils";
+import { RButton, RCard, RError, RPage, RSearch, RTitle } from "@/components/reports/kit";
+import { fig, longDay } from "@/components/reports/period";
+import { useFormFilters } from "../forms/common";
+import { AnalyticsFilters, AnalyticsTabs, Pending, useAnalytics } from "./shell";
 
-type Sort = "best" | "new" | "weak";
-const PLATFORMS: Platform[] = ["facebook", "instagram", "x", "youtube"];
-const COLS = "grid-cols-[52px_minmax(0,1fr)_96px] sm:grid-cols-[64px_minmax(0,1fr)_100px_96px_140px]";
+const PAGE = 60;
 
-/** Every campaign post this week, each compared with what its own account usually gets. */
+/** Analytics → Posts: the posts (links) and clippings/photos (files) the offices attached as proof, from the database —
+ * per field, how many were reported and how many have a link or file behind them; then every item by day, each opening
+ * the post or file itself. */
 export default function InsightsPosts() {
   const { t, tf, lang } = useT();
-  const [sort, setSort] = React.useState<Sort>("best");
+  const f = useFormFilters(7);
+  const posts = useAnalytics<PostsData>(f, "posts");
+  const [field, setField] = React.useState("");
   const [q, setQ] = React.useState("");
-  const [platform, setPlatform] = React.useState<Platform | "">("");
-  const [office, setOffice] = React.useState("");
-  const offices = [...new Map(POSTS.map((p) => [p.office.code, p.office])).values()]
-    .sort((a, b) => (lang === "en" ? a.name_en.localeCompare(b.name_en) : a.name_mr.localeCompare(b.name_mr, "mr")));
+  const [shown, setShown] = React.useState(PAGE);
+  React.useEffect(() => setShown(PAGE), [field, q, f.formId, f.start, f.end, f.division]);
 
+  const label = (x: { field_mr?: string; field_en?: string; label_mr?: string; label_en?: string }) =>
+    lang === "en" ? x.field_en || x.label_en || x.field_mr || x.label_mr || "" : x.field_mr || x.label_mr || "";
   const needle = q.trim().toLowerCase();
-  const rows = POSTS
-    .filter((p) => (!platform || p.platform === platform) && (!office || p.office.code === office))
-    .filter((p) => !needle || [p.caption, p.office.name_mr, p.office.name_en, p.platform].some((s) => s.toLowerCase().includes(needle)))
-    .sort((a, b) => sort === "best" ? b.mult - a.mult : sort === "new" ? a.daysAgo - b.daysAgo : a.mult - b.mult);
+  const items = (posts.data?.items ?? []).filter((x) => (!field || x.field === field)
+    && (!needle || [x.name_mr, x.name_en, x.division_mr, x.office, x.host ?? "", x.url ?? ""].some((s) => s.toLowerCase().includes(needle))));
+  const byDay = React.useMemo(() => {
+    const m = new Map<string, PostItem[]>();
+    items.slice(0, shown).forEach((x) => m.set(x.date, [...(m.get(x.date) ?? []), x]));
+    return [...m.entries()];
+  }, [items, shown]);
+  // only fields that have proof behind them; the rest would be a wall of zeros
+  const fields = (posts.data?.fields ?? []).filter((c) => c.links > 0 || c.files > 0);
 
   return (
     <RPage>
-      <InsightsTitle title={t("ins_posts")} sub={tf("ins_posts_sub", { n: "1,284" })} />
-      <InsightsTabs />
+      <RTitle title={t("ins_posts")} sub={t("po_sub")} />
+      <AnalyticsTabs />
+      <AnalyticsFilters f={f} />
+      {posts.error ? <RError error={posts.error} /> : !posts.data ? <Pending h="h-96" /> : (
+        <>
+          {/* one button per field: what was reported, and how much proof is behind it */}
+          <div className="grid grid-cols-2 sm:grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-2.5" role="group" aria-label={t("field")}>
+            <FieldButton on={!field} onClick={() => setField("")} title={t("po_all")} big={fig(posts.data.total)} sub="" />
+            {fields.map((c) => (
+              <FieldButton key={c.key} on={field === c.key} onClick={() => setField(c.key)} title={label(c)} big={fig(c.links + c.files)}
+                sub={tf("po_counts", { n: fig(c.reported), l: fig(c.links), f: fig(c.files) })} />
+            ))}
+          </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-[1_1_280px] flex-wrap items-center gap-3">
-          <RSearch value={q} onChange={setQ} placeholder={t("ins_search_posts")} className="max-w-[460px] flex-[1_1_280px]" />
-          <RSelect aria-label={t("mon_platform")} value={platform} onChange={(e) => setPlatform(e.target.value as Platform | "")}>
-            <option value="">{t("all_platforms")}</option>
-            {PLATFORMS.map((x) => <option key={x} value={x}>{PLATFORM_LABEL[x]}</option>)}
-          </RSelect>
-          <RSelect aria-label={t("office")} value={office} onChange={(e) => setOffice(e.target.value)}>
-            <option value="">{t("all_offices")}</option>
-            {offices.map((o) => <option key={o.code} value={o.code}>{lang === "en" ? o.name_en : o.name_mr}</option>)}
-          </RSelect>
-        </div>
-        <RSegmented label={t("ins_sort")} value={sort} onChange={setSort}
-          options={[{ value: "best", label: t("ins_sort_best") }, { value: "new", label: t("ins_sort_new") }, { value: "weak", label: t("ins_sort_weak") }]} />
-      </div>
+          <RSearch value={q} onChange={setQ} placeholder={t("po_search")} />
 
-      <section className="overflow-hidden rounded-2xl bg-r-card">
-        <div className={`grid ${COLS} gap-4 border-b border-r-sunk px-5 py-3 text-[13px] font-bold text-r-muted`}>
-          <span /><span>{t("ins_post")}</span>
-          <span className="hidden sm:block">{t("ins_first_3_days")}</span>
-          <span className="hidden text-right sm:block">{t("ins_views")}</span>
-          <span className="text-right">{t("ins_vs_usual")}</span>
-        </div>
-        {rows.map((p) => <Row key={p.id} p={p} />)}
-        {!rows.length && <p className="m-0 px-5 py-8 text-center text-r-muted">{t("ins_no_posts")}</p>}
-      </section>
-      <p className="m-0 text-sm text-r-muted">{t("ins_posts_note")}</p>
-      <span className="sr-only" aria-live="polite">{lang === "en" ? `${rows.length} posts` : `${rows.length} पोस्ट`}</span>
+          {!items.length ? <p className="m-0 rounded-2xl bg-r-card p-5 text-r-muted">{t("po_none")}</p> : (
+            <div className="flex flex-col gap-5">
+              {byDay.map(([day, list]) => (
+                <section key={day} className="flex flex-col gap-2">
+                  <h2 className="m-0 px-1 text-[15px] font-bold text-r-muted">{longDay(day, lang)} · <span className="num">{list.length}</span></h2>
+                  <RCard className="gap-0 p-0">
+                    {list.map((x, i) => <PostRow key={x.id} x={x} first={i === 0} formId={f.formId} fieldName={label(x)} />)}
+                  </RCard>
+                </section>
+              ))}
+              {items.length > shown && (
+                <div className="flex flex-wrap items-center gap-3">
+                  <RButton onClick={() => setShown((n) => n + PAGE)}>{tf("po_more", { n: Math.min(PAGE, items.length - shown) })}</RButton>
+                  <span className="text-sm text-r-muted">{tf("po_shown", { a: fig(items.length), b: fig(shown) })}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </RPage>
   );
 }
 
-function Row({ p }: { p: Post }) {
-  const { t, tf, lang } = useT();
-  const tone = multTone(p.mult);
+function FieldButton({ on, onClick, title, big, sub }: { on: boolean; onClick: () => void; title: string; big: string; sub: string }) {
   return (
-    <Link to={`/insights/posts/${p.id}`} className={`grid ${COLS} items-center gap-4 border-b border-r-line-soft px-5 py-3.5 text-r-ink no-underline last:border-b-0 hover:bg-r-ground`}>
-      <Thumb tint={p.tint} src={p.image} className="size-[52px] rounded-[10px] sm:size-16" />
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span lang="mr" className="line-clamp-2 font-semibold sm:line-clamp-none sm:truncate">{p.caption}</span>
-        <span className="flex items-center gap-1.5 text-sm text-r-muted">
-          <PlatformBadge platform={p.platform} className="size-[18px] rounded-[5px]" />
-          <span className="truncate">{lang === "en" ? p.office.name_en : p.office.name_mr} · {agoLabel(p.daysAgo, t, tf)}<span className="sm:hidden"> · {views(p.views)}</span></span>
-        </span>
-      </div>
-      <Spark p={p} />
-      <span className="num hidden text-right text-[17px] font-semibold sm:block">{views(p.views)}</span>
-      <span className={`num text-right font-semibold ${TONE_TEXT[tone]}`}>{mult(p.mult)}</span>
-    </Link>
+    <button type="button" aria-pressed={on} onClick={onClick}
+      className={cn("flex min-h-20 cursor-pointer flex-col items-start gap-0.5 rounded-2xl border-[1.5px] px-4 py-3 text-left",
+        on ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:border-r-action")}>
+      <span className="text-sm font-bold first-letter:uppercase">{title}</span>
+      <span className="num text-2xl leading-tight font-bold">{big}</span>
+      {sub && <span className={cn("num text-xs", on ? "opacity-80" : "text-r-muted")}>{sub}</span>}
+    </button>
   );
 }
 
-/** Views over the first three days against a usual post (dashed). */
-const SHAPE = [0, 0.3, 0.55, 0.72, 0.84, 0.92, 1.0];
-function Spark({ p }: { p: Post }) {
-  const { lang } = useT();
-  const growing = p.daysAgo <= 1;
-  const curve = (m: number, still: boolean) => SHAPE.map((s, k) => {
-    const v = still && k >= 4 ? s * m * (1 + (k - 3) * 0.12) : s * m;
-    return `${k ? "L" : "M"}${(4 + k * 15.3).toFixed(1)} ${(33 - (Math.min(v, 5.4) / 5.4) * 30).toFixed(1)}`;
-  }).join(" ");
-  const label = lang === "en"
-    ? `Views over the first 3 days: ${mult(p.mult)} a usual post${growing ? ", still growing" : ""}`
-    : `पहिल्या ३ दिवसांतील व्ह्यूज: नेहमीच्या पोस्टच्या ${mult(p.mult)}${growing ? ", अजून वाढत आहे" : ""}`;
+function PostRow({ x, first, formId, fieldName }: { x: PostItem; first: boolean; formId: number; fieldName: string }) {
+  const { t, shortName: name } = useT();
+  const href = x.kind === "link" ? x.url ?? "#" : proofFileUrl(formId, x.id);
+  let path = "";
+  try { if (x.url) { const u = new URL(x.url); path = (u.pathname + u.search).replace(/\/$/, ""); } } catch { /* shown as is */ }
+  const Icon = x.kind === "link" ? Link2 : x.type?.startsWith("image/") ? ImageIcon : FileText;
   return (
-    <svg viewBox="0 0 100 36" role="img" aria-label={label} className="hidden h-9 w-[100px] sm:block">
-      <path d={curve(1, false)} fill="none" className="stroke-r-field" strokeWidth={1.5} strokeDasharray="3 3" />
-      <path d={curve(p.mult, growing)} fill="none" className={TONE_STROKE[multTone(p.mult)]} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <a href={href} target="_blank" rel="noopener noreferrer"
+      className={cn("group flex min-h-16 items-center gap-3 px-4 py-3 text-r-ink no-underline hover:bg-r-action-soft", !first && "border-t border-r-line-soft")}>
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-r-action-soft text-r-action"><Icon className="size-5" aria-hidden /></span>
+      <span className="flex min-w-0 flex-1 flex-col leading-tight">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <b className="truncate">{name(x)}</b>
+          <span className="rounded-full bg-r-sunk px-2 py-px text-xs font-bold first-letter:uppercase">{fieldName}</span>
+        </span>
+        <span className="truncate text-[13px] text-r-muted">
+          {x.kind === "link" ? <><b className="text-r-ink">{x.host}</b>{path.length > 50 ? path.slice(0, 48) + "…" : path}</> : x.name}
+        </span>
+      </span>
+      <ExternalLink className="size-4 shrink-0 text-r-muted group-hover:text-r-action" aria-label={t("link_open")} />
+    </a>
   );
 }

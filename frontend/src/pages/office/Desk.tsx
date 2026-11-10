@@ -1,13 +1,13 @@
 import * as React from "react";
-import { Link } from "react-router-dom";
-import { ChevronDown, FileSpreadsheet, Search, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, ChevronDown, ChevronRight, FilePen, FilePlus2, FileSpreadsheet, Search, X } from "lucide-react";
 import { backendUrl, type CampaignBrief, type FormDef, type FormField, type ResponseRow } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
 import { byMenuOrder, cn, qs } from "@/lib/utils";
-import { RButton, RCard, RChip, RError, StatusMark, markOf } from "@/components/reports/kit";
+import { RButton, RCard, RChip, RError, RSheet, StatusMark, markOf } from "@/components/reports/kit";
 import { deadlineOf, isOverdue, timeOf, whenText } from "@/components/reports/period";
-import { fieldLabel, formTitle, sumColumns, useFormDef, useForms, useToday } from "../forms/common";
+import { FormNumber, fieldLabel, formTitle, sumColumns, useFormDef, useFormNumbers, useForms, useToday } from "../forms/common";
 import { officeName, shortOffice } from "../forms/Responses";
 import { cellInfo, chaseText, CopyButton, formRange, periodName, reportingPeriod, useCompliance, useResponses, windowOf } from "./shared";
 
@@ -104,7 +104,8 @@ export function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
   }, []);
 
   return (
-    <div className="relative z-20">
+    <div className="flex flex-col items-start gap-3">
+    <div className="relative z-20 self-stretch">
       <div className="flex min-h-16 items-center gap-3 rounded-2xl border-[1.5px] border-r-line bg-r-card px-5 focus-within:border-r-ink focus-within:shadow-[0_0_0_3px_var(--r-focus)]">
         <Search className="size-6 shrink-0 text-r-muted" aria-hidden />
         <input ref={input} type="search" value={q} placeholder={t("desk_search")} aria-label={t("desk_search")}
@@ -141,6 +142,53 @@ export function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
         </div>
       </div>}
     </div>
+      {/* while a search narrows the cards, a plain way back to all of them (the × in the box does the same) */}
+      {q.trim() && (
+        <RButton size="sm" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQ(""); setOpen(false); input.current?.blur(); }}>
+          <ArrowLeft aria-hidden /> {t("back_all_forms")}
+        </RButton>
+      )}
+    </div>
+  );
+}
+
+// --------------------------------------------------------------------------- fill a response
+/** Forms an office can be filled in for today: live (or paused) and running today. */
+function fillable(forms: FormDef[], today: string) {
+  return forms.filter((x) => (x.status === "published" || x.status === "paused") && x.start_date <= today && (!x.end_date || x.end_date >= today));
+}
+
+/** "Fill response": pick one of today's forms, then its fill page asks for the office and the day (the state office
+ * entering figures for an office, e.g. from WhatsApp). Sits beside "New form" on the Desk and the Forms page. */
+export function FillResponseButton() {
+  const { t, lang } = useT();
+  const nav = useNavigate();
+  const { data: forms } = useForms();
+  const today = useToday();
+  const numbers = useFormNumbers();
+  const [open, setOpen] = React.useState(false);
+  const list = forms && today ? fillable(forms, today).sort((a, b) => (numbers.get(a.id) ?? 0) - (numbers.get(b.id) ?? 0)) : [];
+  return (
+    <>
+      <RButton onClick={() => setOpen(true)}><FilePen aria-hidden /> {t("fill_response")}</RButton>
+      <RSheet open={open} onClose={() => setOpen(false)} closeLabel={t("close")} title={t("fill_pick_form")} description={t("fill_pick_hint")}>
+        {!list.length ? <p className="m-0 text-r-muted">{t("no_live_forms")}</p> : (
+          <div className="flex flex-col gap-2">
+            {list.map((x) => (
+              <button key={x.id} type="button" onClick={() => { setOpen(false); nav(`/forms/${x.id}/fill`); }}
+                className="flex min-h-16 w-full cursor-pointer items-center gap-3 rounded-xl border-[1.5px] border-r-line bg-r-card px-4 py-3 text-left text-r-ink hover:border-r-action hover:bg-r-action-soft">
+                <FormNumber small n={numbers.get(x.id)} />
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <b className="wrap-break-word">{formTitle(x, lang)}</b>
+                  <span className="num text-[13px] text-r-muted">{formRange(x, lang)}</span>
+                </span>
+                <ChevronRight className="size-5 shrink-0 text-r-muted" aria-hidden />
+              </button>
+            ))}
+          </div>
+        )}
+      </RSheet>
+    </>
   );
 }
 
@@ -171,6 +219,7 @@ function useMinimized() {
  * A form that has ended or not yet started is left out: the Desk is today's work only. */
 export default function DeskPage() {
   const { t, tf } = useT();
+  const nav = useNavigate();
   const { data: forms } = useForms();
   const today = useToday();
 
@@ -180,20 +229,28 @@ export default function DeskPage() {
     .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id - a.id), [forms, today]);
   const { q, setQ, needle, shown, campaignOf, onPick } = useFormSearch(live);
   const min = useMinimized();
+  const numbers = useFormNumbers();
 
   return (
     <div className="rpt flex flex-col gap-6 sm:gap-8">
       <DeskSearch q={q} setQ={setQ} forms={live} campaignOf={campaignOf} onPick={onPick} />
-      <h1 className="disp m-0 px-1 text-2xl font-bold sm:text-[28px]">{t("desk_heading")}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+        <h1 className="disp m-0 text-2xl font-bold sm:text-[28px]">{t("desk_heading")}</h1>
+        <div className="flex flex-wrap gap-2">
+          <FillResponseButton />
+          <RButton variant="pri" onClick={() => nav("/forms/new")}><FilePlus2 aria-hidden /> {t("new_form")}</RButton>
+        </div>
+      </div>
       {!forms || !today ? <div className="h-96 animate-pulse rounded-2xl bg-r-sunk" />
         : !live.length ? <p className="m-0 px-1 text-sm text-r-muted">{t("desk_nothing_today")}</p>
         : needle && !shown.length ? <p className="m-0 px-1 text-sm text-r-muted">{tf("desk_no_match", { q: q.trim() })}</p>
-        : shown.map((x) => <DeskCard key={x.id} formId={x.id} minimized={min.isMin(x.id)} onToggle={() => min.toggle(x.id)} />)}
+        // each form keeps one number everywhere (useFormNumbers), so a searched card shows the number it always has
+        : shown.map((x) => <DeskCard key={x.id} formId={x.id} n={numbers.get(x.id)} minimized={min.isMin(x.id)} onToggle={() => min.toggle(x.id)} />)}
     </div>
   );
 }
 
-function DeskCard({ formId, minimized, onToggle }: { formId: number; minimized: boolean; onToggle: () => void }) {
+function DeskCard({ formId, n, minimized, onToggle }: { formId: number; n: number | undefined; minimized: boolean; onToggle: () => void }) {
   const tr = useT();
   const { t, tf, lang } = tr;
   const { data: form, error: formError } = useFormDef(formId);
@@ -246,13 +303,23 @@ function DeskCard({ formId, minimized, onToggle }: { formId: number; minimized: 
       {/* header: which form, which period, how far along */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2">
-          <div className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">
-            {periodName(form, ps, lang)}{dl && ` · ${t("due_label")} ${dl.getTime() - now < 864e5 && dl.getTime() > now ? timeOf(dl, lang) : whenText(dl, lang)}`}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            {/* says plainly that this card is a form, and which one */}
+            <FormNumber n={n} />
+            <span className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">
+              {periodName(form, ps, lang)}{dl && ` · ${t("due_label")} ${dl.getTime() - now < 864e5 && dl.getTime() > now ? timeOf(dl, lang) : whenText(dl, lang)}`}
+            </span>
           </div>
-          <h2 className="disp m-0 text-[28px] leading-[1.08] font-bold sm:text-[36px]">{formTitle(form, lang)}</h2>
+          {/* the title opens and closes the card, like the Expand / Minimise button */}
+          <h2 className="disp m-0 text-[28px] leading-[1.08] font-bold sm:text-[36px]">
+            <button type="button" aria-expanded={!minimized} onClick={onToggle}
+              className="cursor-pointer rounded-lg border-0 bg-transparent p-0 text-left font-[inherit] text-inherit hover:underline focus-visible:outline-2 focus-visible:outline-r-action">
+              {formTitle(form, lang)}
+            </button>
+          </h2>
         </div>
         <div className="flex flex-wrap gap-2">
-          {count("none") > 0 && chase && <CopyButton text={chase} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />}
+          {count("none") > 0 && chase && <CopyButton whatsapp text={chase} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />}
           <RButton asChild size="sm" variant="ghost">
             <a href={backendUrl(`/api/forms/${formId}/export${qs({ start: form.start_date, end: lastDay })}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
           </RButton>

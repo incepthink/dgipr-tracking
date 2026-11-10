@@ -333,6 +333,14 @@ export interface GroupRow {
   key: GroupKey; fields: string[]; total: number; previous: number; delta_pct: number | null;
   series: { date: string; value: number; reported: boolean }[];
 }
+/** Analytics → Posts: proof the offices attached (app/forms/insights.py posts). */
+export interface PostItem {
+  id: number; kind: "link" | "file"; url: string | null; host: string | null; name: string | null; type: string | null; size: number | null;
+  field: string; field_mr: string; field_en: string; office: string; name_mr: string; name_en: string;
+  division: string; division_mr: string; date: string; added_by: string; added_at: string | null;
+}
+export interface PostField { key: string; label_mr: string; label_en: string; proof: string; reported: number; links: number; files: number }
+export interface PostsData { start: string; end: string; total: number; items: PostItem[]; fields: PostField[] }
 export interface Groups { start: string; end: string; previous: { start: string; end: string }; comparable: boolean; groups: GroupRow[] }
 export interface MapRow {
   code: string; name_mr: string; name_en: string; kind: string; division: string; division_mr: string;

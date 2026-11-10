@@ -66,7 +66,7 @@ export default function CompliancePage() {
                 <RCheck checked={withOld} onChange={setWithOld} className="self-start">{t("also_older")}</RCheck>
               )}
               {(mode === "day" ? missing : stats?.overdue) ? <WhatsAppBox text={text} /> : <RAlert tone="success">{t("nobody_to_chase")}</RAlert>}
-              <CopyButton variant="pri" size="md" text={text} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />
+              <CopyButton whatsapp variant="pri" size="md" text={text} label={t("copy_whatsapp")} done={t("copied_whatsapp")} />
               <span className="text-[13px] text-r-muted">{t("whatsapp_hint")}</span>
             </RCard>
 

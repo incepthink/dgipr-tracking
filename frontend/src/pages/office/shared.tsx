@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, Send } from "lucide-react";
 import { api, type Compliance, type ComplianceRow, type FormDef, type FormStatus, type ResponsesData } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
@@ -326,20 +326,64 @@ export function chaseText({ form, data, j, withOld, onlyOverdue, tr, now = Date.
   return text;
 }
 
+/** Copies text: the clipboard API where the page allows it (https), else the older select-and-copy, which also works
+ * on phones over plain http. False when neither worked; the caller then shows the text to copy by hand. */
 export async function copyText(text: string, ok: string) {
-  try { await navigator.clipboard.writeText(text); toast.success(ok); return true; }
-  catch { toast.error("Clipboard unavailable"); return false; }
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); toast.success(ok); return true; }
+  } catch { /* fall through to the older way */ }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    Object.assign(ta.style, { position: "fixed", top: "0", left: "0", opacity: "0", fontSize: "16px" });  // 16px: no zoom on iPhone
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    const done = document.execCommand("copy");
+    ta.remove();
+    if (done) { toast.success(ok); return true; }
+  } catch { /* shown by hand below */ }
+  return false;
 }
 
-export function CopyButton({ text, label, done, variant = "default", size = "sm", className }: {
+/** Opens WhatsApp (the app on a phone, WhatsApp Web on a computer) with the text already typed in; pick the chat. */
+export function WhatsAppButton({ text, size = "sm", className }: { text: string; size?: "sm" | "md"; className?: string }) {
+  const { t } = useT();
+  return (
+    <RButton asChild size={size} className={cn("border-[#1da851] bg-[#25d366] text-[#073b1c] hover:border-[#1da851] hover:bg-[#1ebe5b]", className)}>
+      <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer"><Send aria-hidden /> {t("send_whatsapp")}</a>
+    </RButton>
+  );
+}
+
+export function CopyButton({ text, label, done, variant = "default", size = "sm", className, whatsapp }: {
   text: string; label: string; done: string; variant?: "default" | "pri"; size?: "sm" | "md"; className?: string;
+  /** also offer "Send on WhatsApp" beside it, with the same text */
+  whatsapp?: boolean;
 }) {
+  const { t } = useT();
   const [copied, setCopied] = React.useState(false);
+  const [manual, setManual] = React.useState(false);
   React.useEffect(() => setCopied(false), [text]);
   return (
-    <RButton variant={variant} size={size} className={className} onClick={async () => setCopied(await copyText(text, done))}>
-      <Copy aria-hidden /> {copied ? done : label}
-    </RButton>
+    <>
+      <RButton variant={variant} size={size} className={className}
+        onClick={async () => { const ok = await copyText(text, done); setCopied(ok); if (!ok) setManual(true); }}>
+        <Copy aria-hidden /> {copied ? done : label}
+      </RButton>
+      {whatsapp && <WhatsAppButton text={text} size={size} />}
+      {/* the phone refused both ways of copying: show the text, ready to select, and a straight WhatsApp share */}
+      <RSheet open={manual} onClose={() => setManual(false)} closeLabel={t("close")} title={t("copy_manual_title")} description={t("copy_manual_body")}
+        footer={
+          <RButton asChild size="lg" variant="pri">
+            <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">{t("send_whatsapp")}</a>
+          </RButton>
+        }>
+        <textarea readOnly value={text} rows={10} onFocus={(e) => e.currentTarget.select()}
+          className="w-full rounded-xl border-[1.5px] border-r-line bg-r-card p-3 text-base leading-snug text-r-ink" />
+      </RSheet>
+    </>
   );
 }
 

@@ -1,16 +1,16 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ClipboardCheck, FilePlus2, ListChecks, Pause, Pencil, Play, Repeat, Send, Trash2, Users } from "lucide-react";
+import { CalendarDays, ClipboardCheck, FilePen, FilePlus2, ListChecks, Pause, Pencil, Play, Repeat, Send, Trash2, Users } from "lucide-react";
 import { api, type FormBrief, type FormDef } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
 import { cn, qs } from "@/lib/utils";
 import { RButton, RCard, RError, RPage, RTitle } from "@/components/reports/kit";
 import { dayMonth, fig, whenText } from "@/components/reports/period";
-import { formTitle } from "./common";
+import { FormNumber, formTitle, useFormNumbers } from "./common";
 import { STATUS_DOT, formRange } from "../office/shared";
-import { DeskSearch, useFormSearch } from "../office/Desk";
+import { DeskSearch, FillResponseButton, useFormSearch } from "../office/Desk";
 
 
 export default function FormsListPage() {
@@ -20,10 +20,11 @@ export default function FormsListPage() {
     queryKey: ["forms", { archived: true }], queryFn: () => api.get<FormBrief[]>("/api/forms?archived=true"),
   });
   const { q, setQ, needle, shown, campaignOf, onPick } = useFormSearch(data ?? []);
+  const numbers = useFormNumbers();
   return (
     <RPage>
       <RTitle title={t("forms_title")}
-        actions={<RButton variant="pri" onClick={() => nav("/forms/new")}><FilePlus2 aria-hidden /> {t("new_form")}</RButton>} />
+        actions={<div className="flex flex-wrap gap-2"><FillResponseButton /><RButton variant="pri" onClick={() => nav("/forms/new")}><FilePlus2 aria-hidden /> {t("new_form")}</RButton></div>} />
       {!!data?.length && <DeskSearch q={q} setQ={setQ} forms={data} campaignOf={campaignOf} onPick={onPick} />}
       {error ? <RError error={error} /> : isLoading || !data ? (
         <div className="grid gap-4 lg:grid-cols-2">{[0, 1].map((i) => <div key={i} className="h-48 animate-pulse rounded-2xl bg-r-sunk" />)}</div>
@@ -36,13 +37,13 @@ export default function FormsListPage() {
       ) : needle && !shown.length ? (
         <p className="m-0 px-1 text-sm text-r-muted">{tf("desk_no_match", { q: q.trim() })}</p>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-2">{shown.map((f) => <FormCard key={f.id} f={f} />)}</div>
+        <div className="grid gap-5 lg:grid-cols-2">{shown.map((f) => <FormCard key={f.id} f={f} n={numbers.get(f.id)} />)}</div>
       )}
     </RPage>
   );
 }
 
-function FormCard({ f }: { f: FormBrief }) {
+function FormCard({ f, n }: { f: FormBrief; n: number | undefined }) {
   const { t, tf, lang } = useT();
   const inv = [["forms"], ["forms-mine"], ["form", f.id]];
   const status = useAction((s: string) => api.post<FormDef>(`/api/forms/${f.id}/${s}`), { invalidate: inv, success: (r) => t(`status_${r.status}` as TKey) });
@@ -52,7 +53,8 @@ function FormCard({ f }: { f: FormBrief }) {
   return (
     <RCard className={cn("gap-5 p-6 shadow-[0_1px_2px_rgb(21_32_43/0.06),0_4px_12px_rgb(21_32_43/0.06)]", f.status === "archived" && "opacity-70")}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
+        <div className="flex min-w-0 flex-col items-start gap-2">
+          <FormNumber n={n} />
           <Link to={`/forms/${f.id}/edit`} className="text-[17px] leading-snug font-bold text-r-ink no-underline hover:underline">{formTitle(f, lang)}</Link>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Chip><span className={cn("size-2 rounded-full", STATUS_DOT[f.status])} aria-hidden />{t(`status_${f.status}` as TKey)}</Chip>
@@ -78,6 +80,9 @@ function FormCard({ f }: { f: FormBrief }) {
       <div className="mt-auto flex flex-wrap gap-2">
         <RButton size="sm" variant="ghost" asChild><Link to={`/forms/${f.id}/edit`}><Pencil aria-hidden /> {t("edit")}</Link></RButton>
         {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/forms/responses${qs({ form: f.id })}`}><ClipboardCheck aria-hidden /> {t("nav_responses")}</Link></RButton>}
+        {(f.status === "published" || f.status === "paused") && (
+          <RButton size="sm" variant="ghost" asChild><Link to={`/forms/${f.id}/fill`}><FilePen aria-hidden /> {t("fill_response")}</Link></RButton>
+        )}
         <div className="ml-auto flex flex-wrap gap-1">
           {f.status === "draft" && (
             <RButton size="sm" variant="pri" loading={status.isPending} onClick={() => status.mutate("publish")}><Send aria-hidden /> {t("publish")}</RButton>

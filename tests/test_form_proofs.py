@@ -242,6 +242,44 @@ def test_exempt_period(pform, solapur, entry_open):
     assert got["proof_exempt"] is True and got["proof_missing"] == [] and got["values"]["facebook"] == 5
 
 
+def test_state_fills_a_missing_day_with_proof(admin_client, solapur):
+    """Figures an office sent on WhatsApp: the state office enters them field by field, each with its proof."""
+    form = new_form(admin_client)
+    field = url(form, "nashik", TODAY, "field")
+    r = admin_client.post(field, json={"key": "facebook", "value": 2, "note": "WhatsApp"})
+    assert r.status_code == 200, r.text
+    got = r.json()
+    assert got["status"] == "submitted" and got["submitted_by"] == "admin" and got["values"]["facebook"] == 2
+    # proof on the now-sent day follows the save rules: links must match the number, figure and links go together
+    bad = admin_client.post(field, json={"key": "facebook", "proofs": {"links": FB[:3]}})
+    assert bad.status_code == 400 and "must match" in bad.json()["detail"]
+    r = admin_client.post(field, json={"key": "facebook", "value": 3, "proofs": {"links": FB[:3]}})
+    assert r.status_code == 200, r.text
+    assert r.json()["values"]["facebook"] == 3 and [p["url"] for p in r.json()["proofs"]["facebook"]] == FB[:3]
+    # a PDF uploaded by the state office after the day was sent
+    pdf = upload(admin_client, form, "nashik", TODAY, "clippings", b"%PDF-1.4 katran")
+    r = admin_client.post(field, json={"key": "clippings", "value": 1, "proofs": {"files": [pdf]}})
+    assert r.status_code == 200, r.text
+    assert r.json()["proof_missing"] == [] and r.json()["proofs"]["clippings"][0]["name"] == "पुरावा.pdf"
+    # a refused proof leaves the figure as it was
+    r = admin_client.post(field, json={"key": "facebook", "value": 1, "proofs": {"links": FB[:3]}})
+    assert r.status_code == 400
+    assert admin_client.get(url(form, "nashik", TODAY)).json()["values"]["facebook"] == 3
+    # offices can't use it
+    assert solapur.post(url(form, "solapur", TODAY, "field"), json={"key": "facebook", "value": 1}).status_code == 403
+    # Analytics → Posts lists that proof from the database, with figures reported vs links/files given
+    r = admin_client.get(f"/api/forms/{form['id']}/analytics/posts?start={TODAY}&end={TODAY}")
+    assert r.status_code == 200, r.text
+    got = r.json()
+    nashik = [x for x in got["items"] if x["office"] == "nashik"]
+    assert sorted(x["url"] for x in nashik if x["kind"] == "link") == sorted(FB[:3])
+    assert [x["host"] for x in nashik if x["kind"] == "link"][0] == "facebook.com"
+    assert [x["name"] for x in nashik if x["kind"] == "file"] == ["पुरावा.pdf"]
+    fb = next(c for c in got["fields"] if c["key"] == "facebook")
+    assert fb["reported"] >= 3 and fb["links"] >= 3
+    assert solapur.get(f"/api/forms/{form['id']}/analytics/posts").status_code in (200, 403)  # scoped like every analytics call
+
+
 def test_file_access_by_role(admin_client, solapur, pune, zone_pune, zone_nashik):
     form = new_form(admin_client)
     item = upload(solapur, form, "solapur", TODAY, "clippings", b"%PDF-1.4 secret")

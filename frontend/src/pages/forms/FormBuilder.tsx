@@ -2,7 +2,7 @@ import * as React from "react";
 import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Eye, GripVertical, Info, Lock, Pause, Pencil, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, Eye, GripVertical, Info, Lock, Pause, Pencil, Play, Plus, Trash2, Undo2 } from "lucide-react";
 import { api, ApiError, type Column, type FormDef, type FormField, type Frequency, type ProofType } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
@@ -97,6 +97,14 @@ function restore(local: Draft, server: Draft): Draft {
   return { ...server, ...local, fields: byGroup(local.fields.map((f) => ({ ...f, proof: f.proof ?? proofOf.get(f.id) ?? "none", uid: (f.id !== null && byId.get(f.id)) || f.uid }))) };
 }
 
+/** Which part of the draft an edit touched ("title_en", a field's uid, "order"…), so typing in one box is one undo step. */
+function touched(a: Draft, b: Draft) {
+  const top = (Object.keys(b) as (keyof Draft)[]).filter((k) => k !== "fields" && JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+  const ids = (d: Draft) => d.fields.map((f) => f.uid).join();
+  const fields = ids(a) !== ids(b) ? ["order"] : b.fields.filter((f, i) => JSON.stringify(f) !== JSON.stringify(a.fields[i])).map((f) => f.uid);
+  return [...top, ...fields].join(",");
+}
+
 /** Human list of what changed since the last save, for the sticky bar. */
 function changesOf(a: Draft, b: Draft | null, t: (k: TKey) => string, lang: string) {
   if (!b) return [];
@@ -134,6 +142,34 @@ export default function FormBuilderPage() {
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [focusGroup, setFocusGroup] = React.useState<string | null>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
+
+  // Undo, one step at a time: every edit keeps the draft from before it. Edits to the same thing close together (typing
+  // in one box, one drag) are one step. Loading and saving start a fresh list; Discard can itself be undone.
+  const [undoStack, setUndoStack] = React.useState<Draft[]>([]);
+  const prevDraft = React.useRef<Draft | null>(null);
+  const skipNext = React.useRef(true);
+  const lastStep = React.useRef({ at: 0, what: "" });
+  React.useEffect(() => {
+    if (!draft) return;
+    const before = prevDraft.current;
+    prevDraft.current = draft;
+    if (skipNext.current || !before || before === draft) { skipNext.current = false; return; }
+    const what = touched(before, draft);
+    const now = Date.now();
+    const merge = now - lastStep.current.at < 1500 && what === lastStep.current.what;
+    lastStep.current = { at: now, what };
+    if (!merge) setUndoStack((st) => [...st.slice(-99), before]);
+  }, [draft]);
+  const resetUndo = () => { skipNext.current = true; setUndoStack([]); lastStep.current = { at: 0, what: "" }; };
+  const undo = () => {
+    const last = undoStack[undoStack.length - 1];
+    if (!last) return;
+    skipNext.current = true;
+    lastStep.current = { at: 0, what: "" };
+    setUndoStack((st) => st.slice(0, -1));
+    setDraft(last);
+    toast.info(t("undone_one"));
+  };
 
   React.useEffect(() => {
     if (draft || !meta || !today || (formId && !form)) return;
@@ -207,6 +243,7 @@ export default function FormBuilderPage() {
 
   const apply = (savedForm: FormDef) => {
     const d = toDraft(savedForm, allOffices, today);
+    resetUndo();
     writeLocal(formId, null);
     setDraft(d);
     setSaved(d);
@@ -257,7 +294,9 @@ export default function FormBuilderPage() {
     <RPage className="pb-0">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-2.5">
-          <Link to="/forms" className="text-[13px] font-bold text-r-muted no-underline hover:text-r-ink">{t("nav_forms")} ›</Link>
+          <RButton asChild size="sm" className="self-start">
+            <Link to="/forms"><ArrowLeft aria-hidden /> {t("back_forms")}</Link>
+          </RButton>
           <h1 className="disp m-0 text-[32px] leading-[1.1] font-bold">{title}</h1>
           {status === "published" && (
             <span className="flex items-center gap-1.5 self-start rounded-full bg-r-accepted-soft px-2.5 py-[3px] text-sm font-bold text-r-accepted">
@@ -404,6 +443,10 @@ export default function FormBuilderPage() {
       <footer className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-3 border-t border-r-line bg-r-card px-4 py-3 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <RButton variant={status === "draft" ? "default" : "pri"} loading={saving} disabled={(!dirty && !!formId) || (status !== "draft" && !!dateProblem)} title={status !== "draft" ? dateProblem ?? undefined : undefined} onClick={() => save(false)}>{t("save_changes")}</RButton>
         {status === "draft" && <RButton variant="pri" loading={saving} disabled={!!dateProblem} title={dateProblem ?? undefined} onClick={() => save(true)}>{t("publish")}</RButton>}
+        <RButton variant="ghost" disabled={!undoStack.length} onClick={undo}
+          title={undoStack.length ? tf("undo_steps_n", { n: undoStack.length }) : undefined}>
+          <Undo2 aria-hidden /> {t("undo_step")}{undoStack.length > 0 && <span className="num font-normal opacity-70">({undoStack.length})</span>}
+        </RButton>
         {dirty && formId && <RButton variant="ghost" onClick={() => saved && setDraft(saved)}>{t("discard")}</RButton>}
         <span className="min-w-0 flex-1 truncate text-sm">
           {dirty ? <><b>{tf("n_unsaved_changes", { n: changes.length || 1 })}:</b> {changes.slice(0, 4).join(", ")}{changes.length > 4 && "…"} <span className="text-r-muted">· {t("autosaved_local")}</span></> : formId ? <span className="text-r-muted">{t("all_saved")}</span> : null}

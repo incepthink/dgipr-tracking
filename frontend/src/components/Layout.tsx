@@ -73,11 +73,12 @@ function activeOf(pathname: string) {
     .sort((a, b) => b.length - a.length)[0];
 }
 
-/** Insights (post analytics) for the state and zone offices. */
+/** Analytics for the state and zone offices: four tabs, all real data from the report forms. */
 const INSIGHTS: { to: string; label: TKey; icon: React.ElementType; end?: boolean }[] = [
   { to: "/insights", label: "ins_overview", icon: LayoutDashboard, end: true },
-  { to: "/insights/posts", label: "ins_posts", icon: Newspaper },
+  { to: "/office/form-analytics", label: "nav_form_analytics", icon: BarChart3 },
   { to: "/insights/districts", label: "ins_districts", icon: MapPinned },
+  { to: "/insights/posts", label: "ins_posts", icon: Newspaper },
 ];
 
 /** Social monitoring is one page; these sit under it in the sidebar. */
@@ -110,8 +111,9 @@ export function useTheme() {
   return { dark, toggle };
 }
 
-/** Analytics and Monitoring sections in the sidebar. */
-const SHOW_BETA_NAV = true;
+/** Social Monitoring (collecting posts from the platforms) is off for now: its pages still open by URL, but the
+ * sidebar doesn't list them. Analytics always shows for the state and zone offices. */
+const SHOW_MONITORING = false;
 
 const ACTIVE = "bg-sidebar-accent text-white";
 
@@ -131,9 +133,9 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const current = activeOf(pathname);
   const [pwOpen, setPwOpen] = React.useState(false);
   const monitorActive = /^\/(monitor|publications|reports)(\/|$)/.test(pathname);
-  const analytics = SHOW_BETA_NAV && me.role !== "district" && (
+  const analytics = me.role !== "district" && (
     <div>
-      <SectionLabel>{t("nav_analytics_beta")}</SectionLabel>
+      <SectionLabel>{t("nav_analytics")}</SectionLabel>
       <div className="space-y-0.5">
         {INSIGHTS.map((m) => (
           <NavLink key={m.to} to={m.to} end={m.end} onClick={onNavigate} className={({ isActive }) => navCls(isActive)}>
@@ -177,7 +179,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
 
         {isState && analytics}
 
-        {SHOW_BETA_NAV && isState && (
+        {SHOW_MONITORING && isState && (
           <div>
             <SectionLabel>{t("nav_monitoring_beta")}</SectionLabel>
             <Link to="/monitor" onClick={onNavigate} aria-current={monitorActive ? "page" : undefined}

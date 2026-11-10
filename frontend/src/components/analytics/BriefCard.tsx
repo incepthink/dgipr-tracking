@@ -35,7 +35,7 @@ export function BriefCard({ formId, division, enabled }: { formId: number; divis
       {!b ? <div className="h-16 animate-pulse rounded-lg bg-r-sunk" /> : <p className="m-0 leading-relaxed">{b.text}</p>}
       {b && (
         <div className="flex flex-wrap items-center gap-2">
-          <CopyButton text={b.text} label={t("brief_copy")} done={t("copied")} />
+          <CopyButton whatsapp text={b.text} label={t("brief_copy")} done={t("copied")} />
           {me.role === "state" && b.ai_configured && (
             <RButton size="sm" loading={refresh.isPending} onClick={() => refresh.mutate()}><RefreshCw aria-hidden /> {t("brief_refresh")}</RButton>
           )}

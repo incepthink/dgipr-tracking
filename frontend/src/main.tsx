@@ -1,9 +1,10 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { createBrowserRouter, Navigate, RouterProvider, useLocation, useParams } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider, useLocation, useParams, useRouteError } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import "./index.css";
+import { guardAgainstPageTranslation } from "@/lib/translateGuard";
 import { Layout } from "@/components/Layout";
 import { TooltipProvider } from "@/components/ui/primitives";
 import MonitorPage from "@/pages/monitor/Monitor";
@@ -30,7 +31,7 @@ import AccountPage from "@/pages/Account";
 import OfficeReportsPage from "@/pages/office/Reports";
 import UsersPage from "@/pages/admin/Users";
 import { AuthGate, RequireRole, useUser } from "@/lib/auth";
-import { LangProvider } from "@/lib/i18n";
+import { LangProvider, useT } from "@/lib/i18n";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -59,10 +60,32 @@ function RunToMonitor() {
   return <Navigate to={`/monitor?run=${id}`} replace />;
 }
 
+/** Shown instead of a blank page when a page fails to draw: what happened, in plain words, and a reload button. */
+function RouteError() {
+  const error = useRouteError();
+  const { t } = useT();
+  React.useEffect(() => { console.error(error); }, [error]);
+  return (
+    <div className="rpt flex min-h-screen items-center justify-center bg-r-ground p-6">
+      <div className="flex max-w-md flex-col items-start gap-3 rounded-2xl border border-r-line bg-r-card p-6">
+        <h1 className="disp m-0 text-2xl font-bold">{t("something_went_wrong")}</h1>
+        <p className="m-0 text-r-muted">{t("something_went_wrong_body")}</p>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => window.location.reload()}
+            className="min-h-11 cursor-pointer rounded-xl border-0 bg-r-action px-5 font-bold text-white">{t("reload")}</button>
+          <button type="button" onClick={() => window.history.back()}
+            className="min-h-11 cursor-pointer rounded-xl border-[1.5px] border-r-line bg-r-card px-5 font-bold text-r-ink">{t("back")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const router = createBrowserRouter(
   [
     {
       element: <AuthGate><Layout /></AuthGate>,
+      errorElement: <RouteError />,
       children: [
         { index: true, element: <Home /> },
         { path: "forms/mine", element: <MyFormsPage /> },
@@ -102,6 +125,8 @@ const router = createBrowserRouter(
   ],
   { basename: import.meta.env.BASE_URL.replace(/\/$/, "") },
 );
+
+guardAgainstPageTranslation();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

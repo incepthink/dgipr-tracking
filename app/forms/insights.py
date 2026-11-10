@@ -373,3 +373,53 @@ def peer_average(s: Session, form: Form, peers: list[str], start: date, end: dat
     tot = analytics.totals(s, form, peers, start, end)
     return {"offices": len(peers), "periods_reported": sent,
             "per_day": {k: (round(v / sent, 2) if sent else None) for k, v in tot.items()}}
+
+
+# --------------------------------------------------------------------------- posts (proof the offices attached)
+def posts(s: Session, form: Form, offices: list[str], start: date, end: date, limit: int = 1000) -> dict[str, Any]:
+    """Every live proof item (a post link, or a PDF/photo) on counted periods in the range, newest day first, with the
+    field it backs, the office and the figure reported, plus per-field counts: figures reported vs links/files given.
+    This is real data from the report forms; nothing is collected from the platforms."""
+    from urllib.parse import urlparse
+
+    from app.forms import proof as P
+
+    fields = {f.id: f for f in form.fields if not f.archived}
+    subs = s.scalars(select(FormSubmission).options(selectinload(FormSubmission.proofs), selectinload(FormSubmission.values))
+                     .where(FormSubmission.form_id == form.id, FormSubmission.office_code.in_(offices),
+                            FormSubmission.period_start >= start, FormSubmission.period_start <= end,
+                            FormSubmission.status.in_(COUNTED))).all()
+    meta = {m["code"]: m for m in _meta(s, offices)}
+    items: list[dict[str, Any]] = []
+    per_field: dict[str, dict[str, Any]] = {}
+    for sub in subs:
+        values = {v.field_id: v.value_num for v in sub.values}
+        for fid, f in fields.items():
+            if f.proof == "none":
+                continue
+            c = per_field.setdefault(f.key, {"key": f.key, "label_mr": f.label_mr, "label_en": f.label_en, "proof": f.proof,
+                                             "reported": 0.0, "links": 0, "files": 0})
+            c["reported"] += values.get(fid) or 0
+        for pr in P.live(sub):
+            f = fields.get(pr.field_id)
+            if f is None:
+                continue
+            m = meta.get(sub.office_code, {})
+            c = per_field.setdefault(f.key, {"key": f.key, "label_mr": f.label_mr, "label_en": f.label_en, "proof": f.proof,
+                                             "reported": 0.0, "links": 0, "files": 0})
+            c["links" if pr.kind == "link" else "files"] += 1
+            items.append({
+                "id": pr.id, "kind": pr.kind, "url": pr.url, "host": (urlparse(pr.url).hostname or "").removeprefix("www.") if pr.url else None,
+                "name": pr.file_name, "type": pr.file_type, "size": pr.file_size,
+                "field": f.key, "field_mr": f.label_mr, "field_en": f.label_en,
+                "office": sub.office_code, "name_mr": m.get("name_mr", sub.office_code), "name_en": m.get("name_en", ""),
+                "division": m.get("division", ""), "division_mr": m.get("division_mr", ""),
+                "date": sub.period_start.isoformat(), "added_by": pr.added_by,
+                "added_at": pr.added_at.isoformat() if pr.added_at else None,
+            })
+    items.sort(key=lambda x: (x["date"], x["added_at"] or "", x["id"]), reverse=True)
+    for c in per_field.values():
+        c["reported"] = _clean(c["reported"])
+    order = [f.key for f in sorted(fields.values(), key=lambda f: f.sort_order)]
+    return {"start": start.isoformat(), "end": end.isoformat(), "total": len(items), "items": items[:limit],
+            "fields": sorted(per_field.values(), key=lambda c: order.index(c["key"]) if c["key"] in order else 99)}

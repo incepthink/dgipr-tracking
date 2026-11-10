@@ -5,14 +5,16 @@ import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronLeft, ChevronRigh
 import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, byMenuOrder, cn, dmy } from "@/lib/utils";
-import { RButton, RError, RInput, RLabel, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
+import { RAlert, RButton, RError, RInput, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
 import { fig, periodOf, rangeText, shortDay, stepOf, timeOf, whenText } from "@/components/reports/period";
 import { MonthCalendar } from "@/components/reports/DateInput";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
-import { fieldLabel, formTitle, useFormFilters } from "./common";
+import { FormNumber, fieldLabel, formTitle, useFormFilters, useFormNumbers } from "./common";
 import { periodName, useResponses } from "../office/shared";
-import { ProofList } from "./ProofBox";
+import { FileBox, LinkLines, LinksInput, ProofList, fieldTakesFiles, fieldTakesLinks, parseLinks, proofDraftOf, proofPayload, sameProof, uploadPicked,
+  type FileItem, type ProofDraft } from "./ProofBox";
+import { problemOf } from "./FillForm";
 
 const SENT = ["submitted", "returned"];
 /** A sent row with a figure that needs proof and has none. */
@@ -208,6 +210,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   onToggle: () => void; onHits: (id: number, n: number) => void;
 }) {
   const [place, setPlace] = React.useState({ division: "", office: "" });
+  const numbers = useFormNumbers();
   const { division, office } = place;
   const { t, lang } = useT();
   const box = React.useRef<HTMLElement>(null);
@@ -293,23 +296,15 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
 
   const rowId = (r: ResponseRow) => `${r.office}:${r.period_start}`;
   const base = (r: ResponseRow) => `/api/forms/${form.id}/submissions/${r.office}/${r.period_start}`;
-  const refresh = () => { qc.invalidateQueries({ queryKey: ["responses"] }); qc.invalidateQueries({ queryKey: ["compliance"] }); };
+  /** Refetches the table (and the desk's counts); resolves once the new rows are in. */
+  const refreshNow = () => Promise.all([qc.invalidateQueries({ queryKey: ["responses"] }), qc.invalidateQueries({ queryKey: ["compliance"] })]);
+  const refresh = () => { void refreshNow(); };
   const fail = (e: unknown) => toast.error(e instanceof ApiError ? e.message : String(e));
 
   const revert = async (r: ResponseRow, edit: number) => {
     setBusy(rowId(r));
     try { await api.post(`${base(r)}/revert`, { edit_id: edit }); toast.success(t("value_restored")); refresh(); }
     catch (e) { fail(e); } finally { setBusy(null); }
-  };
-  const save = async (r: ResponseRow, key: string, value: string, note: string) => {
-    setBusy(rowId(r));
-    try {
-      const out = await api.post<Submission>(`${base(r)}/correct`, { key, value: value.trim() || null, note });
-      const last = out.edits.at(-1);
-      toast.success(t("value_saved"), last ? { action: { label: t("undo"), onClick: () => void revert(r, last.id) } } : undefined);
-      setEditing(null);
-      refresh();
-    } catch (e) { fail(e); } finally { setBusy(null); }
   };
 
   if (ws.length && (data || error) && !rows.length) return null;
@@ -329,7 +324,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
         className={cn("flex w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-5 py-4 text-left text-r-ink", open ? "rounded-t-2xl" : "rounded-2xl")}>
         <ChevronDown className={cn("size-5 shrink-0 text-r-muted transition-transform", !open && "-rotate-90")} aria-hidden />
         <span className="flex min-w-0 flex-1 flex-col">
-          <b className="truncate text-[17px]">{formTitle(form, lang)}</b>
+          <span className="flex min-w-0 items-center gap-2"><FormNumber small n={numbers.get(form.id)} /><b className="truncate text-[17px]">{formTitle(form, lang)}</b></span>
           <span className="text-[13px] text-r-muted">{when}</span>
           {/* on a phone the chips go under the title, which keeps the full width */}
           {data && <CountChips sent={sent} total={all.length} edited={edited} noProof={noProof}small className="mt-1.5 sm:hidden" />}
@@ -448,8 +443,8 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
       )}
 
       {editRow && editField && (
-        <EditSheet key={`${rowId(editRow)}:${editField.key}`} form={form} row={editRow} field={editField} busy={busy === rowId(editRow)}
-          onSave={(v, note) => save(editRow, editField.key, v, note)} onRevert={(id) => revert(editRow, id)} onClose={() => setEditing(null)} />
+        <RowEditSheet key={rowId(editRow)} form={form} row={editRow} fields={fields} focusKey={editField.key}
+          onSaved={refreshNow} onRevert={(id) => revert(editRow, id)} onClose={() => setEditing(null)} />
       )}
       {proofAt >= 0 && (
         <ProofModal form={form} row={proofRows[proofAt]} fields={fields} at={proofAt} of={proofRows.length} byDate={byDate}
@@ -562,80 +557,229 @@ function Row({ r, senior, fields, canEdit, editing, onEdit, asksProof, onProof }
   );
 }
 
-// --------------------------------------------------------------------------- editing one value
+// --------------------------------------------------------------------------- editing a row's values
 /** One field's edits, newest first. */
 const editsOf = (r: ResponseRow, key: string) => r.edits.filter((e) => e.key === key).reverse();
 const same = (a: AnswerValue | undefined, b: AnswerValue | undefined) => (a ?? "") === (b ?? "");
 const asText = (v: AnswerValue | undefined) => (v === null || v === undefined ? "" : String(v));
 
-function EditSheet({ form, row, field, busy, onSave, onRevert, onClose }: {
-  form: FormDef; row: ResponseRow; field: FormField; busy: boolean;
-  onSave: (value: string, note: string) => void; onRevert: (edit: number) => void; onClose: () => void;
+/** What has been typed into one field of the sheet and not saved yet. */
+type CellDraft = { value?: string; note?: string; proof?: ProofDraft };
+
+/** Every field of one office-day in one scrolling sheet, opened at the field that was clicked. Each field has its own
+ * Save (one figure and its proof together, see set_field in app/forms/service.py); "Save all" saves every changed one.
+ * Made for the state office typing in figures an office sent on WhatsApp. */
+function RowEditSheet({ form, row, fields, focusKey, onSaved, onRevert, onClose }: {
+  form: FormDef; row: ResponseRow; fields: FormField[]; focusKey: string;
+  onSaved: () => Promise<unknown>; onRevert: (edit: number) => void; onClose: () => void;
+}) {
+  const tr = useT();
+  const { t, tf, lang } = tr;
+  const ps = row.period_start;
+  const sent = SENT.includes(row.status);
+  const proofOn = !!form.proof_from && ps >= form.proof_from;
+  const base = `/api/forms/${form.id}/submissions/${row.office}/${ps}`;
+  const [drafts, setDrafts] = React.useState<Record<string, CellDraft>>({});
+  const [busy, setBusy] = React.useState<string | null>(null);  // a field key, or "all"
+  const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  const saved = (k: string) => asText(row.values[k]);
+  const savedProof = (k: string) => proofDraftOf(row.proofs?.[k]);
+  const valueOf = (k: string) => drafts[k]?.value ?? saved(k);
+  const proofOf = (k: string) => drafts[k]?.proof ?? savedProof(k);
+  const valueChanged = (k: string) => valueOf(k).trim() !== saved(k);
+  const proofChanged = (k: string) => !sameProof(proofOf(k), savedProof(k));
+  const isDirty = (k: string) => valueChanged(k) || proofChanged(k);
+  const uploadingOf = (k: string) => proofOf(k).files.some((x) => x.status === "uploading");
+  const problemOfField = (f: FormField) => problemOf(f, valueOf(f.key).trim(), tr);
+  const dirtyKeys = fields.filter((f) => isDirty(f.key)).map((f) => f.key);
+  const uploading = fields.some((f) => uploadingOf(f.key));
+  const blocked = fields.some((f) => isDirty(f.key) && problemOfField(f));
+
+  const patch = (k: string, p: Partial<CellDraft>) => setDrafts((d) => ({ ...d, [k]: { ...d[k], ...p } }));
+  const setProof = (k: string, fn: (d: ProofDraft) => ProofDraft) =>
+    setDrafts((d) => ({ ...d, [k]: { ...d[k], proof: fn(d[k]?.proof ?? proofDraftOf(row.proofs?.[k])) } }));
+  const forget = (keys: string[]) => setDrafts((d) => { const n = { ...d }; keys.forEach((k) => delete n[k]); return n; });
+  const message = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
+
+  // open at the clicked field, with its box ready for typing (after the sheet's own focus on open)
+  React.useEffect(() => {
+    const h = setTimeout(() => {
+      const box = document.getElementById(`re_${focusKey}`);
+      box?.scrollIntoView({ block: "center" });
+      box?.querySelector<HTMLElement>("input, select, textarea")?.focus();
+    }, 60);
+    return () => clearTimeout(h);
+  }, [focusKey]);
+
+  /** One field's figure (if changed) and proof (if changed), in one request. */
+  const post = (k: string) => {
+    const body: Record<string, unknown> = { key: k, note: drafts[k]?.note?.trim() ?? "" };
+    if (valueChanged(k)) body.value = valueOf(k).trim() || null;
+    if (proofChanged(k)) body.proofs = proofPayload(proofOf(k));
+    return api.post<Submission>(`${base}/field`, body);
+  };
+  const saveOne = async (k: string) => {
+    setBusy(k);
+    setErrors((e) => ({ ...e, [k]: "" }));
+    try {
+      const hadValue = valueChanged(k);
+      const out = await post(k);
+      await onSaved();
+      forget([k]);
+      const last = hadValue ? out.edits.filter((e) => e.key === k).at(-1) : undefined;
+      toast.success(t("value_saved"), last ? { action: { label: t("undo"), onClick: () => onRevert(last.id) } } : undefined);
+    } catch (e) {
+      setErrors((x) => ({ ...x, [k]: message(e) }));
+    } finally { setBusy(null); }
+  };
+  const saveAll = async () => {
+    setBusy("all");
+    const done: string[] = [];
+    const failed: Record<string, string> = {};
+    for (const k of dirtyKeys) {
+      try { await post(k); done.push(k); } catch (e) { failed[k] = message(e); }
+    }
+    if (done.length) { await onSaved(); forget(done); toast.success(tf("saved_n", { n: done.length })); }
+    setErrors(failed);
+    setBusy(null);
+    const first = Object.keys(failed)[0];
+    if (first) document.getElementById(`re_${first}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    else onClose();
+  };
+  const close = () => { if ((!dirtyKeys.length && !uploading) || confirm(t("unsaved_leave"))) onClose(); };
+
+  const status = sent && row.submitted_at ? `${t("sub_submitted")} ${whenText(row.submitted_at, lang)}${row.submitted_by ? ` · ${row.submitted_by}` : ""}`
+    : row.status === "draft" ? t("sub_draft") : t("sub_none");
+
+  return (
+    <RSheet open wide onClose={close} closeLabel={t("close")} title={officeName(row, lang)}
+      description={`${periodName(form, ps, lang)} · ${status}`}
+      footer={
+        <div className="flex flex-wrap items-center justify-end gap-2.5">
+          <span className="mr-auto text-sm text-r-muted">
+            {uploading ? t("proof_uploading") : dirtyKeys.length ? tf("n_unsaved_changes", { n: dirtyKeys.length }) : t("nothing_to_save")}
+          </span>
+          <RButton variant="ghost" onClick={close}>{t("close")}</RButton>
+          <RButton variant="pri" disabled={!dirtyKeys.length || blocked || uploading || (busy !== null && busy !== "all")} loading={busy === "all"} onClick={saveAll}>
+            {tf("save_all_n", { n: dirtyKeys.length })}
+          </RButton>
+        </div>
+      }>
+      {!sent && <RAlert tone="info">{t("row_edit_unsent")}</RAlert>}
+      <p className="m-0 text-sm text-r-muted">{t("row_edit_hint")}</p>
+      {fields.map((f) => (
+        <FieldEditCard key={f.key} form={form} row={row} field={f} focus={f.key === focusKey} proofOn={proofOn}
+          value={valueOf(f.key)} note={drafts[f.key]?.note ?? ""} proof={proofOf(f.key)} dirty={isDirty(f.key)}
+          problem={problemOfField(f)} error={errors[f.key] ?? ""} uploading={uploadingOf(f.key)} busy={busy}
+          onValue={(v) => patch(f.key, { value: f.type === "number" ? v.replace(/[^\d.]/g, "") : v })}
+          onNote={(v) => patch(f.key, { note: v })}
+          onLinks={(text) => setProof(f.key, (d) => ({ ...d, linksText: text }))}
+          onPick={(list) => {
+            const upd = (uid: string, p: Partial<FileItem>) => setProof(f.key, (d) => ({ ...d, files: d.files.map((x) => (x.uid === uid ? { ...x, ...p } : x)) }));
+            void uploadPicked(list, { formId: form.id, office: row.office, ps, field: f.key }, (it) => setProof(f.key, (d) => ({ ...d, files: [...d.files, it] })), upd, t);
+          }}
+          onRemoveFile={(uid) => setProof(f.key, (d) => ({ ...d, files: d.files.filter((x) => x.uid !== uid) }))}
+          onSave={() => saveOne(f.key)} onRevert={onRevert} />
+      ))}
+    </RSheet>
+  );
+}
+
+/** One field in the row sheet: its figure, note, proof, history and its own Save. */
+function FieldEditCard({ form, row, field, focus, proofOn, value, note, proof, dirty, problem, error, uploading, busy,
+  onValue, onNote, onLinks, onPick, onRemoveFile, onSave, onRevert }: {
+  form: FormDef; row: ResponseRow; field: FormField; focus: boolean; proofOn: boolean; value: string; note: string; proof: ProofDraft;
+  dirty: boolean; problem: string; error: string; uploading: boolean; busy: string | null;
+  onValue: (v: string) => void; onNote: (v: string) => void; onLinks: (text: string) => void; onPick: (files: File[]) => void;
+  onRemoveFile: (uid: string) => void; onSave: () => void; onRevert: (edit: number) => void;
 }) {
   const { t, tf, lang } = useT();
-  const cur = row.values[field.key];
-  const [value, setValue] = React.useState(asText(cur));
-  const [note, setNote] = React.useState("");
-  const changed = value.trim() !== asText(cur);
-  const c = row.corrections[field.key];
-  const edits = editsOf(row, field.key);
+  const k = field.key;
+  const id = `re_in_${k}`;
+  const cur = row.values[k];
+  const c = row.corrections[k];
+  const edits = editsOf(row, k);
   const sentValue = edits.length ? edits[edits.length - 1].before : SENT.includes(row.status) ? cur : null;
   const show = (v: AnswerValue) => showValue(field, v, t);
-  const submit = (e?: React.FormEvent) => { e?.preventDefault(); if (changed && !busy) onSave(value, note.trim()); };
+  const takesProof = field.type === "number" && field.proof !== "none";
+  const saved = row.proofs?.[k] ?? [];
+  const links = parseLinks(proof.linksText);
+  const submit = (e: React.FormEvent) => { e.preventDefault(); if (dirty && !problem && !uploading && busy === null) onSave(); };
 
   const input = field.type === "yesno" || field.type === "choice" ? (
-    <RSelect value={value} onChange={(e) => setValue(e.target.value)} className="min-h-[54px] w-full rounded-xl text-base">
+    <RSelect id={id} value={value} onChange={(e) => onValue(e.target.value)} className="min-h-[54px] w-full rounded-xl text-base sm:w-56">
       <option value="">—</option>
       {(field.type === "yesno" ? ["yes", "no"] : field.options).map((o) => <option key={o} value={o}>{field.type === "yesno" ? t(o as TKey) : o}</option>)}
     </RSelect>
-  ) : field.type === "text" ? <RTextarea value={value} onChange={(e) => setValue(e.target.value)} className="text-base" />
-    : <RInput big autoFocus type={field.type === "date" ? "date" : "text"} inputMode={field.type === "number" ? "decimal" : undefined} value={value} onChange={(e) => setValue(e.target.value)} />;
+  ) : field.type === "text" ? <RTextarea id={id} value={value} onChange={(e) => onValue(e.target.value)} className="text-base" />
+    : <RInput id={id} big type={field.type === "date" ? "date" : "text"} inputMode={field.type === "number" ? (field.integer ? "numeric" : "decimal") : undefined}
+      placeholder={field.type === "number" ? t("not_entered") : undefined} value={value} onChange={(e) => onValue(e.target.value)} aria-invalid={!!problem || undefined}
+      className={cn(field.type === "number" && "w-full text-center sm:w-36", problem && "border-r-overdue bg-r-overdue-soft")} />;
 
   return (
-    <RSheet open onClose={onClose} closeLabel={t("discard")} title={fieldLabel(field, lang)} description={`${officeName(row, lang)} · ${periodName(form, row.period_start, lang)}`}
-      footer={
-        <div className="flex justify-end gap-2.5">
-          <RButton variant="ghost" onClick={onClose}>{t("discard")}</RButton>
-          <RButton variant="pri" disabled={!changed} loading={busy} onClick={() => submit()}>{t("save")}</RButton>
-        </div>
-      }>
+    <section id={`re_${k}`} aria-labelledby={`${id}_l`}
+      className={cn("flex scroll-mt-4 flex-col gap-3 rounded-2xl border-[1.5px] bg-r-card p-4",
+        dirty ? "border-r-action shadow-[0_0_0_3px_var(--r-focus)]" : focus ? "border-r-ink" : "border-r-line")}>
       <form onSubmit={submit} className="flex flex-col gap-3">
-        <RLabel label={t("edit_value")}>{input}</RLabel>
-        <RLabel small label={t("note")}>
-          <RInput value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("edit_note_ph")} />
-        </RLabel>
+        <div className={cn("flex gap-3", field.type === "number" ? "flex-col sm:flex-row sm:items-center sm:justify-between" : "flex-col")}>
+          <label id={`${id}_l`} htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <b className="text-[17px] leading-tight first-letter:uppercase">{fieldLabel(field, lang)}</b>
+            <span className="text-[13px] text-r-muted">
+              {c ? `${t("corrected")} · ${t("original")}: ${show(c.original)}` : same(sentValue, null) ? t("sub_none") : tf("district_sent", { o: shortOffice(row, lang), v: show(sentValue) })}
+            </span>
+          </label>
+          {input}
+        </div>
+        {problem && <span className="text-sm font-bold text-r-overdue-ink">{problem}</span>}
+        <RInput value={note} onChange={(e) => onNote(e.target.value)} placeholder={t("edit_note_ph")} aria-label={`${t("note")} · ${fieldLabel(field, lang)}`} />
         <button type="submit" hidden />
       </form>
 
-      <ProofSection form={form} row={row} field={field} />
-
-      <section className="flex flex-col gap-1" aria-labelledby="edit-history">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 id="edit-history" className="m-0 text-[15px] font-bold">{t("edit_history")}</h3>
-          {c && (
-            <RButton size="sm" variant="ghost" disabled={busy} onClick={() => onSave(asText(c.original), "")}>
-              <RotateCcw aria-hidden /> {tf("restore_district", { v: show(c.original) })}
-            </RButton>
+      {takesProof && (
+        <div className="flex flex-col gap-2 rounded-xl bg-r-ground p-3" role="group" aria-label={`${t("proof_word")} · ${fieldLabel(field, lang)}`}>
+          <span className="flex items-center gap-2 text-[13px] font-bold text-r-muted">
+            <Paperclip className="size-4" aria-hidden /> {t("proof_word")} · {t(`proof_type_${field.proof}` as TKey)}
+            {row.proof_missing?.includes(k) && <span className="rounded-full bg-r-overdue-soft px-2 py-px text-xs text-r-overdue-ink">{t("proof_missing_mark")}</span>}
+          </span>
+          {!proofOn ? (saved.length ? <ProofList formId={form.id} proofs={saved} /> : <span className="text-sm text-r-muted">{t("proof_exempt")}</span>) : (
+            <>
+              {fieldTakesLinks(field) && (
+                <>
+                  <LinksInput id={`${id}_links`} value={proof.linksText} onChange={onLinks} />
+                  <LinkLines links={links} />
+                </>
+              )}
+              {fieldTakesFiles(field) && <FileBox formId={form.id} files={proof.files} onPick={onPick} onRemove={onRemoveFile} />}
+            </>
           )}
         </div>
-        <ol className="m-0 flex list-none flex-col p-0">
-          {edits.map((e, i) => (
-            <EditEntry key={e.id} e={e} first={i === 0} latest={i === 0} show={show} current={i === 0 && same(e.after, cur)}
-              canGoBack={!same(e.before, cur)} busy={busy} onRevert={() => onRevert(e.id)} />
-          ))}
-          <li className={cn("flex gap-3 py-3", edits.length > 0 && "border-t border-r-sunk")}>
-            <span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-r-action" aria-hidden />
-            <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
-              {same(sentValue, null) ? <span>{officeName(row, lang)} · {t("sub_none")}</span> : <>
-                <span>{tf("district_sent", { o: officeName(row, lang), v: show(sentValue) })}</span>
-                <span className="text-r-muted">{row.submitted_at ? whenText(row.submitted_at, lang) : ""}{row.submitted_by ? ` · ${row.submitted_by}` : ""}</span>
-              </>}
-            </div>
-            {!edits.length && <span className="self-center rounded-full bg-r-sunk px-2.5 py-0.5 text-xs font-bold text-r-muted">{t("current_value")}</span>}
-          </li>
-        </ol>
-      </section>
-    </RSheet>
+      )}
+
+      {error && <RAlert tone="danger">{error}</RAlert>}
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(edits.length > 0 || c) && (
+          <details className="min-w-0 flex-1 text-sm" open={focus && edits.length > 0}>
+            <summary className="cursor-pointer font-bold text-r-muted">{tf("history_n", { n: edits.length })}</summary>
+            {c && (
+              <RButton size="sm" variant="ghost" className="mt-1" onClick={() => onValue(asText(c.original))}>
+                <RotateCcw aria-hidden /> {tf("restore_district", { v: show(c.original) })}
+              </RButton>
+            )}
+            <ol className="m-0 flex list-none flex-col p-0">
+              {edits.map((e, i) => (
+                <EditEntry key={e.id} e={e} first={i === 0} latest={i === 0} show={show} current={i === 0 && same(e.after, cur)}
+                  canGoBack={!same(e.before, cur)} busy={busy !== null} onRevert={() => onRevert(e.id)} />
+              ))}
+            </ol>
+          </details>
+        )}
+        <RButton variant="pri" className="ml-auto" disabled={!dirty || !!problem || uploading || busy !== null} loading={busy === k} onClick={onSave}>
+          {t("save")}
+        </RButton>
+      </div>
+    </section>
   );
 }
 
@@ -663,25 +807,7 @@ function EditEntry({ e, first, latest, show, current, canGoBack, busy, onRevert 
   );
 }
 
-// --------------------------------------------------------------------------- proof of one value
-/** The links and files the office attached to a figure (app/forms/proof.py), or why there are none. */
-function ProofSection({ form, row, field }: { form: FormDef; row: ResponseRow; field: FormField }) {
-  const { t } = useT();
-  if (field.proof === "none") return null;
-  const proofs = row.proofs?.[field.key] ?? [];
-  const missing = row.proof_missing?.includes(field.key);
-  return (
-    <section className="flex flex-col gap-2" aria-labelledby="value-proof">
-      <h3 id="value-proof" className="m-0 flex items-center gap-2 text-[15px] font-bold">
-        <Paperclip className="size-4 text-r-muted" aria-hidden /> {t("proof_word")}
-        {missing && <span className="rounded-full bg-r-overdue-soft px-2.5 py-0.5 text-xs font-bold text-r-overdue-ink">{t("proof_missing_mark")}</span>}
-      </h3>
-      {!proofs.length && row.proof_exempt ? <span className="text-sm text-r-muted">{t("proof_exempt")}</span>
-        : <ProofList formId={form.id} proofs={proofs} />}
-    </section>
-  );
-}
-
+// --------------------------------------------------------------------------- proof of one row
 /** All of one office's proof for a period, figure by figure: each field that asks for proof and has a figure or proof,
  * with what was attached, who added it, and what is still missing. ← / → (or the footer) step to the previous / next office. */
 function ProofModal({ form, row, fields, at, of, byDate, onStep, onClose }: {
