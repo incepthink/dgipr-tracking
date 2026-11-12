@@ -215,10 +215,6 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <RSheet open={pwOpen} onClose={() => setPwOpen(false)} title={t("change_pw")} closeLabel={t("close")}>
         <PasswordForm onDone={() => { setPwOpen(false); onNavigate?.(); }} />
       </RSheet>
-
-      <div className="border-t border-sidebar-accent px-5 py-4 text-xs text-sidebar-muted">
-        <div>Dates are calendar days in Asia/Kolkata.</div>
-      </div>
     </div>
   );
 }
