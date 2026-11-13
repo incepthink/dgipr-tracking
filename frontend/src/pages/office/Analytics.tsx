@@ -58,16 +58,22 @@ export function FormAnalyticsPage() {
   const me = useUser();
   const f = useFormFilters(14);
   const cols = sumColumns(f.form);
-  // what the overview / map / compare sections measure: one field or one group
-  const [pick, setPick] = React.useState<{ column?: string; group?: GroupKey }>({});
+  // what the overview / map / compare sections measure (one field or one group) and the section toggles live in the
+  // page address, so a reload, a shared link or Back keeps what was picked
+  const pick: { column?: string; group?: GroupKey } = { column: f.params.get("col") || undefined, group: (f.params.get("grp") as GroupKey | null) || undefined };
+  const setPick = (p: { column?: string; group?: GroupKey }) => f.set({ col: p.column ?? null, grp: p.group ?? null });
   const defaultCol = cols.find((c) => c.key === "facebook") ?? cols[0];
-  const sel = pick.column || pick.group ? pick : { column: defaultCol?.key };
+  const sel: { column?: string; group?: GroupKey } = pick.column || pick.group ? pick : { column: defaultCol?.key };
   const selFields: FormField[] = sel.group ? cols.filter((c) => groupOf(c) === sel.group) : cols.filter((c) => c.key === sel.column);
   const selLabel = sel.group ? t(GROUP_LABEL[sel.group]) : selFields[0] ? fieldLabel(selFields[0], lang) : "";
   const metricQs = { column: sel.column, group: sel.group };
-  const [asTable, setAsTable] = React.useState(false);
-  const [level, setLevel] = React.useState<"division" | "office">(me.role === "zone" ? "office" : "division");
-  const [mapMetric, setMapMetric] = React.useState<MapMetric>("reporting");
+  const asTable = f.params.get("view") === "table";
+  const setAsTable = (v: boolean | ((x: boolean) => boolean)) => f.set({ view: (typeof v === "function" ? v(asTable) : v) ? "table" : null });
+  const defaultLevel = me.role === "zone" ? "office" : "division";
+  const level = (f.params.get("level") as "division" | "office" | null) || defaultLevel;
+  const setLevel = (v: "division" | "office") => f.set({ level: v === defaultLevel ? null : v });
+  const mapMetric = (f.params.get("map") as MapMetric | null) || "reporting";
+  const setMapMetric = (v: MapMetric) => f.set({ map: v === "reporting" ? null : v });
 
   const attention = useAn<Attention>(f, "attention");
   const groups = useAn<Groups>(f, "groups");

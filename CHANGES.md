@@ -53,6 +53,26 @@ No backend change, no migration: this round only needs the Vercel deploy (and `a
   visible "not due yet" dot (`components/analytics/CalendarHeatmap.tsx`).
 - "Totals by medium" boxes: small sparkline removed (`components/analytics/GroupTile.tsx`).
 
+## 14 Nov 2026: Form analytics keeps its picks in the address
+
+Report: "the dashboard reloads after a minute and the selected KPI is lost". The app has no auto-refresh (checked:
+no timer or refetch on these pages, the live HTML has no refresh, sessions last days; the Desk and Form analytics
+watched 2½ min with zero reloads). The likely source is the Vite **dev** server used for phone testing, which reloads
+the page when its connection drops. Fix anyway: the Form analytics picks (KPI field or group `col` / `grp`, table view
+`view`, ranking level `level`, map metric `map`) are now kept in the URL (`replace`, no history entries), so any reload,
+Back or shared link keeps them (`pages/office/Analytics.tsx`). Frontend only.
+
+## ✅ Live data changes, 13 Nov 2026 (after the deploy)
+
+- **महाराष्ट्र परिचय केंद्र, नवी दिल्ली / पणजी, गोवा added as recipients** of live forms 1 (`drought_measures`) and 5
+  (`mahatma_phule_bicentenary`): every live form had only 43 recipients because they were created before these offices
+  existed (4.11.2026). Forms 2–4 (ended / test) unchanged. The two offices have no user accounts yet. Backup:
+  `dgipr.backup-2026-11-13-1730-before-mic.sqlite3`.
+- **39 real post links from the state DGIPR accounts** (Facebook 21, Instagram 12, X 6; posts of 13 Nov 2026, supplied by
+  the state office) added to form 1, office `mumbai_hq` (the DGIPR handles' office in `config/accounts.yaml`), day
+  13 Nov, via `service.set_field` as `admin`: figures facebook 21 / instagram 12 / x 6 = their links, day "sent by the
+  state office". They show in Analytics → Posts. Backup: `dgipr.backup-2026-11-13-1745-before-posts.sqlite3`.
+
 ## ✅ DEPLOYED 13 Nov 2026 ~23:00 IST: frontend (round 2) to Vercel production
 
 `vercel deploy --prod --scope hashcase` from `frontend/` (incepthink login; CLI ≥ 47.2.2 is now required, older ones are
