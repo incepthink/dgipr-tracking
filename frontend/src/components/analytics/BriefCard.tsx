@@ -25,9 +25,9 @@ export function BriefCard({ formId, division, enabled }: { formId: number; divis
   const b = q.data;
   if (q.isError || (b && b.source === "none")) return null;
   return (
-    <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-r-line bg-r-action-soft p-3.5">
+    <div className="flex flex-col gap-2 rounded-xl border-[1.5px] border-r-line bg-r-card p-3.5">
       <div className="flex flex-wrap items-center gap-2">
-        <Sparkles className="size-4 text-r-action" aria-hidden />
+        <Sparkles className="size-4 text-r-muted" aria-hidden />
         <b className="text-sm">{t("brief_title")}</b>
         {b?.period && <span className="text-[13px] text-r-muted">{dayMonth(b.period, lang)}</span>}
         {b && <RChip className="ml-auto" title={b.source === "template" && b.reason ? b.reason : undefined}>{b.source === "ai" ? t("brief_ai") : t("brief_template")}</RChip>}

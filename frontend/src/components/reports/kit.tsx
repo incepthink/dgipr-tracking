@@ -51,7 +51,7 @@ const rButton = cva(
     variants: {
       variant: {
         default: "border-r-ink bg-r-card text-r-ink hover:bg-r-sunk",
-        pri: "border-r-action bg-r-action text-white hover:border-r-action-hover hover:bg-r-action-hover dark:text-r-ground",
+        pri: "border-r-brand bg-r-brand text-white hover:border-r-brand-hover hover:bg-r-brand-hover dark:text-r-ground",
         ghost: "border-transparent bg-transparent text-r-ink hover:bg-r-sunk",
         danger: "border-r-overdue bg-r-card text-r-overdue-ink hover:bg-r-overdue-soft",
       },
@@ -150,10 +150,10 @@ export function RSearch({ value, onChange, placeholder, className, children }: {
   value: string; onChange: (v: string) => void; placeholder: string; className?: string; children?: React.ReactNode;
 }) {
   return (
-    <div className={cn("flex min-h-16 items-center gap-3 rounded-2xl border-[1.5px] border-r-line bg-r-card py-2 pr-2 pl-5 focus-within:border-r-ink", className)}>
-      <Search className="size-6 shrink-0 text-r-muted" aria-hidden />
+    <div className={cn("flex min-h-13 items-center gap-2 rounded-2xl border-[1.5px] border-r-line bg-r-card py-1.5 pr-2 pl-3.5 focus-within:border-r-ink sm:min-h-16 sm:gap-3 sm:py-2 sm:pl-5", className)}>
+      <Search className="size-5 shrink-0 text-r-muted sm:size-6" aria-hidden />
       <input type="search" value={value} placeholder={placeholder} aria-label={placeholder} onChange={(e) => onChange(e.target.value)}
-        className="min-w-0 flex-1 border-0 bg-transparent py-2 text-lg text-r-ink outline-none! placeholder:text-r-faint sm:text-xl [&::-webkit-search-cancel-button]:hidden" />
+        className="min-w-0 flex-1 border-0 bg-transparent py-2 text-base text-r-ink outline-none! placeholder:text-sm placeholder:text-r-faint sm:text-xl sm:placeholder:text-xl [&::-webkit-search-cancel-button]:hidden" />
       {value && (
         <button type="button" aria-label="Clear" onClick={() => onChange("")}
           className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full border-0 bg-r-sunk text-r-muted hover:text-r-ink"><X className="size-4" /></button>

@@ -127,11 +127,11 @@ export default function InsightsOverview() {
   );
 }
 
-function Kpi({ label, value, hint, change, changeLabel, tone }: {
-  label: string; value: string | null; hint?: string; change?: number | null; changeLabel?: string; tone?: "good" | "bad" | "warn";
+function Kpi({ label, value, hint, change, changeLabel }: {
+  label: string; value: string | null; hint?: string; change?: number | null; changeLabel?: string; /** kept for callers; the boxes are all plain white now */ tone?: "good" | "bad" | "warn";
 }) {
   return (
-    <RCard className={cn("gap-1 p-4", tone === "bad" && "border-r-overdue/40 bg-r-overdue-soft", tone === "warn" && "bg-r-returned-soft", tone === "good" && "bg-r-accepted-soft")}>
+    <RCard className="gap-1 p-4">
       <span className="text-[13px] font-bold text-r-muted">{label}</span>
       {value === null ? <span className="h-9 w-24 animate-pulse rounded-lg bg-r-sunk" /> : <span className="num text-[30px] leading-tight font-bold">{value}</span>}
       {change !== null && change !== undefined && (

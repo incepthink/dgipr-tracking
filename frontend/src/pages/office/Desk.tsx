@@ -106,14 +106,14 @@ export function DeskSearch({ q, setQ, forms, campaignOf, onPick }: {
   return (
     <div className="flex flex-col items-start gap-3">
     <div className="relative z-20 self-stretch">
-      <div className="flex min-h-16 items-center gap-3 rounded-2xl border-[1.5px] border-r-line bg-r-card px-5 focus-within:border-r-ink focus-within:shadow-[0_0_0_3px_var(--r-focus)]">
-        <Search className="size-6 shrink-0 text-r-muted" aria-hidden />
+      <div className="flex min-h-13 items-center gap-2 rounded-2xl border-[1.5px] border-r-line bg-r-card px-3.5 focus-within:border-r-ink sm:min-h-16 sm:gap-3 sm:px-5 focus-within:shadow-[0_0_0_3px_var(--r-focus)]">
+        <Search className="size-5 shrink-0 text-r-muted sm:size-6" aria-hidden />
         <input ref={input} type="search" value={q} placeholder={t("desk_search")} aria-label={t("desk_search")}
           role="combobox" aria-expanded={open} aria-controls="desk-list" aria-autocomplete="list"
           aria-activedescendant={open && hits.length ? optId(cur) : undefined}
           onFocus={() => { setOpen(true); setActive(0); }} onBlur={() => setOpen(false)}
           onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }} onKeyDown={onKey}
-          className="min-w-0 flex-1 border-0 bg-transparent py-4 text-lg text-r-ink outline-none! placeholder:text-r-faint sm:text-xl [&::-webkit-search-cancel-button]:hidden" />
+          className="min-w-0 flex-1 border-0 bg-transparent py-3 text-base text-r-ink outline-none! placeholder:text-sm placeholder:text-r-faint sm:py-4 sm:text-xl sm:placeholder:text-xl [&::-webkit-search-cancel-button]:hidden" />
         {q ? (
           <button type="button" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQ(""); input.current?.focus(); }}
             className="flex size-8 cursor-pointer items-center justify-center rounded-full border-0 bg-r-sunk text-r-muted"><X className="size-4" /></button>
@@ -168,14 +168,19 @@ export function FillResponseButton() {
   const numbers = useFormNumbers();
   const [open, setOpen] = React.useState(false);
   const list = forms && today ? fillable(forms, today).sort((a, b) => (numbers.get(a.id) ?? 0) - (numbers.get(b.id) ?? 0)) : [];
+  // the state office fills figures in the Responses table, opened at the form and today; with one live form it goes
+  // straight there, with several it first asks which
+  const go = (id: number) => nav(`/forms/responses${qs({ form: id, day: today })}`);
   return (
     <>
-      <RButton onClick={() => setOpen(true)}><FilePen aria-hidden /> {t("fill_response")}</RButton>
+      <RButton onClick={() => (list.length === 1 ? go(list[0].id) : list.length ? setOpen(true) : nav("/forms/responses"))}>
+        <FilePen aria-hidden /> {t("fill_response")}
+      </RButton>
       <RSheet open={open} onClose={() => setOpen(false)} closeLabel={t("close")} title={t("fill_pick_form")} description={t("fill_pick_hint")}>
         {!list.length ? <p className="m-0 text-r-muted">{t("no_live_forms")}</p> : (
           <div className="flex flex-col gap-2">
             {list.map((x) => (
-              <button key={x.id} type="button" onClick={() => { setOpen(false); nav(`/forms/${x.id}/fill`); }}
+              <button key={x.id} type="button" onClick={() => { setOpen(false); go(x.id); }}
                 className="flex min-h-16 w-full cursor-pointer items-center gap-3 rounded-xl border-[1.5px] border-r-line bg-r-card px-4 py-3 text-left text-r-ink hover:border-r-action hover:bg-r-action-soft">
                 <FormNumber small n={numbers.get(x.id)} />
                 <span className="flex min-w-0 flex-1 flex-col">
@@ -284,8 +289,8 @@ function DeskCard({ formId, n, minimized, onToggle }: { formId: number; n: numbe
     return { days: acc.days + days, offices: acc.offices + (days ? 1 : 0) };
   }, { days: 0, offices: 0 }) : { days: 0, offices: 0 };
   const chase = cdata && form && j >= 0 ? chaseText({ form, data: cdata, j, withOld: true, tr, now }) : "";
-  // the day page shows the figures with their proof; corrections are made from there on the responses page
-  const respTo = (r: ResponseRow) => `/forms/${formId}/fill${qs({ office: r.office, period: r.period_start })}`;
+  // an office opens the Responses table at that day with just that office picked in the district filter
+  const respTo = (r: ResponseRow) => `/forms/responses${qs({ form: formId, day: r.period_start, office: r.office })}`;
   const shown = (r: ResponseRow) => filter === "all" || (filter === "none" ? !isSent(r.status) : r.status === filter);
   const error = formError ?? resp.error ?? comp.error;
 

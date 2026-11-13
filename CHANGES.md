@@ -1,3 +1,95 @@
+# Changes — 13 Nov 2026 (round 2, frontend only)
+
+No backend change, no migration: this round only needs the Vercel deploy (and `app/web/spa/` is rebuilt).
+
+- **Responses: type figures straight into the table** (`pages/forms/Responses.tsx`). Every figure cell is now an input
+  box: type, then Enter (saves, moves to the office below), Tab, or click away; Escape puts the saved figure back;
+  ↑/↓ move between offices. Uses the existing `POST …/submissions/{office}/{period}/field`. The scrolling
+  "whole office-day" sheet from round 1 is **removed** (also its strings in `i18n.tsx`). Saves are sent one at a time
+  (fast typing on a day nobody has sent made two requests race to create the same submission → 500 `UNIQUE constraint
+  failed: form_submissions…`; the backend still has that race for truly parallel requests).
+- **Evidence column: small "⬆ PDF" button** on each row ("PDF · 3" once files are attached). It opens a small box
+  with one **Upload PDF / photo** button (**several at once**) and the **list of files already attached** to that
+  office-day (all fields), each opening in a new tab. The state office does **not** pick a column: files are saved
+  under the form's files-only field (`proof: "files"`, i.e. newspaper clippings; else the first field taking files),
+  through the same `/field` save. So Analytics → Posts counts table uploads under that field. The old "View · n" chip
+  and its proof popup (`ProofModal`) are **removed**. Pasting
+  *links* from the Responses page is no longer offered (offices still paste links on their fill page).
+- Responses table look: **every row plain white** (no green "sent" / red "returned" row colour; the Sent column says
+  it), **no red "proof missing" dots** in the cells, **all figures black** (edited ones were purple with a corner
+  mark; the edit is still in the cell's tooltip and in History), and the **"Missing proof only" filter button is
+  removed** (the "n without proof" count chip stays).
+- **Undo button beside "Full screen"**: takes back the last figure typed or the last batch of files, one step per press,
+  with the count, e.g. "Undo (3)".
+- Responses count chips ("86 of 360 sent", "2 edited", "23 without proof") are now **one plain colour** (light grey,
+  dark text, square-ish corners; white on the grey date band) instead of green / purple / red tints (`CountChips`).
+- **Analytics → Overview: the four number boxes and the "Today's review" box are plain white** (were red / yellow /
+  green / blue tinted; `Kpi` in `pages/insights/Overview.tsx`, `components/analytics/BriefCard.tsx`).
+- **District office home (My forms)**: the heading "जिल्हा माहिती अधिकारी: <office>" is smaller (24 / 28 px) and
+  centred with its date and division; the card facts (कालावधी etc.) **wrap instead of being cut off** with "…"
+  (`pages/forms/MyForms.tsx`). The filter chips (सर्व / राज्याने बदललेले / परत पाठवलेले) sit **in one row on a phone**
+  (smaller, no wrapping; full size from `sm` up).
+- **Search boxes on phones** (`DeskSearch` on Desk / Forms / My forms, `RSearch` on Responses): smaller hint text,
+  icon and padding so "फॉर्म किंवा मोहिमेचे नाव शोधा…" isn't cut. Typed text stays 16 px (smaller makes iPhones zoom
+  in on focus). Desktop unchanged.
+- **Pop-up messages (toasts) are plain white** with dark text and a thin border, app-wide (`main.tsx`: `richColors`
+  removed, card/ink colours). They were filled green / red.
+- Fix: with the page in Google Translate, the PDF button showed "PDF ⬆ PDF" after an upload (the translator kept the old
+  text node when the button switched back from "uploading"). The button is now `translate="no"` and always has the same
+  children. Checked by wrapping text in `<font>` like the translator does.
+- Responses: the **"All dates" button is outlined** when picked (dark border, white inside) instead of solid black,
+  matching the date picker beside it.
+- **"Fill response" now opens the Responses table** (state office): the Desk / Forms header button goes to
+  `/forms/responses?form=<id>&day=<today>` (straight there with one live form, else after picking the form), and the
+  Desk's per-office "Review / View" link opens Responses at that day with **that office picked in the district
+  filter** (`&office=<code>`), only that form open. (A first version searched by office name, which also matched
+  other जिमाका of the same division, e.g. Solapur and Satara for Pune.) The duplicate "Fill response" button on each Forms card is removed (its "Responses" button stays). The office
+  fill page (`/forms/:id/fill`) is unchanged and still what district / zone users use.
+- Only this form's table reloads after a save (it used to reload every form's table; Form 2's month took ~1 s).
+- **Main buttons and the "Form 1/2" badges are now the sidebar's dark navy** (`--r-brand` in `index.css`, used by
+  `RButton variant="pri"` in `components/reports/kit.tsx` and `FormNumber` in `pages/forms/common.tsx`): New form,
+  Publish and every other main button. Links and focus rings stay blue.
+- Reporting calendar (Form analytics): colour key at the top, month row, weekday + date per column, Sundays in red,
+  visible "not due yet" dot (`components/analytics/CalendarHeatmap.tsx`).
+- "Totals by medium" boxes: small sparkline removed (`components/analytics/GroupTile.tsx`).
+
+## ✅ DEPLOYED 13 Nov 2026 ~23:00 IST: frontend (round 2) to Vercel production
+
+`vercel deploy --prod --scope hashcase` from `frontend/` (incepthink login; CLI ≥ 47.2.2 is now required, older ones are
+refused). New production deployment `dgipr-tracking-348co037h`; previous one, for rollback: `dgipr-tracking-5u0hsfmcz`
+(Vercel dashboard → Deployments → … → Promote / Instant Rollback). Backend not redeployed: the server's `app/`, `scripts/`
+and `config/` were checked file by file and are identical to this copy. `npm run build` done, so `app/web/spa/` is
+rebuilt; 122 tests pass. The Vercel project is **not** connected to GitHub, so a push does not deploy.
+
+## ✅ DONE on the live server, 13 Nov 2026 ~22:30 IST: drought workbook imported
+
+- Backup first: `/data/dgipr/dgipr.backup-2026-11-13-1636-before-excel.sqlite3` (SQLite backup API, integrity ok).
+- Live form **1 `drought_measures` (दुष्काळ उपाययोजना)**: start date moved **17 Oct → 1 Oct 2026** (audited), then the
+  workbook imported with `scripts/import_sheet.py`'s logic: 1,500 office-days, 1 Oct → 12 Nov, all "submitted", audited as
+  `import:xlsx`. One exception: **Pune 3 Nov keeps the office's own लेख (2) and इन्स्टाग्राम (2)**, which carry proof links
+  (the workbook said 0 and 5, which the links-must-match rule refused). Pune's other three live days (17/18 Oct, 8 Nov,
+  test-looking entries) were replaced by the workbook's figures.
+- Live totals 1 Oct–12 Nov now: `[45, 983, 16195, 160, 25, 2678, 2229, 2627, 855, 434, 692, 2]`. That's the workbook's
+  राज्य एकूण except लेख +2 and इन्स्टाग्राम −3 (the Pune 3 Nov exception). Other forms untouched (52 submissions).
+- Access used: a new deploy key added to `ubuntu`'s `authorized_keys` (comment `dgipr-deploy-2026-11-13`) and two SSH
+  rules on security group `dgipr-prod` (a /24 for the deploy PC, `3.0.5.32/29` for EC2 Instance Connect). Remove them
+  when no longer needed.
+
+## Loading the real drought workbook into the live database (optional, only if the state office asks)
+
+The state office's workbook `दुष्काळ_प्रसिद्धी_अहवाल-12.11.2026(2).xlsx` (sheet डेटा एंट्री, 1 Oct → 12 Nov 2026) loads
+cleanly with the **existing** `scripts/import_sheet.py`: 1,500 office-days, 43 offices, every name recognised, and the
+totals equal the workbook's own राज्य एकूण row (`[43, 983, 16195, 160, 25, 2678, 2232, 2627, 855, 434, 692, 2]`).
+Tried on a test copy only; Analytics then shows exactly those totals. No code change is needed. On the server:
+1. **Back up the DB.** Copy the xlsx to the server.
+2. `python scripts/import_sheet.py FILE.xlsx --dry-run` (no writes; the totals above must print).
+3. Check the live drought form's **slug** and **start date**. The importer's default slug is `drought_measures`; pass
+   `--form <slug>` if it differs. Days before the form's start date don't show in Analytics, so move the start to
+   1 Oct 2026 in the form builder if it is later.
+4. `python scripts/import_sheet.py FILE.xlsx --form <slug>`. Every office-day becomes "submitted"; a value already
+   there for the same office-day-field is **overwritten** by the workbook's (re-runnable, audited as `import:xlsx`).
+   Days on or after the form's "proof from" date will count as "without proof" (the workbook has no links/files).
+
 # Changes — 8–9 Nov 2026 (UI feedback round)
 
 Handover for whoever deploys. Everything below was made on the copy of the repo shared in Nov 2026, driven by the

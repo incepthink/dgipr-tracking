@@ -1,19 +1,19 @@
 import * as React from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, FileSpreadsheet, Maximize2, Minimize2, Paperclip, RotateCcw, Undo2, X } from "lucide-react";
-import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
+import { createPortal } from "react-dom";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, Clock, FileSpreadsheet, Loader2, Maximize2, Minimize2, Undo2, Upload, X } from "lucide-react";
+import { api, ApiError, backendUrl, type AnswerValue, type FormDef, type FormField, type Proof, type ResponseRow, type Submission, type ValueEdit } from "@/lib/api";
 import { useT, type TKey } from "@/lib/i18n";
 import { addDays, byMenuOrder, cn, dmy } from "@/lib/utils";
-import { RAlert, RButton, RError, RInput, RPage, RSearch, RSelect, RSheet, RTextarea, RTitle } from "@/components/reports/kit";
+import { RButton, RError, RPage, RSearch, RSheet, RTitle } from "@/components/reports/kit";
 import { fig, periodOf, rangeText, shortDay, stepOf, timeOf, whenText } from "@/components/reports/period";
 import { MonthCalendar } from "@/components/reports/DateInput";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { FormNumber, fieldLabel, formTitle, useFormFilters, useFormNumbers } from "./common";
 import { periodName, useResponses } from "../office/shared";
-import { FileBox, LinkLines, LinksInput, ProofList, fieldTakesFiles, fieldTakesLinks, parseLinks, proofDraftOf, proofPayload, sameProof, uploadPicked,
-  type FileItem, type ProofDraft } from "./ProofBox";
+import { FILE_TYPES, ProofList, fieldTakesFiles, proofDraftOf, proofPayload, uploadPicked, type FileItem } from "./ProofBox";
 import { problemOf } from "./FillForm";
 
 const SENT = ["submitted", "returned"];
@@ -21,8 +21,6 @@ const SENT = ["submitted", "returned"];
 const lacksProof = (r: ResponseRow) => SENT.includes(r.status) && (r.proof_missing?.length ?? 0) > 0;
 /** Every live link and file of a row, over all its fields. */
 const proofCount = (r: ResponseRow) => Object.values(r.proofs ?? {}).reduce((n, l) => n + l.length, 0);
-/** Whether the proof column offers "View": something is attached, or something sent still needs it. */
-const hasProofView = (r: ResponseRow) => proofCount(r) > 0 || lacksProof(r);
 
 export function showValue(f: FormField, v: AnswerValue, t: (k: TKey) => string) {
   if (v === null || v === undefined || v === "") return "—";
@@ -106,13 +104,16 @@ export default function ResponsesPage() {
   // A link that names a form (?form=, e.g. Review on the desk) opens that section, at ?day= if given.
   const target = Number(f.params.get("form")) || 0;
   const targetDay = f.params.get("day");
+  const targetOffice = f.params.get("office") || "";
   const [opened, setOpened] = React.useState<Set<number>>(() => new Set(target ? [target] : []));
   const [closed, setClosed] = React.useState<Set<number>>(new Set());
   React.useEffect(() => setClosed(new Set()), [q]);
-  const isOpen = (id: number) => (q.trim() ? !closed.has(id) : opened.has(id));
+  // a link that names a form and an office (an office on the Desk) opens just that form, not every form the office matches
+  const isOpen = (id: number) => !closed.has(id) && (opened.has(id) || (!!q.trim() && (!target || id === target)));
   const toggle = (id: number) => {
-    const flip = (s: Set<number>) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; };
-    if (q.trim()) setClosed(flip); else setOpened(flip);
+    const add = (s: Set<number>) => new Set(s).add(id);
+    const del = (s: Set<number>) => { const n = new Set(s); n.delete(id); return n; };
+    if (isOpen(id)) { setOpened(del); setClosed(add); } else { setOpened(add); setClosed(del); }
   };
 
   // each section reports how many rows match the search, so we can say when nothing does
@@ -124,7 +125,7 @@ export default function ResponsesPage() {
     <RPage>
       <RTitle title={t("nav_responses")} />
 
-      <RSearch value={q} placeholder={t("resp_search")} onChange={(v) => f.set({ q: v || null })} />
+      <RSearch value={q} placeholder={t("resp_search")} onChange={(v) => f.set({ q: v || null, form: null })} />
 
       <div className="mt-5 flex flex-col gap-6">
         {!all ? <div className="h-40 animate-pulse rounded-2xl bg-r-sunk" />
@@ -140,7 +141,7 @@ export default function ResponsesPage() {
                   {t(`resp_group_${g}`)} <span className="num font-normal">· {list.length}</span>
                 </h2>
                 {list.map((x) => (
-                  <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} q={q}
+                  <FormSection key={x.id} form={x} today={today} day={x.id === target ? targetDay : null} office={x.id === target ? targetOffice : ""} q={q}
                     open={isOpen(x.id)} focus={x.id === target} onToggle={() => toggle(x.id)} onHits={onHits} />
                 ))}
               </section>
@@ -205,14 +206,15 @@ function PlaceSelect({ label, value, onChange, children }: { label: string; valu
 
 // --------------------------------------------------------------------------- one form, as a dropdown
 /** All dates by default; the calendar inside narrows the dropdown to one date. */
-function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
-  form: FormDef; today: string; day: string | null; q: string; open: boolean; focus: boolean;
+function FormSection({ form, today, day, office: startOffice, q, open, focus, onToggle, onHits }: {
+  form: FormDef; today: string; day: string | null; office: string; q: string; open: boolean; focus: boolean;
   onToggle: () => void; onHits: (id: number, n: number) => void;
 }) {
-  const [place, setPlace] = React.useState({ division: "", office: "" });
+  // a link from the Desk can pick one office in the district filter (?office=)
+  const [place, setPlace] = React.useState({ division: "", office: startOffice });
   const numbers = useFormNumbers();
   const { division, office } = place;
-  const { t, lang } = useT();
+  const { t, tf, lang } = useT();
   const box = React.useRef<HTMLElement>(null);
   React.useEffect(() => { if (focus) box.current?.scrollIntoView({ block: "start", behavior: "smooth" }); }, [focus]);
   const qc = useQueryClient();
@@ -222,7 +224,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   const byDate = !sel && !once;
   const ps = periodOf(form, sel ?? range.end);
   const { start, end } = byDate ? range : { start: ps, end: ps };
-  const { data, error, isLoading, isFetching } = useResponses(form.id, start, end, division);
+  const { data, error, isLoading, isPlaceholderData } = useResponses(form.id, start, end, division);
   const fields = (data?.form.fields ?? []).filter((x) => !x.archived);
   const canEdit = data?.can_review ?? false;
   // each division's senior office (मुख्यालय, संचालक, विमाका) stands out from its districts
@@ -247,22 +249,20 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
 
   // as in a spreadsheet: a header click sorts high → low (offices A → Z), each further click reverses it
   const [sort, setSort] = React.useState<Sort | null>(null);
-  // "Missing proof only": just the sent rows with a figure that still needs its proof
   // the column shows while a field asks for proof, or proof is still attached from before it stopped asking
   const asksProof = fields.some((x) => x.proof !== "none") || all.some((r) => proofCount(r) > 0);
-  const [onlyNoProof, setOnlyNoProof] = React.useState(false);
   const sortBy = (key: string) => setSort((s) => (s?.key === key
     ? { key, dir: s.dir === "asc" ? "desc" : "asc" }
     : { key, dir: key === OFFICE ? "asc" : "desc" }));
 
   // newest date first, each date under its own band; the sort applies within each band
   const groups = React.useMemo(() => {
-    const shown = onlyNoProof ? rows.filter(lacksProof) : rows;
+    const shown = rows;
     if (!byDate) return [{ ps: "", rows: sortRows(shown, sort, fields, lang) }];
     const m = new Map<string, ResponseRow[]>();
     shown.forEach((r) => m.set(r.period_start, [...(m.get(r.period_start) ?? []), r]));
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0])).map(([p, rs]) => ({ ps: p, rows: sortRows(rs, sort, fields, lang) }));
-  }, [rows, onlyNoProof, byDate, sort, fields, lang]);
+  }, [rows, byDate, sort, fields, lang]);
 
   // the date band sticks just under the column headings, whose height depends on how their labels wrap
   const head = React.useRef<HTMLTableSectionElement>(null);
@@ -276,17 +276,22 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   }, [data, rows.length]);
 
   const [busy, setBusy] = React.useState<string | null>(null);
-  const [editing, setEditing] = React.useState<{ id: string; key: string } | null>(null);
   const [showLog, setShowLog] = React.useState(false);
-  // the row whose proof is open; previous / next walk the rows offering "View", in table order
-  const [proofOf, setProofOf] = React.useState<string | null>(null);
+  // what the Undo button takes back, latest last: each figure typed and each batch of files added in this table
+  const [undos, setUndos] = React.useState<{ what: string; run: () => Promise<unknown> }[]>([]);
+  const [undoing, setUndoing] = React.useState(false);
+  // files still uploading, per row
+  const [uploading, setUploading] = React.useState<Record<string, number>>({});
 
-  // full screen: the same body, laid over the page; Escape leaves it unless an edit or the history is open on top
+  // full screen: the same body, laid over the page; Escape leaves it unless the history or proof is open on top,
+  // or the Escape was for a box in the table
   const [full, setFull] = React.useState(false);
-  const overlaid = !!editing || showLog || !!proofOf;
+  const overlaid = showLog;
   React.useEffect(() => {
     if (!full) return;
-    const esc = (e: KeyboardEvent) => { if (e.key === "Escape" && !overlaid) setFull(false); };
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !overlaid && !(e.target as HTMLElement)?.closest?.("input, select, textarea")) setFull(false);
+    };
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", esc);
@@ -297,7 +302,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
   const rowId = (r: ResponseRow) => `${r.office}:${r.period_start}`;
   const base = (r: ResponseRow) => `/api/forms/${form.id}/submissions/${r.office}/${r.period_start}`;
   /** Refetches the table (and the desk's counts); resolves once the new rows are in. */
-  const refreshNow = () => Promise.all([qc.invalidateQueries({ queryKey: ["responses"] }), qc.invalidateQueries({ queryKey: ["compliance"] })]);
+  const refreshNow = () => Promise.all([qc.invalidateQueries({ queryKey: ["responses", form.id] }), qc.invalidateQueries({ queryKey: ["compliance"] })]);
   const refresh = () => { void refreshNow(); };
   const fail = (e: unknown) => toast.error(e instanceof ApiError ? e.message : String(e));
 
@@ -307,15 +312,64 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
     catch (e) { fail(e); } finally { setBusy(null); }
   };
 
+  // saves go to the server one at a time: typing fast across a day nobody has sent would otherwise race to create
+  // the same submission twice
+  const queue = React.useRef<Promise<unknown>>(Promise.resolve());
+  const inTurn = <T,>(fn: () => Promise<T>): Promise<T> => {
+    const p = queue.current.then(fn, fn);
+    queue.current = p.catch(() => undefined);
+    return p;
+  };
+
+  /** A figure typed into the table (see set_field in app/forms/service.py: an unsent day becomes sent by the state office). */
+  const saveCell = async (r: ResponseRow, x: FormField, v: string) => {
+    const out = await inTurn(() => api.post<Submission>(`${base(r)}/field`, { key: x.key, value: v || null, note: "" }));
+    const last = out.edits.filter((e) => e.key === x.key).at(-1);
+    if (last) setUndos((u) => [...u, { what: `${fieldLabel(x, lang)} · ${shortOffice(r, lang)}`, run: () => api.post(`${base(r)}/revert`, { edit_id: last.id }) }]);
+    refresh();  // the box already shows what was typed; the row's status and colour follow
+  };
+
+  /** PDFs / photos picked in the Evidence column: uploaded, then added to that column's proof in one save. */
+  const upload = async (r: ResponseRow, x: FormField, files: File[]) => {
+    const id = rowId(r);
+    setUploading((u) => ({ ...u, [id]: files.length }));
+    try {
+      const items = new Map<string, FileItem>();
+      await uploadPicked(files, { formId: form.id, office: r.office, ps: r.period_start, field: x.key },
+        (it) => items.set(it.uid, it), (uid, p) => items.set(uid, { ...items.get(uid)!, ...p }), t);
+      const done = [...items.values()].filter((it) => it.status === "done");
+      [...items.values()].filter((it) => it.status === "error").forEach((it) => toast.error(`${it.name}: ${it.error}`));
+      if (!done.length) return;
+      const before = proofDraftOf(r.proofs?.[x.key]);
+      await inTurn(() => api.post(`${base(r)}/field`, { key: x.key, note: "", proofs: proofPayload({ ...before, files: [...before.files, ...done] }) }));
+      const what = `PDF · ${shortOffice(r, lang)}`;
+      setUndos((u) => [...u, { what, run: () => api.post(`${base(r)}/field`, { key: x.key, note: "", proofs: proofPayload(before) }) }]);
+      toast.success(tf("files_added", { n: done.length, f: what }));
+      await refreshNow();
+    } catch (e) { fail(e); } finally { setUploading((u) => { const n = { ...u }; delete n[id]; return n; }); }
+  };
+
+  const undo = async () => {
+    const last = undos.at(-1);
+    if (!last) return;
+    setUndoing(true);
+    try {
+      await inTurn(last.run);
+      setUndos((u) => u.slice(0, -1));
+      toast.success(tf("undone_what", { w: last.what }));
+      await refreshNow();
+    } catch (e) { fail(e); } finally { setUndoing(false); }
+  };
+
   if (ws.length && (data || error) && !rows.length) return null;
   const sent = all.filter((r) => SENT.includes(r.status)).length;
   const edited = all.filter((r) => Object.keys(r.corrections).length > 0).length;
   const noProof = all.filter(lacksProof).length;
   const bodyId = `form-${form.id}`;
-  const editRow = editing && all.find((r) => rowId(r) === editing.id);
-  const editField = editing && fields.find((x) => x.key === editing.key);
-  const proofRows = groups.flatMap((g) => g.rows).filter(hasProofView);
-  const proofAt = proofRows.findIndex((r) => rowId(r) === proofOf);
+  // PDFs uploaded from the table go to the form's files-only column (newspaper clippings), else the first that takes files
+  const fileFields = fields.filter((x) => x.type === "number" && fieldTakesFiles(x));
+  const pdfField = fileFields.find((x) => x.proof === "files") ?? fileFields[0] ?? null;
+  const pdfOn = (r: ResponseRow) => (canEdit && !!form.proof_from && r.period_start >= form.proof_from ? pdfField : null);
   const when = byDate ? `${t("zb_all_dates")} · ${rangeText(start, end, lang)}` : periodName(form, ps, lang);
 
   return (
@@ -355,7 +409,7 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
               <>
                 <button type="button" aria-pressed={byDate} onClick={() => setSel(null)}
                   className={cn("inline-flex h-11.75 cursor-pointer items-center rounded-xl border-[1.5px] px-4 text-[15px] font-semibold",
-                    byDate ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
+                    byDate ? "border-r-ink bg-r-card text-r-ink" : "border-r-line bg-r-card text-r-muted hover:bg-r-sunk")}>
                   {t("zb_all_dates")}
                 </button>
                 <span className={cn("rounded-xl border-[1.5px]", !byDate ? "border-r-ink" : "border-r-line")}>
@@ -365,31 +419,34 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
               </>
             )}
             <PlaceFilters division={division} office={office} onChange={(p) => setPlace((s) => ({ ...s, ...p }))} />
-            {asksProof && (noProof > 0 || onlyNoProof) && (
-              <button type="button" aria-pressed={onlyNoProof} onClick={() => setOnlyNoProof((v) => !v)}
-                className={cn("inline-flex h-11.75 cursor-pointer items-center gap-2 rounded-xl border-[1.5px] px-4 text-[15px] font-semibold",
-                  onlyNoProof ? "border-r-overdue bg-r-overdue-soft text-r-overdue-ink" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
-                <span className="size-2 rounded-full bg-r-overdue" aria-hidden /> {t("resp_only_no_proof")}
-              </button>
+            {/* on a phone only the icons show, so the date controls keep their row */}
+            <span className="ml-auto flex items-center gap-1">
+            {canEdit && (
+              <RButton variant="ghost" size="sm" onClick={undo} disabled={!undos.length || undoing} loading={undoing}
+                aria-label={t("undo")} title={undos.length ? `${t("undo")}: ${undos.at(-1)!.what}` : t("nothing_to_undo")}>
+                <Undo2 aria-hidden /><span className="hidden sm:inline">{t("undo")}</span>
+                {undos.length > 0 && <span className="num font-normal">({undos.length})</span>}
+              </RButton>
             )}
-            {/* on a phone only the icon shows, so the date controls keep their row */}
-            <RButton variant="ghost" size="sm" className="ml-auto" onClick={() => setFull((f) => !f)} aria-pressed={full}
+            <RButton variant="ghost" size="sm" onClick={() => setFull((f) => !f)} aria-pressed={full}
               aria-label={t(full ? "collapse_table" : "expand_table")} title={t(full ? "collapse_table" : "expand_table")}>
               {full ? <Minimize2 aria-hidden /> : <Maximize2 aria-hidden />}
               <span className="hidden sm:inline">{t(full ? "collapse_table" : "expand_table")}</span>
             </RButton>
+            </span>
           </div>
+          {canEdit && data && <p className="m-0 px-4 pt-1 pb-2 text-[13px] text-r-muted">{t("click_to_edit")}</p>}
           {error ? <div className="p-4"><RError error={error} /></div> : isLoading || !data ? <div className="m-4 h-40 animate-pulse rounded-xl bg-r-sunk" /> : !groups.some((g) => g.rows.length) ? (
             <p className="m-0 p-5 text-r-muted">{t("resp_no_rows")}</p>
           ) : (
-            <div className={cn("overflow-auto scrollbar-thin transition-opacity", full ? "min-h-0 flex-1" : "max-h-[70vh]", isFetching && "opacity-60")}>
+            <div className={cn("overflow-auto scrollbar-thin transition-opacity", full ? "min-h-0 flex-1" : "max-h-[70vh]", isPlaceholderData && "opacity-60")}>
               {/* every value column is wide enough that its heading wraps only between words; when they don't all fit,
                   the grid scrolls sideways with the office column pinned */}
-              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 148 + 72 + (asksProof ? 88 : 0) + fields.length * 120 }}>
+              <table className="w-full table-fixed border-separate border-spacing-0 text-sm" style={{ minWidth: 148 + 72 + (asksProof ? 120 : 0) + fields.length * 120 }}>
                 <colgroup>
                   <col className="w-[112px] md:w-[148px]" />
                   <col className="w-18" />
-                  {asksProof && <col className="w-22" />}
+                  {asksProof && <col className="w-30" />}
                   {fields.map((x) => <col key={x.key} />)}
                 </colgroup>
                 <thead ref={head} className="sticky top-0 z-20">
@@ -410,15 +467,16 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
                           {/* the label also stays at the left edge while the grid scrolls sideways */}
                           <span className="sticky left-3 inline-flex items-center gap-2.5">
                             <span className="font-bold">{periodName(form, g.ps, lang)}</span>
-                            <CountChips small sent={g.rows.filter((r) => SENT.includes(r.status)).length} total={g.rows.length}
+                            <CountChips small onGrey sent={g.rows.filter((r) => SENT.includes(r.status)).length} total={g.rows.length}
                               edited={g.rows.filter((r) => Object.keys(r.corrections).length > 0).length} noProof={g.rows.filter(lacksProof).length} />
                           </span>
                         </th>
                       </tr>
                     )}
                     {g.rows.map((r) => (
-                      <Row key={rowId(r)} r={r} senior={senior.has(r.office)} fields={fields} canEdit={canEdit} editing={editing?.id === rowId(r) ? editing.key : null}
-                        onEdit={(key) => setEditing({ id: rowId(r), key })} asksProof={asksProof} onProof={() => setProofOf(rowId(r))} />
+                      <Row key={rowId(r)} r={r} senior={senior.has(r.office)} fields={fields} canEdit={canEdit} asksProof={asksProof}
+                        pdfField={pdfOn(r)} uploading={uploading[rowId(r)] ?? 0} onSave={(x, v) => saveCell(r, x, v)}
+                        onUpload={(x, files) => void upload(r, x, files)} formId={form.id} />
                     ))}
                   </tbody>
                 ))}
@@ -432,7 +490,6 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
                 <a href={backendUrl(`/api/forms/${form.id}/export?start=${start}&end=${end}${division ? `&division=${division}` : ""}`)} download><FileSpreadsheet aria-hidden /> {t("export_workbook")}</a>
               </RButton>
               <span className="flex items-center gap-3">
-                {canEdit && <span className="hidden text-[13px] text-r-muted md:inline">{t("click_to_edit")}</span>}
                 <RButton variant="ghost" size="sm" onClick={() => setShowLog(true)}>
                   <Clock aria-hidden /> {t("history_log")}
                 </RButton>
@@ -442,17 +499,18 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
         </div>
       )}
 
-      {editRow && editField && (
-        <RowEditSheet key={rowId(editRow)} form={form} row={editRow} fields={fields} focusKey={editField.key}
-          onSaved={refreshNow} onRevert={(id) => revert(editRow, id)} onClose={() => setEditing(null)} />
-      )}
-      {proofAt >= 0 && (
-        <ProofModal form={form} row={proofRows[proofAt]} fields={fields} at={proofAt} of={proofRows.length} byDate={byDate}
-          onStep={(d) => setProofOf(rowId(proofRows[proofAt + d]))} onClose={() => setProofOf(null)} />
-      )}
       {showLog && data && (
         <HistoryModal form={data.form} when={when} byDate={byDate} rows={all} fields={fields} canEdit={canEdit} busy={busy}
-          onRevert={revert} onOpen={(r, key) => { setShowLog(false); setEditing({ id: rowId(r), key }); }} onClose={() => setShowLog(false)} />
+          onRevert={revert} onClose={() => setShowLog(false)}
+          onOpen={(r, key) => {
+            setShowLog(false);
+            // straight to that figure's box in the table
+            setTimeout(() => {
+              const el = document.querySelector<HTMLElement>(`[data-cell="${CSS.escape(`${rowId(r)}|${key}`)}"]`);
+              el?.scrollIntoView({ block: "center", inline: "center" });
+              el?.focus();
+            }, 80);
+          }} />
       )}
     </section>
   );
@@ -460,18 +518,18 @@ function FormSection({ form, today, day, q, open, focus, onToggle, onHits }: {
 
 /** "43 of 129 sent" (and "2 edited") as status chips, styled as on My forms: green when every office has sent,
  * soft green part way, grey when none has. */
-function CountChips({ sent, total, edited = 0, noProof = 0, small, className }: {
-  sent: number; total: number; edited?: number; noProof?: number; small?: boolean; className?: string;
+function CountChips({ sent, total, edited = 0, noProof = 0, small, onGrey, className }: {
+  sent: number; total: number; edited?: number; noProof?: number; small?: boolean; onGrey?: boolean; className?: string;
 }) {
   const { tf } = useT();
-  const chip = cn("num inline-flex shrink-0 items-center rounded-full font-bold whitespace-nowrap", small ? "px-2.5 py-0.5 text-xs" : "px-3 py-1 text-[13px]");
+  // one plain colour for every chip: no tints, no borders, just the counts
+  const chip = cn("num inline-flex shrink-0 items-center rounded-md font-semibold whitespace-nowrap text-r-ink",
+    onGrey ? "bg-r-card" : "bg-r-sunk", small ? "px-2 py-0.5 text-xs" : "px-2.5 py-1 text-[13px]");
   return (
     <span className={cn("flex flex-wrap items-center gap-1.5", className)}>
-      <span className={cn(chip, sent && sent === total ? "bg-r-accepted text-r-card" : sent ? "bg-r-accepted-soft text-r-accepted" : "bg-r-sunk text-r-muted")}>
-        {tf("resp_counts", { a: sent, b: total })}
-      </span>
-      {edited > 0 && <span className={cn(chip, "bg-r-corrected/10 text-r-corrected-ink")}>{tf("resp_edited", { n: edited })}</span>}
-      {noProof > 0 && <span className={cn(chip, "bg-r-overdue-soft text-r-overdue-ink")}>{tf("resp_no_proof", { n: noProof })}</span>}
+      <span className={chip}>{tf("resp_counts", { a: sent, b: total })}</span>
+      {edited > 0 && <span className={chip}>{tf("resp_edited", { n: edited })}</span>}
+      {noProof > 0 && <span className={chip}>{tf("resp_no_proof", { n: noProof })}</span>}
     </span>
   );
 }
@@ -499,15 +557,16 @@ function SortHead({ col, label, sort, onSort, center, className }: {
   );
 }
 
-function Row({ r, senior, fields, canEdit, editing, onEdit, asksProof, onProof }: {
-  r: ResponseRow; senior: boolean; fields: FormField[]; canEdit: boolean; editing: string | null; onEdit: (key: string) => void;
-  asksProof: boolean; onProof: () => void;
+function Row({ r, formId, senior, fields, canEdit, asksProof, pdfField, uploading, onSave, onUpload }: {
+  r: ResponseRow; formId: number; senior: boolean; fields: FormField[]; canEdit: boolean; asksProof: boolean;
+  /** the column PDFs / photos are saved under on this row's day (null: no upload button) */
+  pdfField: FormField | null; uploading: number;
+  onSave: (x: FormField, v: string) => Promise<void>; onUpload: (x: FormField, files: File[]) => void;
 }) {
   const { t, lang } = useT();
   const sent = SENT.includes(r.status);
-  const nProof = proofCount(r);
-  const missing = lacksProof(r);
-  const bg = r.status === "returned" ? "bg-r-overdue-soft" : sent ? "bg-r-accepted-soft" : "bg-r-card";
+  // every row plain white: the Sent column already says who has sent
+  const bg = "bg-r-card";
   return (
     <tr className={bg}>
       {/* the before: strip paints the row colour a few pixels past the left edge, so no sliver of a cell scrolling
@@ -523,33 +582,21 @@ function Row({ r, senior, fields, canEdit, editing, onEdit, asksProof, onProof }
       </td>
       {asksProof && (
         <td className="border-b border-r-line-soft px-1 py-1 text-center">
-          {hasProofView(r) ? (
-            <button type="button" onClick={onProof} aria-label={`${t("proof_word")}: ${officeName(r, lang)}`}
-              title={missing ? t("proof_missing_mark") : undefined}
-              className={cn("num inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border-0 px-2.5 text-xs font-bold whitespace-nowrap",
-                missing ? "bg-r-overdue-soft text-r-overdue-ink hover:bg-r-overdue/20" : "bg-r-action-soft text-r-action hover:bg-r-action/20")}>
-              {missing ? <span className="size-1.5 rounded-full bg-r-overdue" aria-hidden /> : <Paperclip className="size-3" aria-hidden />}
-              {t("view")}{nProof > 0 && <span className="font-normal">· {nProof}</span>}
-            </button>
-          ) : <span className="text-xs text-r-faint">—</span>}
+          {pdfField ? <EvidenceButton formId={formId} office={officeName(r, lang)} uploading={uploading}
+              files={Object.values(r.proofs ?? {}).flat().filter((p): p is Proof => p.kind === "file")} onPick={(files) => onUpload(pdfField, files)} />
+            : <span className="text-xs text-r-faint">—</span>}
         </td>
       )}
       {fields.map((x) => {
         const v = r.values[x.key];
         const c = r.corrections[x.key];
-        const shown = c ? <span className="corr">{showValue(x, v, t)}</span> : !sent && r.status !== "draft" ? "—" : showValue(x, v, t);
+        const shown = !sent && r.status !== "draft" ? "—" : showValue(x, v, t);
         const noProof = r.proof_missing?.includes(x.key);
         const tip = [c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : "", noProof ? t("proof_missing_mark") : ""].filter(Boolean).join(" · ") || undefined;
         return (
           <td key={x.key} className={cn("num relative truncate border-b border-r-line-soft text-center", !sent && "text-r-faint", canEdit ? "p-0.5" : "px-1.5 py-1.5")}>
-            {noProof && <span aria-label={t("proof_missing_mark")} role="img" title={t("proof_missing_mark")} className="pointer-events-none absolute top-0.5 left-0.5 size-1.5 rounded-full bg-r-overdue" />}
-            {canEdit ? (
-              <button type="button" onClick={() => onEdit(x.key)} title={tip ?? t("edit_value")} aria-label={`${t("edit_value")}: ${fieldLabel(x, lang)}, ${officeName(r, lang)}`}
-                className={cn("num block w-full cursor-pointer truncate rounded-md border-0 bg-transparent px-1 py-1 text-center text-sm hover:bg-r-card hover:text-r-ink hover:ring-1 hover:ring-r-line",
-                  sent ? "text-r-ink" : "text-r-faint", editing === x.key && "bg-r-card ring-2 ring-r-action")}>
-                {shown}
-              </button>
-            ) : <span title={tip}>{shown}</span>}
+            {canEdit ? <Cell r={r} x={x} cellId={`${r.office}:${r.period_start}|${x.key}`} onSave={(v) => onSave(x, v)} />
+              : <span title={tip}>{shown}</span>}
           </td>
         );
       })}
@@ -557,340 +604,143 @@ function Row({ r, senior, fields, canEdit, editing, onEdit, asksProof, onProof }
   );
 }
 
-// --------------------------------------------------------------------------- editing a row's values
-/** One field's edits, newest first. */
-const editsOf = (r: ResponseRow, key: string) => r.edits.filter((e) => e.key === key).reverse();
+// --------------------------------------------------------------------------- typing straight into the table
 const same = (a: AnswerValue | undefined, b: AnswerValue | undefined) => (a ?? "") === (b ?? "");
 const asText = (v: AnswerValue | undefined) => (v === null || v === undefined ? "" : String(v));
+const message = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 
-/** What has been typed into one field of the sheet and not saved yet. */
-type CellDraft = { value?: string; note?: string; proof?: ProofDraft };
+/** Moves the focus to the same column `d` rows down (or up) in this table, as Enter / arrows do in a spreadsheet. */
+function moveFocus(from: HTMLElement, d: 1 | -1) {
+  const col = from.dataset.col;
+  const table = from.closest("table");
+  if (!col || !table) return;
+  const all = [...table.querySelectorAll<HTMLElement>(`[data-col="${CSS.escape(col)}"]`)];
+  const next = all[all.indexOf(from) + d];
+  if (next) { next.focus(); if (next instanceof HTMLInputElement) next.select(); }
+}
 
-/** Every field of one office-day in one scrolling sheet, opened at the field that was clicked. Each field has its own
- * Save (one figure and its proof together, see set_field in app/forms/service.py); "Save all" saves every changed one.
- * Made for the state office typing in figures an office sent on WhatsApp. */
-function RowEditSheet({ form, row, fields, focusKey, onSaved, onRevert, onClose }: {
-  form: FormDef; row: ResponseRow; fields: FormField[]; focusKey: string;
-  onSaved: () => Promise<unknown>; onRevert: (edit: number) => void; onClose: () => void;
-}) {
+/** One figure, editable in place: type it and press Enter (or click away) and it is saved; Escape puts back the saved
+ * figure. A field the office never sent shows a dash until something is typed. */
+function Cell({ r, x, cellId, onSave }: { r: ResponseRow; x: FormField; cellId: string; onSave: (v: string) => Promise<void> }) {
   const tr = useT();
-  const { t, tf, lang } = tr;
-  const ps = row.period_start;
-  const sent = SENT.includes(row.status);
-  const proofOn = !!form.proof_from && ps >= form.proof_from;
-  const base = `/api/forms/${form.id}/submissions/${row.office}/${ps}`;
-  const [drafts, setDrafts] = React.useState<Record<string, CellDraft>>({});
-  const [busy, setBusy] = React.useState<string | null>(null);  // a field key, or "all"
-  const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const { t, lang } = tr;
+  const has = SENT.includes(r.status) || r.status === "draft";
+  const savedText = has ? asText(r.values[x.key]) : "";
+  const [text, setText] = React.useState(savedText);
+  const [state, setState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [err, setErr] = React.useState("");
+  const focused = React.useRef(false);
+  // the server's value replaces the box once it changes, unless someone is typing in it
+  React.useEffect(() => { if (!focused.current) { setText(savedText); setErr(""); } }, [savedText]);
 
-  const saved = (k: string) => asText(row.values[k]);
-  const savedProof = (k: string) => proofDraftOf(row.proofs?.[k]);
-  const valueOf = (k: string) => drafts[k]?.value ?? saved(k);
-  const proofOf = (k: string) => drafts[k]?.proof ?? savedProof(k);
-  const valueChanged = (k: string) => valueOf(k).trim() !== saved(k);
-  const proofChanged = (k: string) => !sameProof(proofOf(k), savedProof(k));
-  const isDirty = (k: string) => valueChanged(k) || proofChanged(k);
-  const uploadingOf = (k: string) => proofOf(k).files.some((x) => x.status === "uploading");
-  const problemOfField = (f: FormField) => problemOf(f, valueOf(f.key).trim(), tr);
-  const dirtyKeys = fields.filter((f) => isDirty(f.key)).map((f) => f.key);
-  const uploading = fields.some((f) => uploadingOf(f.key));
-  const blocked = fields.some((f) => isDirty(f.key) && problemOfField(f));
-
-  const patch = (k: string, p: Partial<CellDraft>) => setDrafts((d) => ({ ...d, [k]: { ...d[k], ...p } }));
-  const setProof = (k: string, fn: (d: ProofDraft) => ProofDraft) =>
-    setDrafts((d) => ({ ...d, [k]: { ...d[k], proof: fn(d[k]?.proof ?? proofDraftOf(row.proofs?.[k])) } }));
-  const forget = (keys: string[]) => setDrafts((d) => { const n = { ...d }; keys.forEach((k) => delete n[k]); return n; });
-  const message = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
-
-  // open at the clicked field, with its box ready for typing (after the sheet's own focus on open)
-  React.useEffect(() => {
-    const h = setTimeout(() => {
-      const box = document.getElementById(`re_${focusKey}`);
-      box?.scrollIntoView({ block: "center" });
-      box?.querySelector<HTMLElement>("input, select, textarea")?.focus();
-    }, 60);
-    return () => clearTimeout(h);
-  }, [focusKey]);
-
-  /** One field's figure (if changed) and proof (if changed), in one request. */
-  const post = (k: string) => {
-    const body: Record<string, unknown> = { key: k, note: drafts[k]?.note?.trim() ?? "" };
-    if (valueChanged(k)) body.value = valueOf(k).trim() || null;
-    if (proofChanged(k)) body.proofs = proofPayload(proofOf(k));
-    return api.post<Submission>(`${base}/field`, body);
-  };
-  const saveOne = async (k: string) => {
-    setBusy(k);
-    setErrors((e) => ({ ...e, [k]: "" }));
+  const commit = async (v = text.trim()) => {
+    if (v === savedText) { setErr(""); setState("idle"); return; }
+    const p = problemOf(x, v, tr);
+    if (p) { setErr(p); setState("error"); toast.error(`${fieldLabel(x, lang)}: ${p}`); return; }
+    setState("saving");
     try {
-      const hadValue = valueChanged(k);
-      const out = await post(k);
-      await onSaved();
-      forget([k]);
-      const last = hadValue ? out.edits.filter((e) => e.key === k).at(-1) : undefined;
-      toast.success(t("value_saved"), last ? { action: { label: t("undo"), onClick: () => onRevert(last.id) } } : undefined);
+      await onSave(v);
+      setErr(""); setState("saved");
+      setTimeout(() => setState((s) => (s === "saved" ? "idle" : s)), 1500);
     } catch (e) {
-      setErrors((x) => ({ ...x, [k]: message(e) }));
-    } finally { setBusy(null); }
-  };
-  const saveAll = async () => {
-    setBusy("all");
-    const done: string[] = [];
-    const failed: Record<string, string> = {};
-    for (const k of dirtyKeys) {
-      try { await post(k); done.push(k); } catch (e) { failed[k] = message(e); }
+      setErr(message(e)); setState("error"); toast.error(`${fieldLabel(x, lang)} · ${shortOffice(r, lang)}: ${message(e)}`);
     }
-    if (done.length) { await onSaved(); forget(done); toast.success(tf("saved_n", { n: done.length })); }
-    setErrors(failed);
-    setBusy(null);
-    const first = Object.keys(failed)[0];
-    if (first) document.getElementById(`re_${first}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
-    else onClose();
   };
-  const close = () => { if ((!dirtyKeys.length && !uploading) || confirm(t("unsaved_leave"))) onClose(); };
 
-  const status = sent && row.submitted_at ? `${t("sub_submitted")} ${whenText(row.submitted_at, lang)}${row.submitted_by ? ` · ${row.submitted_by}` : ""}`
-    : row.status === "draft" ? t("sub_draft") : t("sub_none");
+  const c = r.corrections[x.key];
+  const noProof = r.proof_missing?.includes(x.key);
+  const tip = [err, c ? `${t("corrected")} · ${t("original")}: ${c.original ?? "—"}${c.note ? ` · ${c.note}` : ""}` : "",
+    noProof ? t("proof_missing_mark") : ""].filter(Boolean).join(" · ") || t("edit_value");
+  const label = `${fieldLabel(x, lang)}, ${officeName(r, lang)}`;
+  const box = cn("num block h-8 w-full min-w-0 rounded-md border-0 bg-transparent px-1 text-center text-sm outline-none",
+    "hover:bg-r-card hover:ring-1 hover:ring-r-line focus:bg-r-card focus:ring-2 focus:ring-r-action",
+    has ? "text-r-ink" : "text-r-faint",
+    state === "error" && "bg-r-overdue-soft ring-2 ring-r-overdue", state === "saving" && "opacity-50");
 
   return (
-    <RSheet open wide onClose={close} closeLabel={t("close")} title={officeName(row, lang)}
-      description={`${periodName(form, ps, lang)} · ${status}`}
-      footer={
-        <div className="flex flex-wrap items-center justify-end gap-2.5">
-          <span className="mr-auto text-sm text-r-muted">
-            {uploading ? t("proof_uploading") : dirtyKeys.length ? tf("n_unsaved_changes", { n: dirtyKeys.length }) : t("nothing_to_save")}
-          </span>
-          <RButton variant="ghost" onClick={close}>{t("close")}</RButton>
-          <RButton variant="pri" disabled={!dirtyKeys.length || blocked || uploading || (busy !== null && busy !== "all")} loading={busy === "all"} onClick={saveAll}>
-            {tf("save_all_n", { n: dirtyKeys.length })}
-          </RButton>
-        </div>
-      }>
-      {!sent && <RAlert tone="info">{t("row_edit_unsent")}</RAlert>}
-      <p className="m-0 text-sm text-r-muted">{t("row_edit_hint")}</p>
-      {fields.map((f) => (
-        <FieldEditCard key={f.key} form={form} row={row} field={f} focus={f.key === focusKey} proofOn={proofOn}
-          value={valueOf(f.key)} note={drafts[f.key]?.note ?? ""} proof={proofOf(f.key)} dirty={isDirty(f.key)}
-          problem={problemOfField(f)} error={errors[f.key] ?? ""} uploading={uploadingOf(f.key)} busy={busy}
-          onValue={(v) => patch(f.key, { value: f.type === "number" ? v.replace(/[^\d.]/g, "") : v })}
-          onNote={(v) => patch(f.key, { note: v })}
-          onLinks={(text) => setProof(f.key, (d) => ({ ...d, linksText: text }))}
-          onPick={(list) => {
-            const upd = (uid: string, p: Partial<FileItem>) => setProof(f.key, (d) => ({ ...d, files: d.files.map((x) => (x.uid === uid ? { ...x, ...p } : x)) }));
-            void uploadPicked(list, { formId: form.id, office: row.office, ps, field: f.key }, (it) => setProof(f.key, (d) => ({ ...d, files: [...d.files, it] })), upd, t);
+    <>
+      {x.type === "yesno" || x.type === "choice" ? (
+        <select data-col={x.key} data-cell={cellId} aria-label={label} title={tip} value={text} disabled={state === "saving"}
+          onChange={(e) => { setText(e.target.value); void commit(e.target.value); }} className={cn(box, "cursor-pointer")}>
+          <option value="">—</option>
+          {(x.type === "yesno" ? ["yes", "no"] : x.options).map((o) => <option key={o} value={o}>{x.type === "yesno" ? t(o as TKey) : o}</option>)}
+        </select>
+      ) : (
+        <input data-col={x.key} data-cell={cellId} aria-label={label} title={tip} value={text} placeholder="—" aria-invalid={state === "error" || undefined}
+          type={x.type === "date" ? "date" : "text"} inputMode={x.type === "number" ? (x.integer ? "numeric" : "decimal") : undefined}
+          readOnly={state === "saving"} autoComplete="off"
+          onFocus={(e) => { focused.current = true; e.target.select(); }}
+          onBlur={() => { focused.current = false; void commit(); }}
+          onChange={(e) => setText(x.type === "number" ? e.target.value.replace(/[^\d.]/g, "") : e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") { e.preventDefault(); moveFocus(e.currentTarget, e.shiftKey ? -1 : 1); }
+            else if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); moveFocus(e.currentTarget, e.key === "ArrowDown" ? 1 : -1); }
+            else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setText(savedText); setErr(""); setState("idle"); }
           }}
-          onRemoveFile={(uid) => setProof(f.key, (d) => ({ ...d, files: d.files.filter((x) => x.uid !== uid) }))}
-          onSave={() => saveOne(f.key)} onRevert={onRevert} />
-      ))}
-    </RSheet>
-  );
-}
-
-/** One field in the row sheet: its figure, note, proof, history and its own Save. */
-function FieldEditCard({ form, row, field, focus, proofOn, value, note, proof, dirty, problem, error, uploading, busy,
-  onValue, onNote, onLinks, onPick, onRemoveFile, onSave, onRevert }: {
-  form: FormDef; row: ResponseRow; field: FormField; focus: boolean; proofOn: boolean; value: string; note: string; proof: ProofDraft;
-  dirty: boolean; problem: string; error: string; uploading: boolean; busy: string | null;
-  onValue: (v: string) => void; onNote: (v: string) => void; onLinks: (text: string) => void; onPick: (files: File[]) => void;
-  onRemoveFile: (uid: string) => void; onSave: () => void; onRevert: (edit: number) => void;
-}) {
-  const { t, tf, lang } = useT();
-  const k = field.key;
-  const id = `re_in_${k}`;
-  const cur = row.values[k];
-  const c = row.corrections[k];
-  const edits = editsOf(row, k);
-  const sentValue = edits.length ? edits[edits.length - 1].before : SENT.includes(row.status) ? cur : null;
-  const show = (v: AnswerValue) => showValue(field, v, t);
-  const takesProof = field.type === "number" && field.proof !== "none";
-  const saved = row.proofs?.[k] ?? [];
-  const links = parseLinks(proof.linksText);
-  const submit = (e: React.FormEvent) => { e.preventDefault(); if (dirty && !problem && !uploading && busy === null) onSave(); };
-
-  const input = field.type === "yesno" || field.type === "choice" ? (
-    <RSelect id={id} value={value} onChange={(e) => onValue(e.target.value)} className="min-h-[54px] w-full rounded-xl text-base sm:w-56">
-      <option value="">—</option>
-      {(field.type === "yesno" ? ["yes", "no"] : field.options).map((o) => <option key={o} value={o}>{field.type === "yesno" ? t(o as TKey) : o}</option>)}
-    </RSelect>
-  ) : field.type === "text" ? <RTextarea id={id} value={value} onChange={(e) => onValue(e.target.value)} className="text-base" />
-    : <RInput id={id} big type={field.type === "date" ? "date" : "text"} inputMode={field.type === "number" ? (field.integer ? "numeric" : "decimal") : undefined}
-      placeholder={field.type === "number" ? t("not_entered") : undefined} value={value} onChange={(e) => onValue(e.target.value)} aria-invalid={!!problem || undefined}
-      className={cn(field.type === "number" && "w-full text-center sm:w-36", problem && "border-r-overdue bg-r-overdue-soft")} />;
-
-  return (
-    <section id={`re_${k}`} aria-labelledby={`${id}_l`}
-      className={cn("flex scroll-mt-4 flex-col gap-3 rounded-2xl border-[1.5px] bg-r-card p-4",
-        dirty ? "border-r-action shadow-[0_0_0_3px_var(--r-focus)]" : focus ? "border-r-ink" : "border-r-line")}>
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <div className={cn("flex gap-3", field.type === "number" ? "flex-col sm:flex-row sm:items-center sm:justify-between" : "flex-col")}>
-          <label id={`${id}_l`} htmlFor={id} className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <b className="text-[17px] leading-tight first-letter:uppercase">{fieldLabel(field, lang)}</b>
-            <span className="text-[13px] text-r-muted">
-              {c ? `${t("corrected")} · ${t("original")}: ${show(c.original)}` : same(sentValue, null) ? t("sub_none") : tf("district_sent", { o: shortOffice(row, lang), v: show(sentValue) })}
-            </span>
-          </label>
-          {input}
-        </div>
-        {problem && <span className="text-sm font-bold text-r-overdue-ink">{problem}</span>}
-        <RInput value={note} onChange={(e) => onNote(e.target.value)} placeholder={t("edit_note_ph")} aria-label={`${t("note")} · ${fieldLabel(field, lang)}`} />
-        <button type="submit" hidden />
-      </form>
-
-      {takesProof && (
-        <div className="flex flex-col gap-2 rounded-xl bg-r-ground p-3" role="group" aria-label={`${t("proof_word")} · ${fieldLabel(field, lang)}`}>
-          <span className="flex items-center gap-2 text-[13px] font-bold text-r-muted">
-            <Paperclip className="size-4" aria-hidden /> {t("proof_word")} · {t(`proof_type_${field.proof}` as TKey)}
-            {row.proof_missing?.includes(k) && <span className="rounded-full bg-r-overdue-soft px-2 py-px text-xs text-r-overdue-ink">{t("proof_missing_mark")}</span>}
-          </span>
-          {!proofOn ? (saved.length ? <ProofList formId={form.id} proofs={saved} /> : <span className="text-sm text-r-muted">{t("proof_exempt")}</span>) : (
-            <>
-              {fieldTakesLinks(field) && (
-                <>
-                  <LinksInput id={`${id}_links`} value={proof.linksText} onChange={onLinks} />
-                  <LinkLines links={links} />
-                </>
-              )}
-              {fieldTakesFiles(field) && <FileBox formId={form.id} files={proof.files} onPick={onPick} onRemove={onRemoveFile} />}
-            </>
-          )}
-        </div>
+          className={cn(box, "placeholder:text-r-faint")} />
       )}
-
-      {error && <RAlert tone="danger">{error}</RAlert>}
-
-      <div className="flex flex-wrap items-center gap-2">
-        {(edits.length > 0 || c) && (
-          <details className="min-w-0 flex-1 text-sm" open={focus && edits.length > 0}>
-            <summary className="cursor-pointer font-bold text-r-muted">{tf("history_n", { n: edits.length })}</summary>
-            {c && (
-              <RButton size="sm" variant="ghost" className="mt-1" onClick={() => onValue(asText(c.original))}>
-                <RotateCcw aria-hidden /> {tf("restore_district", { v: show(c.original) })}
-              </RButton>
-            )}
-            <ol className="m-0 flex list-none flex-col p-0">
-              {edits.map((e, i) => (
-                <EditEntry key={e.id} e={e} first={i === 0} latest={i === 0} show={show} current={i === 0 && same(e.after, cur)}
-                  canGoBack={!same(e.before, cur)} busy={busy !== null} onRevert={() => onRevert(e.id)} />
-              ))}
-            </ol>
-          </details>
-        )}
-        <RButton variant="pri" className="ml-auto" disabled={!dirty || !!problem || uploading || busy !== null} loading={busy === k} onClick={onSave}>
-          {t("save")}
-        </RButton>
-      </div>
-    </section>
+      {state === "saving" && <Loader2 className="pointer-events-none absolute top-1/2 right-1 size-3 -translate-y-1/2 animate-spin text-r-muted" aria-hidden />}
+      {state === "saved" && <Check className="pointer-events-none absolute top-1/2 right-1 size-3.5 -translate-y-1/2 text-r-accepted" aria-label={t("saved")} />}
+    </>
   );
 }
 
-function EditEntry({ e, first, latest, show, current, canGoBack, busy, onRevert }: {
-  e: ValueEdit; first: boolean; latest: boolean; show: (v: AnswerValue) => string; current: boolean; canGoBack: boolean; busy: boolean; onRevert: () => void;
+/** The small PDF button in the Evidence column. It opens a box with one Upload button (several PDFs / photos at once)
+ * and the list of files already attached to this office-day, each opening in a new tab. The state office does not pick
+ * a column: files go to the form's file column (see `pdfField` in FormSection). */
+function EvidenceButton({ formId, office, files, uploading, onPick }: {
+  formId: number; office: string; files: Proof[]; uploading: number; onPick: (files: File[]) => void;
 }) {
-  const { t, tf, lang } = useT();
-  return (
-    <li className={cn("flex gap-3 py-3", !first && "border-t border-r-sunk")}>
-      <span className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", e.reverts || e.source === "office" ? "bg-r-field" : "bg-r-corrected")} aria-hidden />
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
-        <span className="num"><span className="text-r-muted line-through">{show(e.before)}</span> → <b>{show(e.after)}</b>{e.reverts ? <span className="text-r-muted"> · {t("undone_tag")}</span> : null}</span>
-        <span className="text-r-muted">{whenText(e.at, lang)} · {e.source === "office" ? t("src_office") : t("state_office")} · {e.by}</span>
-        {e.note && <span className="rounded-lg bg-r-sunk px-2.5 py-1.5">{e.note}</span>}
-      </div>
-      <span className="flex shrink-0 flex-col items-end gap-1 self-center">
-        {current && <span className="rounded-full bg-r-sunk px-2.5 py-0.5 text-xs font-bold text-r-muted">{t("current_value")}</span>}
-        {canGoBack && (
-          <RButton size="sm" variant="ghost" disabled={busy} onClick={onRevert}>
-            <Undo2 aria-hidden /> {latest ? t("undo") : tf("go_back_to", { v: show(e.before) })}
-          </RButton>
-        )}
-      </span>
-    </li>
-  );
-}
-
-// --------------------------------------------------------------------------- proof of one row
-/** All of one office's proof for a period, figure by figure: each field that asks for proof and has a figure or proof,
- * with what was attached, who added it, and what is still missing. ← / → (or the footer) step to the previous / next office. */
-function ProofModal({ form, row, fields, at, of, byDate, onStep, onClose }: {
-  form: FormDef; row: ResponseRow; fields: FormField[]; at: number; of: number; byDate: boolean;
-  onStep: (d: -1 | 1) => void; onClose: () => void;
-}) {
-  const { t, tf, lang } = useT();
-  const sent = SENT.includes(row.status);
+  const { t } = useT();
+  const btn = React.useRef<HTMLButtonElement>(null);
+  const input = React.useRef<HTMLInputElement>(null);
+  const [box, setBox] = React.useState<React.CSSProperties | null>(null);
   React.useEffect(() => {
-    const key = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement)?.closest?.("input, textarea, select")) return;
-      if (e.key === "ArrowLeft" && at > 0) onStep(-1);
-      if (e.key === "ArrowRight" && at < of - 1) onStep(1);
-    };
-    document.addEventListener("keydown", key);
-    return () => document.removeEventListener("keydown", key);
-  }, [at, of, onStep]);
+    if (!box) return;
+    const inside = (e: Event) => !!(e.target as HTMLElement)?.closest?.("[data-evidence-box]") || btn.current?.contains(e.target as Node);
+    const close = (e: Event) => { if (!inside(e)) setBox(null); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); setBox(null); } };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("scroll", close, true);
+    document.addEventListener("keydown", esc, true);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("scroll", close, true); document.removeEventListener("keydown", esc, true); };
+  }, [box]);
 
-  // figures left blank or at 0 need no proof; they are left out unless something was attached anyway
-  const shown = fields.filter((x) => (row.proofs?.[x.key]?.length ?? 0) > 0
-    || (x.proof !== "none" && (row.proof_missing?.includes(x.key) || Number(row.values[x.key]) > 0)));
-  const total = proofCount(row);
-  const missing = sent ? row.proof_missing?.length ?? 0 : 0;
-  const status = sent && row.submitted_at ? `${t("sub_submitted")} ${whenText(row.submitted_at, lang)}${row.submitted_by ? ` · ${row.submitted_by}` : ""}`
-    : row.status === "draft" ? t("sub_draft") : t("sub_none");
+  const toggle = () => {
+    if (box) return setBox(null);
+    const b = btn.current!.getBoundingClientRect();
+    const w = Math.min(320, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
+    // opens below the button, or above it when the button is low on the screen
+    setBox(window.innerHeight - b.bottom > 300 ? { top: b.bottom + 6, left, width: w } : { bottom: window.innerHeight - b.top + 6, left, width: w });
+  };
 
   return (
-    <RSheet open wide onClose={onClose} closeLabel={t("close")} title={officeName(row, lang)}
-      description={`${byDate ? `${periodName(form, row.period_start, lang)} · ` : ""}${status}`}
-      footer={
-        <div className="flex items-center justify-between gap-2.5">
-          <RButton variant="ghost" size="sm" disabled={at === 0} onClick={() => onStep(-1)}><ChevronLeft aria-hidden /> {t("prev_day")}</RButton>
-          <span className="num text-[13px] text-r-muted">{at + 1} / {of}</span>
-          <RButton variant="ghost" size="sm" disabled={at >= of - 1} onClick={() => onStep(1)}>{t("next_day")} <ChevronRight aria-hidden /></RButton>
-        </div>
-      }>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="num inline-flex items-center gap-1 rounded-full bg-r-action-soft px-3 py-1 text-[13px] font-bold text-r-action">
-          <Paperclip className="size-3.5" aria-hidden /> {tf("proof_count", { n: total })}
-        </span>
-        {missing > 0 && <span className="num rounded-full bg-r-overdue-soft px-3 py-1 text-[13px] font-bold text-r-overdue-ink">{tf("n_proof_missing", { n: missing })}</span>}
-      </div>
-      {!shown.length ? <p className="m-0 text-r-muted">{row.proof_exempt ? t("proof_exempt") : t("proof_none_attached")}</p> : (
-        <ul className="m-0 flex list-none flex-col gap-3 p-0">
-          {shown.map((x) => {
-            const list = row.proofs?.[x.key] ?? [];
-            const lack = sent && row.proof_missing?.includes(x.key);
-            const v = row.values[x.key];
-            const links = list.filter((p) => p.kind === "link").length;
-            // a links field counts one link per item; a later correction can leave the two apart
-            const off = x.proof === "links" && typeof v === "number" && list.length > 0 && links !== v;
-            const by = [...new Set(list.map((p) => p.added_by).filter(Boolean))].join(", ");
-            const last = list.map((p) => p.added_at).sort().at(-1);
-            const files = list.length - links;
-            const counts = [links && tf("proof_n_links", { n: links }), files && tf("proof_n_files", { n: files })].filter(Boolean).join(" · ");
-            return (
-              <li key={x.key} className={cn("overflow-hidden rounded-xl border", lack ? "border-r-overdue/40 bg-r-overdue-soft/60" : "border-r-line bg-r-sunk/60")}>
-                <div className="flex items-center gap-3 border-b border-r-line-soft px-3.5 py-2.5">
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <b className="truncate text-[15px] first-letter:uppercase">{fieldLabel(x, lang)}</b>
-                    <span className="flex flex-wrap items-center gap-1.5 text-xs text-r-muted">
-                      <span className="rounded-full bg-r-card px-2 py-px font-semibold ring-1 ring-r-line-soft">{t(`proof_type_${x.proof}` as TKey)}</span>
-                      {counts && <span className="num">{counts}</span>}
-                    </span>
-                  </span>
-                  <span className="num flex h-10 min-w-10 shrink-0 items-center justify-center rounded-lg bg-r-card px-2.5 text-[20px] font-bold ring-1 ring-r-line-soft">{showValue(x, v, t)}</span>
-                </div>
-                <div className="flex flex-col gap-2 p-3">
-                  {lack && <span className="self-start rounded-full bg-r-overdue px-2.5 py-0.5 text-xs font-bold text-r-card">{t("proof_missing_mark")}</span>}
-                  {off && <span className="text-xs font-bold text-r-overdue-ink">{tf("proof_links_match", { n: links })}</span>}
-                  {list.length > 0 ? <ProofList formId={form.id} proofs={list} /> : !lack && <span className="text-sm text-r-muted">{t("proof_none_attached")}</span>}
-                </div>
-                {last && (
-                  <div className="flex items-center gap-1.5 border-t border-r-line-soft px-3.5 py-2 text-xs text-r-muted">
-                    <Clock className="size-3.5" aria-hidden /> {whenText(last, lang)}{by ? ` · ${by}` : ""}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </RSheet>
+    <>
+      <button ref={btn} type="button" onClick={toggle} aria-haspopup="dialog" aria-expanded={!!box} translate="no"
+        title={t("upload_pdf")} aria-label={`${t("upload_pdf")}: ${office}`}
+        className={cn("inline-flex h-6 cursor-pointer items-center gap-0.5 rounded-md border border-r-line px-1.5 text-[11px] font-semibold whitespace-nowrap text-r-muted hover:bg-r-sunk hover:text-r-ink",
+          box ? "bg-r-sunk text-r-ink" : "bg-r-card")}>
+        {/* same children always (two icons, one label), only their content changes, so a page translator can't leave a
+            stale "PDF" behind */}
+        <Loader2 className={cn("size-3", uploading > 0 ? "animate-spin" : "hidden")} aria-hidden />
+        <Upload className={cn("size-3", uploading > 0 && "hidden")} aria-hidden />
+        <span className="num">{files.length ? `PDF · ${files.length}` : "PDF"}</span>
+      </button>
+      <input ref={input} type="file" multiple hidden accept={FILE_TYPES.join(",")}
+        onChange={(e) => { const list = [...(e.target.files ?? [])]; e.target.value = ""; if (list.length) onPick(list); }} />
+      {box && createPortal(
+        <div data-evidence-box role="dialog" aria-label={`${t("upload_pdf")}: ${office}`} style={box}
+          className="fixed z-50 flex max-h-[min(420px,70vh)] flex-col gap-2 rounded-xl border border-r-line bg-r-card p-3 text-left shadow-xl">
+          <b className="truncate text-sm">{office}</b>
+          <RButton size="sm" variant="pri" disabled={uploading > 0} loading={uploading > 0} onClick={() => input.current?.click()}>
+            <Upload aria-hidden /> {uploading > 0 ? t("proof_uploading") : t("add_pdf_btn")}
+          </RButton>
+          <div className="-mx-1 min-h-0 overflow-y-auto px-1 scrollbar-thin">
+            {files.length ? <ProofList formId={formId} proofs={files} /> : <p className="m-0 py-1 text-center text-sm text-r-muted">{t("no_pdf_yet")}</p>}
+          </div>
+        </div>, document.body)}
+    </>
   );
 }
 

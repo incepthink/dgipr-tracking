@@ -170,9 +170,12 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
 
   return (
     <RPage>
-      <RTitle eyebrow={today ? longDay(today, lang) : undefined}
-        title={<>{t("district_officer")}: {shortName(me.office) || me.display_name}</>}
-        sub={division?.label_mr} />
+      {/* the office's own heading: centred, and smaller than a page title so it fits a phone in two lines */}
+      <header className="flex flex-col items-center gap-1 text-center">
+        {today && <div className="text-[13px] font-bold tracking-[0.06em] text-r-muted uppercase">{longDay(today, lang)}</div>}
+        <h1 className="disp m-0 text-[24px] leading-tight font-bold sm:text-[28px]">{t("district_officer")}: {shortName(me.office) || me.display_name}</h1>
+        {division?.label_mr && <p className="m-0 text-r-muted">{division.label_mr}</p>}
+      </header>
 
       {error ? <RError error={error} /> : isLoading ? <SkeletonCards /> : !forms.length ? (
         <RCard className="items-center py-10 text-center">
@@ -185,13 +188,14 @@ function DistrictToday({ listOnly }: { listOnly: boolean }) {
           <section className="flex flex-col gap-2" aria-labelledby="mine">
             <h2 id="mine" className={cn("mx-1 mt-1 mb-0 text-[15px] font-bold text-r-muted", listOnly && "sr-only")}>{t("nav_my_forms")}</h2>
             <DeskSearch q={q} setQ={setQ} forms={forms} campaignOf={campaignOf} onPick={onPick} />
-            <div role="group" aria-label={t("nav_my_forms")} className="flex flex-wrap gap-2">
+            {/* one row on a phone: smaller chips that never wrap; full size from sm up */}
+            <div role="group" aria-label={t("nav_my_forms")} className="flex flex-nowrap gap-1.5 sm:flex-wrap sm:gap-2">
               {FILTERS.map((k) => (
                 <button key={k} type="button" aria-pressed={filter === k} onClick={() => setFilter(k)}
-                  className={cn("inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-full border-[1.5px] px-4 text-sm font-bold",
+                  className={cn("inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border-[1.5px] px-2.5 text-[13px] font-bold whitespace-nowrap sm:min-h-10 sm:gap-2 sm:px-4 sm:text-sm",
                     filter === k ? "border-r-ink bg-r-ink text-r-card" : "border-r-line bg-r-card text-r-ink hover:bg-r-sunk")}>
                   {t(`mine_${k}`)}
-                  <span className={cn("num min-w-6 rounded-full px-1.5 py-px text-center text-xs", filter === k ? "bg-r-card text-r-ink" : "bg-r-sunk text-r-muted")}>{counts[k]}</span>
+                  <span className={cn("num min-w-5 rounded-full px-1 py-px text-center text-[11px] sm:min-w-6 sm:px-1.5 sm:text-xs", filter === k ? "bg-r-card text-r-ink" : "bg-r-sunk text-r-muted")}>{counts[k]}</span>
                 </button>
               ))}
             </div>
@@ -274,7 +278,7 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <dt className="text-xs font-bold tracking-[0.04em] text-r-muted uppercase">{label}</dt>
-      <dd className="m-0 truncate text-[15px] font-semibold">{children}</dd>
+      <dd className="m-0 text-[15px] font-semibold wrap-break-word">{children}</dd>
     </div>
   );
 }

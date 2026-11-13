@@ -22,12 +22,12 @@ export function useFormNumbers() {
   return React.useMemo(() => new Map([...(data ?? [])].sort((a, b) => a.id - b.id).map((f, i) => [f.id, i + 1] as const)), [data]);
 }
 
-/** "Form 3" in the action colour, the label that says a card is a form. */
+/** "Form 3" in the sidebar navy, the label that says a card is a form. */
 export function FormNumber({ n, small }: { n: number | undefined; small?: boolean }) {
   const { tf, num } = useT();
   if (!n) return null;
   return (
-    <span className={cn("num inline-flex shrink-0 items-center rounded-lg bg-r-action font-bold whitespace-nowrap text-white dark:text-r-ground",
+    <span className={cn("num inline-flex shrink-0 items-center rounded-lg bg-r-brand font-bold whitespace-nowrap text-white dark:text-r-ground",
       small ? "px-2 py-0.5 text-[13px]" : "px-3 py-1 text-base")}>
       {tf("form_n", { n: num(n) })}
     </span>

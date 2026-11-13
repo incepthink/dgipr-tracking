@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, ClipboardCheck, FilePen, FilePlus2, ListChecks, Pause, Pencil, Play, Repeat, Send, Trash2, Users } from "lucide-react";
+import { CalendarDays, ClipboardCheck, FilePlus2, ListChecks, Pause, Pencil, Play, Repeat, Send, Trash2, Users } from "lucide-react";
 import { api, type FormBrief, type FormDef } from "@/lib/api";
 import { useAction } from "@/lib/hooks";
 import { useT, type TKey } from "@/lib/i18n";
@@ -80,9 +80,6 @@ function FormCard({ f, n }: { f: FormBrief; n: number | undefined }) {
       <div className="mt-auto flex flex-wrap gap-2">
         <RButton size="sm" variant="ghost" asChild><Link to={`/forms/${f.id}/edit`}><Pencil aria-hidden /> {t("edit")}</Link></RButton>
         {f.status !== "draft" && <RButton size="sm" variant="ghost" asChild><Link to={`/forms/responses${qs({ form: f.id })}`}><ClipboardCheck aria-hidden /> {t("nav_responses")}</Link></RButton>}
-        {(f.status === "published" || f.status === "paused") && (
-          <RButton size="sm" variant="ghost" asChild><Link to={`/forms/${f.id}/fill`}><FilePen aria-hidden /> {t("fill_response")}</Link></RButton>
-        )}
         <div className="ml-auto flex flex-wrap gap-1">
           {f.status === "draft" && (
             <RButton size="sm" variant="pri" loading={status.isPending} onClick={() => status.mutate("publish")}><Send aria-hidden /> {t("publish")}</RButton>

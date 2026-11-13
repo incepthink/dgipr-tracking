@@ -134,7 +134,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <LangProvider>
       <TooltipProvider>
         <RouterProvider router={router} />
-        <Toaster richColors position="bottom-right" closeButton />
+        {/* plain white messages in the page's own colours, no green / red fills */}
+        <Toaster position="bottom-right" closeButton
+          toastOptions={{ style: { background: "var(--r-card)", color: "var(--r-ink)", border: "1px solid var(--r-line)", boxShadow: "0 4px 14px rgb(0 0 0 / 0.08)" } }} />
       </TooltipProvider>
       </LangProvider>
     </QueryClientProvider>

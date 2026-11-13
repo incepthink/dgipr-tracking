@@ -124,6 +124,9 @@
   --r-action: #1f48b8;
   --r-action-hover: #15327f;
   --r-action-soft: #eef2fc;
+  /* main buttons and the Form n badge: the sidebar's navy */
+  --r-brand: #15202b;
+  --r-brand-hover: #2a3844;
   --r-focus: #f2b544;
   --r-today: #fff8e6;
   --r-accepted: #0e6a4e;
@@ -170,6 +173,8 @@
   --r-action: #8db0ff;
   --r-action-hover: #b3caff;
   --r-action-soft: #1f2840;
+  --r-brand: #8db0ff;
+  --r-brand-hover: #b3caff;
   --r-focus: #f2b544;
   --r-today: #2b2414;
   --r-accepted: #5ccb95;
@@ -217,6 +222,8 @@
   --color-r-action: var(--r-action);
   --color-r-action-hover: var(--r-action-hover);
   --color-r-action-soft: var(--r-action-soft);
+  --color-r-brand: var(--r-brand);
+  --color-r-brand-hover: var(--r-brand-hover);
   --color-r-focus: var(--r-focus);
   --color-r-today: var(--r-today);
   --color-r-accepted: var(--r-accepted);
