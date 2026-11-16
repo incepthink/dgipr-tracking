@@ -7,7 +7,7 @@ import { api, backendUrl, type SheetTable } from "@/lib/api";
 import { useMeta } from "@/lib/hooks";
 import { useUser } from "@/lib/auth";
 import { useT, type TKey } from "@/lib/i18n";
-import { addDays, cn } from "@/lib/utils";
+import { addDays, cn, dmyText } from "@/lib/utils";
 import { RAlert, RButton, RCheck, RLabel, RSelect, RSheet } from "@/components/reports/kit";
 import { DateInput } from "@/components/reports/DateInput";
 import { fig, periodEnd, periodOf, rangeText } from "@/components/reports/period";
@@ -27,10 +27,10 @@ export function sheetTableQuery(formId: number, qs: string) {
   };
 }
 
-/** Figures as the sheet shows them (0, never a dash); empty text cells come back null. */
+/** Figures as the sheet shows them (0, never a dash); empty text cells come back null; dates read DD/MM/YYYY. */
 export function cellOut(v: string | number | null | undefined, numeric: boolean) {
   if (numeric) return fig(typeof v === "number" ? v : Number(v) || 0);
-  return v === "" || v === null || v === undefined ? null : String(v);
+  return v === "" || v === null || v === undefined ? null : dmyText(String(v));
 }
 
 /** District tables (two text columns): the division name only on the first row of its group. */

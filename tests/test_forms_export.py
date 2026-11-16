@@ -62,8 +62,11 @@ def test_workbook_layout_totals_and_highlights(session):
     div = wb["विभागनिहाय एकत्रित"]
     assert [c.value for c in div[div.max_row]][:3] == ["राज्य एकूण", 9, 66]
     datewise = wb["तारखेनिहाय अहवाल"]
-    assert [[c.value for c in r][:3] for r in datewise.iter_rows(min_row=4)] == \
-        [[D1.isoformat(), 6, 62], [D2.isoformat(), 3, 4], ["एकूण", 9, 66]]
+    # dates are real dates shown day first (DD/MM/YYYY), as in the state office's own sheet
+    day = lambda v: v.date() if hasattr(v, "date") else v  # noqa: E731
+    assert [[day(c.value) for c in r][:3] for r in datewise.iter_rows(min_row=4)] == \
+        [[D1, 6, 62], [D2, 3, 4], ["एकूण", 9, 66]]
+    assert datewise["A4"].number_format == "dd/mm/yyyy" and de["A4"].number_format == "dd/mm/yyyy"
     daily = wb["दररोजचा अहवाल"]  # the last day of the range
     assert daily["A4"].value == "विभागाचे नाव" and [c.value for c in daily[daily.max_row]][:3] == ["राज्य एकूण", 3, 4]
     assert "२ ऑक्टोबर २०२६" in daily["A2"].value

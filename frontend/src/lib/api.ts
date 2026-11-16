@@ -1,5 +1,5 @@
 /** Where the FastAPI backend is mounted relative to this origin: "" when FastAPI serves the SPA itself,
- * "/tracking/backend" on dgipr.hashcase.tech (set via VITE_BACKEND_PREFIX at build time). */
+ * "/dgipr/tracking/backend" on www.hashcase.tech (set via VITE_BACKEND_PREFIX at build time). */
 export const BACKEND_PREFIX: string = import.meta.env.VITE_BACKEND_PREFIX ?? "";
 export const backendUrl = (path: string) => BACKEND_PREFIX + path;
 

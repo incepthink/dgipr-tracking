@@ -258,7 +258,9 @@ test is skipped when no browser is available).
 
 ## 9. Production deployment
 
-* **Frontend**: Vercel project `dgipr-tracking` (team `hashcase`) → https://dgipr-tracking.vercel.app.
+* **Frontend**: Vercel project `dgipr-tracking` (team `hashcase`), served at **https://www.hashcase.tech/dgipr/tracking**: the
+  main site (repo `incepthink/evm-hashcase`, `next.config.mjs` rewrites) forwards `/dgipr/tracking/*` to
+  `https://dgipr-tracking.vercel.app/dgipr/tracking/*`. The old `dgipr.hashcase.tech/tracking` redirects there.
   `frontend/vercel.json` serves the SPA at `/app/` and rewrites every other path (`/api`, `/reports`, `/report/preview.pdf`,
   `/fonts`, `/classic`, …) to the backend. Redeploy: `cd frontend && vercel deploy --prod --scope hashcase`.
 * **Backend**: AWS EC2 `dgipr-prod` (t2.small, ap-southeast-1, Elastic IP 54.169.233.35), Docker Compose in `/opt/dgipr/deploy`:
@@ -291,7 +293,7 @@ aws s3api put-public-access-block --bucket dgipr-proofs --public-access-block-co
 aws s3api put-bucket-encryption --bucket dgipr-proofs --server-side-encryption-configuration   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 aws s3api put-bucket-versioning --bucket dgipr-proofs --versioning-configuration Status=Enabled
 aws s3api put-bucket-cors --bucket dgipr-proofs --cors-configuration '{"CORSRules":[{
-  "AllowedOrigins":["https://dgipr.hashcase.tech","http://localhost:5173"],
+  "AllowedOrigins":["https://www.hashcase.tech","https://dgipr.hashcase.tech","http://localhost:5173"],
   "AllowedMethods":["PUT"],"AllowedHeaders":["Content-Type"],"MaxAgeSeconds":3000}]}'
 
 # an IAM user that can only put and get proof objects (HeadObject is covered by GetObject)
@@ -310,6 +312,6 @@ PROOF_S3_BUCKET=dgipr-proofs
 PROOF_S3_REGION=ap-south-1
 AWS_ACCESS_KEY_ID=…
 AWS_SECRET_ACCESS_KEY=…
-PUBLIC_APP_URL=https://dgipr.hashcase.tech/tracking
+PUBLIC_APP_URL=https://www.hashcase.tech/dgipr/tracking
 ```
 `PUBLIC_APP_URL` builds the file links in the Excel पुरावा sheet. Opening one requires a login.

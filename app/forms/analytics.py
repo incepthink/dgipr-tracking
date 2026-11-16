@@ -271,7 +271,13 @@ def _write_table(ws, t: dict[str, Any], *, header_row: int = 3) -> None:
     for row in t["rows"]:
         r += 1
         for i, v in enumerate(row, start=1):
-            ws.cell(r, i, v).border = st["box"]
+            # a period label "2026-10-01" (तारखेनिहाय) is written as a real date, shown day first as in the sheet
+            if isinstance(v, str) and len(v) == 10 and v[4] == v[7] == "-" and v.replace("-", "").isdigit():
+                c = ws.cell(r, i, date.fromisoformat(v))
+                c.number_format = "dd/mm/yyyy"
+            else:
+                c = ws.cell(r, i, v)
+            c.border = st["box"]
     r += 1
     for i, v in enumerate(t["total"], start=1):
         c = ws.cell(r, i, v)
@@ -337,7 +343,7 @@ def _proof_sheet(s: Session, ws, form: Form, ps_list, subs, meta, app_url: str, 
                 else:
                     link = f"{base}/backend/api/forms/{form.id}/proofs/{pr.id}/file"
                     kind = kinds.get(pr.file_type or "", "फाइल")
-                ws.cell(row, 1, ps).number_format = "yyyy-mm-dd"
+                ws.cell(row, 1, ps).number_format = "dd/mm/yyyy"
                 ws.cell(row, 2, office_names(o.code, d.summary_label_mr, o.name_mr)[0])
                 ws.cell(row, 3, o.name_mr)
                 ws.cell(row, 4, labels.get(pr.field_id, ""))
@@ -396,7 +402,7 @@ def workbook(s: Session, form: Form, offices: list[str], start: date, end: date,
             row += 1
             sub = subs.get((o.code, ps))
             counted = sub is not None and sub.status in COUNTED
-            de.cell(row, 1, ps).number_format = "yyyy-mm-dd"
+            de.cell(row, 1, ps).number_format = "dd/mm/yyyy"
             de.cell(row, 2, office_names(o.code, d.summary_label_mr, o.name_mr)[0])
             de.cell(row, 3, o.name_mr)  # the registry's official name (जिमाका, पुणे …), not the old sheet spelling
             vals = {v.field_id: v for v in sub.values} if counted else {}
@@ -404,7 +410,7 @@ def workbook(s: Session, form: Form, offices: list[str], start: date, end: date,
                 v = vals.get(f.id)
                 c = de.cell(row, i, _cell_out(f, value_of(f, v)) if v is not None else None)
                 if f.type == "date" and isinstance(c.value, date):
-                    c.number_format = "yyyy-mm-dd"
+                    c.number_format = "dd/mm/yyyy"
                 if v is not None and v.corrected_at is not None:
                     orig = _original_of(f, v)
                     orig = "रिकामे" if orig is None else _cell_out(f, orig)

@@ -53,6 +53,31 @@ No backend change, no migration: this round only needs the Vercel deploy (and `a
   visible "not due yet" dot (`components/analytics/CalendarHeatmap.tsx`).
 - "Totals by medium" boxes: small sparkline removed (`components/analytics/GroupTile.tsx`).
 
+## ✅ 16 Nov 2026: app moved to https://www.hashcase.tech/dgipr/tracking (all deployed)
+
+- **Main site** (`incepthink/evm-hashcase`, Vercel project `evm-hashcase`, deploys from GitHub `main`): `next.config.mjs`
+  `rewrites.beforeFiles` forwards `/dgipr/tracking` and `/dgipr/tracking/:path*` to
+  `https://dgipr-tracking.vercel.app/dgipr/tracking/...` (commit `9ee53aa`), the same pattern as the `/examples/*` demos.
+- **This app** (`frontend/vercel.json`): built with `VITE_BASE=/dgipr/tracking/`, `VITE_BACKEND_PREFIX=/dgipr/tracking/backend`;
+  rewrites moved under `/dgipr/tracking/...`. Old links `/tracking(/.*)?` (reached through `dgipr.hashcase.tech`, project
+  `mahasamvad-content-platform-web`, unchanged) **redirect** to the new address, deep links included. Deployed
+  `dgipr-tracking-hlwt9n1q0`.
+- **Server**: `PUBLIC_APP_URL=https://www.hashcase.tech/dgipr/tracking` in `/opt/dgipr/deploy/app.env` (copy
+  `app.env.bak-2026-11-16-0837`), backend rebuilt with this copy's code (adds the Excel date fix below). Rollback code:
+  `/opt/dgipr/rollback-code-2026-11-16-0837.tgz`; DB backup `dgipr.backup-2026-11-16-0837-before-url-move.sqlite3`.
+- **S3 CORS** (`dgipr-proofs`): `https://www.hashcase.tech` added to AllowedOrigins (old origin and localhost kept).
+- Users log in once more on the new address (new site, new cookie). SSH rule on `dgipr-prod` is now `49.36.0.0/16`.
+- Checked: new link, `hashcase.tech/...`, deep links, old link redirect, backend through the new link, main site pages,
+  browser on desktop + phone (no errors, no failed files), S3 preflight from the new origin.
+
+## 16 Nov 2026: dates day-first (DD/MM/YYYY) in tables and the Excel workbook
+
+- Tables & export (screen and print): date cells such as the तारखेनिहाय rows showed `2026-10-01`; `cellOut` now
+  shows them as `01/10/2026` (`pages/office/ReportExport.tsx`). Frontend.
+- Excel workbook: the date columns (डेटा एंट्री, पुरावा, date fields) used the `yyyy-mm-dd` display format, now
+  `dd/mm/yyyy`; the तारखेनिहाय sheet's dates were text and are now real dates shown `dd/mm/yyyy`
+  (`app/forms/analytics.py`, test updated in `tests/test_forms_export.py`). **Backend: needs a backend redeploy.**
+
 ## 14 Nov 2026: Form analytics keeps its picks in the address
 
 Report: "the dashboard reloads after a minute and the selected KPI is lost". The app has no auto-refresh (checked:

@@ -1,16 +1,17 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
-  "buildCommand": "VITE_BASE=/tracking/ VITE_BACKEND_PREFIX=/tracking/backend npm run build -- --outDir dist",
+  "buildCommand": "VITE_BASE=/dgipr/tracking/ VITE_BACKEND_PREFIX=/dgipr/tracking/backend npm run build -- --outDir dist",
   "outputDirectory": "dist",
   "redirects": [
-    { "source": "/", "destination": "https://dgipr.hashcase.tech/tracking/", "permanent": false },
-    { "source": "/app/:path*", "destination": "https://dgipr.hashcase.tech/tracking/:path*", "permanent": false }
+    { "source": "/", "destination": "https://www.hashcase.tech/dgipr/tracking", "permanent": false },
+    { "source": "/app/:path*", "destination": "https://www.hashcase.tech/dgipr/tracking/:path*", "permanent": false },
+    { "source": "/tracking(/.*)?", "destination": "https://www.hashcase.tech/dgipr/tracking$1", "permanent": false }
   ],
   "rewrites": [
-    { "source": "/tracking/backend/(.*)", "destination": "https://54-169-233-35.sslip.io/$1" },
-    { "source": "/tracking/assets/(.*)", "destination": "/assets/$1" },
-    { "source": "/tracking/(favicon\\.ico|apple-touch-icon\\.png)", "destination": "/$1" },
-    { "source": "/tracking(/.*)?", "destination": "/index.html" }
+    { "source": "/dgipr/tracking/backend/(.*)", "destination": "https://54-169-233-35.sslip.io/$1" },
+    { "source": "/dgipr/tracking/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/dgipr/tracking/(favicon\\.ico|apple-touch-icon\\.png)", "destination": "/$1" },
+    { "source": "/dgipr/tracking(/.*)?", "destination": "/index.html" }
   ]
 }

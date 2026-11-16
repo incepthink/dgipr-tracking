@@ -8,7 +8,7 @@ const backend = process.env.DGIPR_BACKEND ?? "http://127.0.0.1:8000";
 const proxied = ["/api", "/reports", "/report/preview.pdf", "/fonts"];
 
 export default defineConfig({
-  // FastAPI serves the SPA at /app/; the Vercel build for dgipr.hashcase.tech sets VITE_BASE=/tracking/.
+  // FastAPI serves the SPA at /app/; the Vercel build (www.hashcase.tech/dgipr/tracking) sets VITE_BASE=/dgipr/tracking/.
   base: process.env.VITE_BASE ?? "/app/",
   plugins: [react(), tailwindcss()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
